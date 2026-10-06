@@ -1,0 +1,6 @@
+# Só para desenvolver fora do Docker (npm run dev:api): expõe o banco no PC.
+# Uso: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+services:
+  db:
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"

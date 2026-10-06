@@ -27,14 +27,14 @@ copy .env.example .env          # no Linux/Mac: cp .env.example .env
 docker compose up -d --build
 ```
 
-Abra http://localhost:8088 e entre com `atendente@demo.local` / `demo12345a`. A primeira subida demora alguns minutos (baixa as imagens e compila). Banco, migrations e usuários de demonstração sobem sozinhos. Para desligar: `docker compose down`. Se a porta 8088 (ou a 5433 do banco) já estiver em uso, troque `WEB_PORT`/`DB_PORT` no `.env` e rode o `up` de novo.
+Abra http://localhost:8088 e entre com `atendente@demo.local` / `demo12345a`. A primeira subida demora alguns minutos (baixa as imagens e compila). Banco, migrations e usuários de demonstração sobem sozinhos. Para desligar: `docker compose down`. Se a porta 8088 já estiver em uso, troque `WEB_PORT` no `.env` e rode o `up` de novo. O banco não ocupa porta nenhuma do PC nesse modo.
 
 ## Rodar local para desenvolver
 
 ```bash
 npm install
 cp .env.example .env            # preencha SESSION_SECRET
-docker compose up -d db
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db   # banco em localhost:5433 (DB_PORT)
 npm run db:migrate -w apps/api
 npm run db:seed -w apps/api
 npm run dev:api
