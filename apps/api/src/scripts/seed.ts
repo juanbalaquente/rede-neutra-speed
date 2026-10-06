@@ -42,8 +42,9 @@ export async function seed(db: Db, opts: { adminEmail: string; adminPassword: st
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const config = loadConfig();
-  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@speed.local";
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  // "|| undefined": variável vazia no .env vale como não definida.
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || "admin@speed.local";
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || undefined;
   if (!adminPassword && config.NODE_ENV === "production") throw new Error("Defina SEED_ADMIN_PASSWORD");
   const { db, close } = createDb(config.DATABASE_URL);
   await seed(db, {

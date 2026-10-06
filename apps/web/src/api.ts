@@ -47,7 +47,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, data.error ?? "erro", data.message ?? "Erro inesperado.");
+  if (!res.ok) {
+    // Resposta sem JSON vem do nginx: a API não está no ar.
+    const fallback = res.status >= 502 ? "Servidor fora do ar. Tente de novo em instantes." : "Erro inesperado.";
+    throw new ApiError(res.status, data.error ?? "erro", data.message ?? fallback);
+  }
   return data as T;
 }
 
