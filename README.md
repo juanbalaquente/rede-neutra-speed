@@ -27,7 +27,7 @@ copy .env.example .env          # no Linux/Mac: cp .env.example .env
 docker compose up -d --build
 ```
 
-Abra http://localhost:8088 e entre com `atendente@demo.local` / `demo12345a`. A primeira subida demora alguns minutos (baixa as imagens e compila). Banco, migrations e usuários de demonstração sobem sozinhos. Para desligar: `docker compose down`. Se a porta 8088 (ou a 5432 do banco) já estiver em uso, troque `WEB_PORT`/`DB_PORT` no `.env` e rode o `up` de novo.
+Abra http://localhost:8088 e entre com `atendente@demo.local` / `demo12345a`. A primeira subida demora alguns minutos (baixa as imagens e compila). Banco, migrations e usuários de demonstração sobem sozinhos. Para desligar: `docker compose down`. Se a porta 8088 (ou a 5433 do banco) já estiver em uso, troque `WEB_PORT`/`DB_PORT` no `.env` e rode o `up` de novo.
 
 ## Rodar local para desenvolver
 

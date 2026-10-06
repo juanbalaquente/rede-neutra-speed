@@ -3,7 +3,7 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3001),
-  DATABASE_URL: z.string().default("postgres://rede:rede@localhost:5432/rede_neutra"),
+  DATABASE_URL: z.string().default("postgres://rede:rede@localhost:5433/rede_neutra"),
   /** Segredo das sessões (JWT). Obrigatório em produção. */
   SESSION_SECRET: z.string().min(32).default("dev-only-secret-troque-em-producao-0000"),
   SESSION_HOURS: z.coerce.number().default(8),
