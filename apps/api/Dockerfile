@@ -17,4 +17,5 @@ COPY --from=build /app/apps/api/dist apps/api/dist
 COPY apps/api/drizzle apps/api/drizzle
 WORKDIR /app/apps/api
 EXPOSE 3001
-CMD ["sh", "-c", "node dist/scripts/migrate.js && node dist/server.js"]
+# O seed é idempotente: cria planos e admin só se faltarem.
+CMD ["sh", "-c", "node dist/scripts/migrate.js && node dist/scripts/seed.js && node dist/server.js"]

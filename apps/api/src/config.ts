@@ -24,7 +24,9 @@ const envSchema = z.object({
 export type Config = z.infer<typeof envSchema>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const config = envSchema.parse(env);
+  // Variável vazia no .env (ex.: "SESSION_SECRET=") vale como não definida.
+  const defined = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== ""));
+  const config = envSchema.parse(defined);
   if (config.NODE_ENV === "production" && config.SESSION_SECRET.startsWith("dev-only")) {
     throw new Error("SESSION_SECRET precisa ser definido em produção");
   }

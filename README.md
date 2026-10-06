@@ -16,7 +16,20 @@ Portal onde um provedor parceiro vende e opera os próprios clientes na rede de 
 
 TypeScript em monorepo (npm workspaces): `apps/api` (Node + Hono, Postgres + Drizzle) e `apps/web` (React + Vite). Mesma família de ferramentas da SpeedWiki.
 
-## Rodar local
+## Ver funcionando (jeito mais rápido)
+
+Precisa só do Docker Desktop aberto. No terminal (PowerShell no Windows):
+
+```bash
+git clone https://github.com/juanbalaquente/rede-neutra-speed
+cd rede-neutra-speed
+copy .env.example .env          # no Linux/Mac: cp .env.example .env
+docker compose up -d --build
+```
+
+Abra http://localhost:8080 e entre com `atendente@demo.local` / `demo12345a`. A primeira subida demora alguns minutos (baixa as imagens e compila). Banco, migrations e usuários de demonstração sobem sozinhos. Para desligar: `docker compose down`.
+
+## Rodar local para desenvolver
 
 ```bash
 npm install
