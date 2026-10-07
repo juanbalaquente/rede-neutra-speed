@@ -83,11 +83,12 @@ Variáveis de integração (`.env.example`): `INTEGRATIONS_MODE` (`mock` ou `rea
 
 ## 6. Estado do código
 
-**Atualização de 7 out 2026 (sessão do portal), 60 testes passando:**
+**Atualização de 7 out 2026 (sessão do portal), 67 testes passando:**
 
 - **Modelo de vagas (decisões do Juan, 7 out 2026):** reserva por vaga, não por porta. Vaga = saída de splitter livre no diagrama do Codemaps, descontando clientes que o OLTCloud tem a mais; só Codemaps e OLTCloud entram na conta (Voalle e as caixas "nativas" ficam fora). CTO sem caixa no OLTCloud ou com dado velho (mais de 1 h) é "conferir". **Área do piloto por sigla no nome da CTO:** R1 (Backbone Central), ITA (Itacolomi) e FAT (Fátima); o administrador Speed define as siglas liberadas por parceiro (`allowedRegions`, vazio = nada é oferecido).
 - **Integração por interface:** `NetworkMap` usa `ctoId` (id do Codemaps) e `getCtoVagas`. Modo `INTEGRATIONS_MODE=wiki` (`integrations/wiki.ts`), só leitura, valida a resposta contra [`CONTRATO-WIKI-V1.md`](CONTRATO-WIKI-V1.md). A Wiki **ainda não implementou** as rotas (`/viabilidade`, `/ctos/{id}/vagas`, `/health`).
 - **Reserva por id:** a trava é `(cto_id, port)` (migration 0001). Reservar exige uma viabilidade do mesmo parceiro, para o mesmo endereço, nas últimas 24 h que tenha listado a CTO.
+- **Painel da rede, auditoria e equipe:** o administrador Speed entra no Painel da rede (consultas de parceiros por dia, com viabilidade, sem viabilidade e fora da área; mapa de calor de ocupação das CTOs vistas, por sigla; visão em tabela) e tem Auditoria com nome de quem fez, parceiro e filtros. O supervisor do parceiro gerencia a própria Equipe. O mapa mostra só as CTOs que apareceram em consultas; o mapa completo por sigla depende de uma rota da Wiki (proposta no contrato).
 - **Gestão de parceiros (administrador Speed):** tela "Parceiros" com uso atual (reservas abertas, usuários ativos), siglas liberadas (atalho para o piloto R1, ITA, FAT), limites, bloqueio com motivo obrigatório e reativação, e usuários do parceiro (cadastro do primeiro supervisor com senha gerada, desativar e reativar respeitando o limite). Telas conferidas em Chrome headless, claro, escuro e celular.
 - **Reserva:** a trava virou contagem sob lock por CTO (reservas vivas de todos os parceiros + 1 ≤ vagas livres), com limite de 50% de `totalVagas` por parceiro, leitura `?fresh=true` e área conferida de novo no servidor. Migration 0002.
 - **Front:** o visual do modelo 4 já está em Nova venda e Reservas (casca, Ctrl K, tema, anéis). As demais telas do protótipo ainda não existem. **Não foi verificado em navegador nesta sessão**; só typecheck e build.

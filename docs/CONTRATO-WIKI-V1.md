@@ -135,4 +135,5 @@ Para o portal alertar quando a chave falhar. `401`/`403` aparece para o administ
 - **Calibrar** a distância de `proximaAmbigua` (~25 m).
 - **FAT:** só 19 clientes vinculados para 111 CTOs. Pode ser área nova ou cadastro atrasado; validar em campo.
 - **Relatório no portal:** `GET /admin/cto-conferir` (e a tela "CTOs para conferir", só administrador Speed) lista as CTOs em `conferir` mais consultadas, com CSV (`id_codemaps`, `nome`, …) para cruzar com a lista da Wiki.
+- **[PROPOSTA] v1.1: mapa completo por sigla.** O painel da Speed no portal hoje mostra só as CTOs que apareceram em consultas. Para ver a rede inteira do piloto: `GET /proxy/redeneutra/v1/regioes/{sigla}/ctos` devolvendo, para cada CTO da sigla, `ctoId`, `name`, `vagasLivres`, `totalVagas`, `confidence`, `motivos` e `updatedAt` (o mesmo formato de `/vagas`, em lista, a partir do snapshot de 15 min). Sem `?fresh`.
 - **Fora da v1:** chamados de infraestrutura (abrir e consultar), média de sinal por CTO sem o sentinela -99.99 (trava de sinal) e webhooks de CTO caída.
