@@ -44,7 +44,7 @@ Escopo da v1: **somente leitura**. Nenhuma rota escreve em Voalle, OLTCloud ou C
 
 - **Raio:** o portal pede 300 m (padrão). A Wiki aceita até 1.000 m e devolve **todas** as candidatas do raio, da mais próxima à mais distante.
 - `point` é `null` se o endereço não geocodificar. Plus Code: `422` com `plus_code_not_supported` (o portal já recusa antes de chamar).
-- **`ctoId`:** id da caixa **principal** do OLTCloud, como string (o mesmo do `cto-off-monitor`). Pode ser `null` quando a Wiki não resolve o nome do Codemaps para uma caixa (nome repetido sem coincidência única de coordenada). A CTO continua na lista: o portal não oferece porta dela e registra a demanda.
+- **`ctoId`:** **id do Codemaps** (o item de `nearbyaddress` traz `id` numérico), como string. A Wiki liga a caixa do OLTCloud por `external_id` (campo da caixa), não por nome. Na amostra de 24 itens (não representativa), `external_id` achou 18 e o nome achou 13; onde os dois acharam, apontaram a mesma caixa, e há caixas renomeadas no OLTCloud em que só o `external_id` liga. `null` é caso **raro**: só quando o item do Codemaps não traz id. A CTO continua na lista: o portal não oferece porta dela e registra a demanda.
 - **`freePorts`:** contagem segundo o mapa (Codemaps, campo `avaliable`). Pode ser `null`. O portal trata `null` como "conferir".
 - **`proximaAmbigua`:** `true` quando duas candidatas estão a menos de ~25 m uma da outra (valor a calibrar). Opcional; ausente vale `false`. O portal mostra o aviso "a CTO certa só se confirma em campo" e **nunca escolhe a mais próxima sozinho**. A confirmação definitiva é em campo, na ativação.
 
@@ -74,7 +74,7 @@ Escopo da v1: **somente leitura**. Nenhuma rota escreve em Voalle, OLTCloud ou C
 - **`updatedAt`** (obrigatório, ISO 8601 com fuso): quando a ocupação foi lida. **Idade máxima:** 15 min no normal; acima de 1 h a Wiki devolve `conferir`. O portal aplica o mesmo limite de 1 h como segunda barreira (e dado sem data conta como velho).
 - **`motivos`** (opcional, lista de códigos): por que está em `conferir`, para a Speed saber o que checar. **Aparece só para a Speed**; o parceiro vê só "a Speed precisa conferir".
 - **`?fresh=true`:** a Wiki consulta só aquela caixa (e a gêmea) direto no OLTCloud, sem varredura. O portal usa na **reserva**. A viabilidade usa o snapshot.
-- **404:** caixa não encontrada. Se a caixa for recriada no OLTCloud o id muda e vem 404. **O portal trata como "conferir", não como "CTO sumiu"**, e guarda também o nome na reserva.
+- **404:** "CTO sem caixa no OLTCloud ou inexistente". Existe CTO do Codemaps sem caixa no OLTCloud (6 de 24 na amostra: emendas, "DT" e CTOs provavelmente novas), e uma caixa renomeada ou recriada também pode deixar de ligar. **O portal trata todos esses casos como "conferir", não como "CTO sumiu"**, e guarda também o nome na reserva.
 
 ### `GET /proxy/redeneutra/v1/health`
 
@@ -88,8 +88,8 @@ Para o portal alertar quando a chave falhar. `401`/`403` aparece para o administ
 
 Uma CTO só oferece portas se **todas** estas condições valem; senão sai como "conferir" e o parceiro não vê nenhuma porta dela:
 
-1. `ctoId` não nulo.
-2. `/portas` não devolveu 404.
+1. `ctoId` não nulo (caso raro).
+2. `/portas` não devolveu 404 (a CTO tem caixa no OLTCloud).
 3. `confidence` é `fontes_concordam`.
 4. `freePorts` não nulo e igual a `livres + desconhecidas` de `/portas` (segunda barreira do portal).
 5. `updatedAt` com menos de 1 h.
@@ -109,6 +109,7 @@ Porta `desconhecida` nunca é oferecida, mesmo com a CTO ok. A reserva é chavea
 ## Em aberto
 
 - **Reservas invisíveis para a Speed (v1.1, depende de decisão do Juan).** A reserva vive só no banco do portal; o comercial da Speed não a enxerga e dois lados podem vender a mesma porta. Proposta da Wiki: o portal publica eventos (criada, cancelada, expirada, convertida) numa rota de **escrita** da Wiki, que mantém uma tabela espelho; a viabilidade interna subtrai as portas reservadas. Isso escreve no banco **da própria Wiki** (não nos sistemas de origem), mas muda o escopo "somente leitura". `/portas` continua devolvendo só a verdade da rede (se subtraísse as reservas do portal, o portal contaria em dobro). Condições do portal: os eventos saem de uma fila no banco do portal com reenvio até a Wiki confirmar, e cada evento traz o id da reserva, para receber o mesmo evento duas vezes não duplicar.
-- **Discrepância de regra de "ocupada".** O cliente direto do portal (modo `real`) usa `status !== "Livre"`; o `cto-off-monitor` da Wiki usa `client_id`/`pppoe` na porta. Pode divergir. No modo `wiki` quem decide é a Wiki, então não bloqueia o portal. Pendente: amostra real de leitura do `box/list` (depende de autorização do Juan).
+- **Cobertura real (pendente da Wiki):** medir quantas CTOs do Codemaps têm caixa no OLTCloud e como ficam as caixas nativas gêmeas (`external_id` e vínculo com a normal). A amostra de 24 itens sugere que parte relevante das CTOs vai sair como "conferir" (6 de 24 sem caixa), o que afeta a escolha das CTOs do piloto.
+- **Regra de "ocupada" (resolvida em 7 out 2026, amostra de leitura da Wiki):** vale `status != "Livre"`. Das 121.427 portas: 113.625 Livre sem cliente; 7.795 Ocupada com `client_id` e `pppoe`; 6 Ocupada sem `client_id`/`pppoe`; 1 Ocupada com `client_id` sem `pppoe`; 0 Livre com cliente. Em toda caixa, `occupation.length == ports`. A regra por `client_id`/`pppoe` (`cto-off-monitor`) deixaria 7 portas ocupadas passarem como livres. O cliente direto do portal (modo `real`) mantém `status != "Livre"`.
 - **Calibrar** a distância de `proximaAmbigua` (~25 m).
 - Chamados de infraestrutura (abrir e consultar), média de sinal por CTO sem o sentinela -99.99 (trava de sinal) e webhooks de CTO caída ficam para a v1.1.

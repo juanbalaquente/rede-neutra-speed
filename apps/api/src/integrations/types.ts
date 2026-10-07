@@ -10,10 +10,10 @@ export interface GeoPoint {
 
 export interface NearbyCto {
   /**
-   * Identificador estável da CTO (id da caixa). O nome não serve de chave: há
-   * nomes repetidos e caixas gêmeas. Nos clientes diretos antigos (Codemaps e
-   * OLTCloud sem a Wiki) o id é o próprio nome, e a limitação continua valendo.
-   * null = a fonte não conseguiu resolver a caixa: a CTO aparece, mas não vende.
+   * Identificador estável da CTO. Pela Wiki é o id do Codemaps (string); o nome não
+   * serve de chave: há nomes repetidos e caixas gêmeas. Nos clientes diretos (modo
+   * real, só validação) o id é o próprio nome, e a limitação continua valendo.
+   * null = o item não trouxe id (caso raro): a CTO aparece, mas não vende.
    */
   ctoId: string | null;
   name: string;
