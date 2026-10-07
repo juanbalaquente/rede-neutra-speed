@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, gte, like } from "drizzle-orm";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
@@ -366,14 +366,42 @@ export function createApp({ db, config, integrations }: AppDeps) {
     return c.json({ days, rows });
   });
 
+  /** Trilha de auditoria com nome de quem fez e do parceiro. Filtros: parceiro, prefixo de ação, período. */
   admin.get("/audit", async (c) => {
-    const partnerId = c.req.query("partnerId");
+    const parsed = z
+      .object({
+        partnerId: z.string().uuid().optional(),
+        action: z.string().regex(/^[a-z_.]{1,40}$/).optional(),
+        days: z.coerce.number().int().min(1).max(365).default(30),
+        limit: z.coerce.number().int().min(1).max(1000).default(300),
+      })
+      .safeParse(Object.fromEntries(Object.entries(c.req.query()).filter(([, v]) => v !== "")));
+    if (!parsed.success) throw new AppError(400, "dados_invalidos", "Filtro inválido.");
+    const q = parsed.data;
+    const filters = [gte(auditLog.createdAt, new Date(Date.now() - q.days * 24 * 3600_000))];
+    if (q.partnerId) filters.push(eq(auditLog.partnerId, q.partnerId));
+    if (q.action) filters.push(like(auditLog.action, `${q.action}%`));
     const rows = await db
-      .select()
+      .select({
+        id: auditLog.id,
+        createdAt: auditLog.createdAt,
+        action: auditLog.action,
+        entity: auditLog.entity,
+        entityId: auditLog.entityId,
+        ip: auditLog.ip,
+        data: auditLog.data,
+        partnerId: auditLog.partnerId,
+        partnerName: partners.name,
+        userId: auditLog.userId,
+        userName: users.name,
+        userEmail: users.email,
+      })
       .from(auditLog)
-      .where(partnerId ? eq(auditLog.partnerId, partnerId) : undefined)
+      .leftJoin(users, eq(users.id, auditLog.userId))
+      .leftJoin(partners, eq(partners.id, auditLog.partnerId))
+      .where(and(...filters))
       .orderBy(desc(auditLog.id))
-      .limit(500);
+      .limit(q.limit);
     return c.json({ entries: rows });
   });
 

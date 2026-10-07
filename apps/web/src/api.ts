@@ -106,8 +106,8 @@ export const api = {
     request<{ partner: AdminPartner }>("POST", "/admin/partners", input),
   updatePartner: (id: string, changes: Partial<PartnerLimits> & { allowedRegions?: string[]; status?: AdminPartner["status"]; reason?: string }) =>
     request<{ partner: AdminPartner }>("PATCH", `/admin/partners/${id}`, changes),
-  users: (partnerId: string) => request<{ users: PartnerUser[] }>("GET", `/users?partnerId=${encodeURIComponent(partnerId)}`),
-  createUser: (input: { partnerId: string; name: string; email: string; password: string; role: "atendente" | "supervisor" }) =>
+  users: (partnerId?: string) => request<{ users: PartnerUser[] }>("GET", partnerId ? `/users?partnerId=${encodeURIComponent(partnerId)}` : "/users"),
+  createUser: (input: { partnerId?: string; name: string; email: string; password: string; role: "atendente" | "supervisor" }) =>
     request<{ user: PartnerUser }>("POST", "/users", input),
   setUserActive: (id: string, active: boolean) => request<{ ok: true }>("POST", `/users/${id}/active`, { active }),
 };

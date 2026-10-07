@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
-import { api, type AdminPartner, type PartnerLimits, type PartnerUser } from "../api";
+import { api, type AdminPartner, type PartnerLimits } from "../api";
 import { useToast } from "../ui/Toast";
+import { UsersPanel } from "../ui/UsersPanel";
 
 /** Siglas do piloto (OLTs Backbone Central, Itacolomi e Fátima). */
 const PILOT_REGIONS = ["R1", "ITA", "FAT"];
@@ -9,13 +10,6 @@ const DEFAULT_LIMITS: PartnerLimits = { maxActiveReservations: 10, maxCtoOccupan
 
 const fmtCnpj = (d: string) => (d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d);
 const errMsg = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
-
-/** Senha forte para o primeiro acesso: 14 caracteres, com letra e número garantidos. */
-function generatePassword(): string {
-  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  return `${Array.from(bytes, (b) => chars[b % chars.length]).join("")}a7`;
-}
 
 function RegionsInput({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [text, setText] = useState("");
@@ -79,96 +73,6 @@ function LimitsFields({ value, onChange }: { value: PartnerLimits; onChange: (v:
       {num("maxActiveReservations", "Reservas simultâneas", 1, 1000, "abertas ao mesmo tempo")}
       {num("maxCtoOccupancyPct", "Ocupação por CTO (%)", 1, 100, "das vagas de cada CTO")}
       {num("maxUsers", "Usuários", 1, 500, "ativos no portal")}
-    </div>
-  );
-}
-
-function UsersSection({ partner }: { partner: AdminPartner }) {
-  const say = useToast();
-  const [users, setUsers] = useState<PartnerUser[] | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "supervisor" as "atendente" | "supervisor" });
-  const [busy, setBusy] = useState(false);
-
-  const load = useCallback(() => {
-    api.users(partner.id).then((r) => setUsers(r.users)).catch((e) => say(errMsg(e, "Falha ao carregar usuários."), "bad"));
-  }, [partner.id, say]);
-  useEffect(load, [load]);
-
-  async function create(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await api.createUser({ partnerId: partner.id, ...form });
-      say(`${form.name} cadastrado. Envie a senha por um canal seguro.`);
-      setForm({ name: "", email: "", password: "", role: "atendente" });
-      load();
-    } catch (err) {
-      say(errMsg(err, "Falha ao cadastrar."), "bad");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggle(u: PartnerUser) {
-    try {
-      await api.setUserActive(u.id, !u.active);
-      say(u.active ? `${u.name} desativado` : `${u.name} reativado`);
-      load();
-    } catch (err) {
-      say(errMsg(err, "Falha ao alterar."), "bad");
-    }
-  }
-
-  const active = users?.filter((u) => u.active).length ?? 0;
-  return (
-    <div className="card">
-      <div className="ch"><h3>Usuários</h3><small>{users ? `${active} de ${partner.maxUsers} ativos` : "carregando…"}</small></div>
-      {users && users.length === 0 && <p className="empty">Nenhum usuário ainda. Cadastre o supervisor do parceiro para ele entrar no portal.</p>}
-      {users && users.length > 0 && (
-        <table className="hist">
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td style={{ fontFamily: "var(--font)" }}>
-                  {u.name}
-                  <div className="muted" style={{ fontSize: 12 }}>{u.email}</div>
-                </td>
-                <td>{u.role === "supervisor" ? "Supervisor" : "Atendente"}</td>
-                <td>
-                  <span className={`badge ${u.active ? "b-ok" : "b-mute"}`}>{u.active ? "Ativo" : "Inativo"}</span>
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  <button className="btn sec sm" onClick={() => toggle(u)}>{u.active ? "Desativar" : "Reativar"}</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <form className="summary" onSubmit={create} style={{ borderTop: "1px solid var(--line)" }}>
-        <b style={{ fontWeight: 500 }}>Novo usuário</b>
-        <div className="g2">
-          <label className="fld"><span>Nome</span><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} minLength={2} required /></label>
-          <label className="fld"><span>E-mail</span><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></label>
-          <label className="fld">
-            <span>Senha inicial</span>
-            <span className="inrow">
-              <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={10} required autoComplete="new-password" />
-              <button type="button" className="btn sec sm" onClick={() => setForm({ ...form, password: generatePassword() })}>Gerar</button>
-            </span>
-            <small>10+ caracteres, com letra e número.</small>
-          </label>
-          <label className="fld">
-            <span>Perfil</span>
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as "atendente" | "supervisor" })}>
-              <option value="supervisor">Supervisor</option>
-              <option value="atendente">Atendente</option>
-            </select>
-          </label>
-        </div>
-        <div><button className="btn sm" disabled={busy || active >= partner.maxUsers}>{busy ? "Cadastrando…" : "Cadastrar usuário"}</button></div>
-        {active >= partner.maxUsers && <small className="muted">Limite de usuários atingido. Aumente o limite ou desative alguém.</small>}
-      </form>
     </div>
   );
 }
@@ -271,7 +175,7 @@ function PartnerEditor({ partner, onChanged }: { partner: AdminPartner; onChange
           )}
         </div>
       </div>
-      <UsersSection partner={partner} />
+      <UsersPanel partnerId={partner.id} maxUsers={partner.maxUsers} meId="" emptyHint="Nenhum usuário ainda. Cadastre o supervisor do parceiro para ele entrar no portal." />
     </div>
   );
 }
