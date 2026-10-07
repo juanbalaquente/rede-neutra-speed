@@ -5,6 +5,7 @@ const BLOCKED_LABEL: Record<NonNullable<ViabilityCto["blockedReason"]>, string> 
   sem_porta_livre: "Sem porta livre",
   limite_ocupacao: "Limite de ocupação atingido",
   sem_dados_de_porta: "Sem dados de porta",
+  conferir: "A Speed precisa conferir esta CTO",
 };
 
 export function ViabilityPage({ user, onReserved }: { user: User; onReserved: () => void }) {

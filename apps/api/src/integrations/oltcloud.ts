@@ -81,12 +81,14 @@ export class OltcloudClient {
     if (id == null) return null;
     const { box } = await this.get<{ box: OcBox }>(`/api/v2/box/${id}`);
     const occupation = new Map((box.occupation ?? []).map((p) => [p.port, p.status]));
+    // Só "Livre" explícito vale como livre; porta sem registro é "desconhecida".
     const ports = Array.from({ length: box.ports }, (_, i) => {
       const port = i + 1;
       const status = occupation.get(port);
-      return { port, occupied: status != null && status !== "Livre" };
+      const state = status == null ? "desconhecida" : status === "Livre" ? "livre" : "ocupada";
+      return { port, state } as const;
     });
-    return { name: box.name, totalPorts: box.ports, ports };
+    return { ctoId: ctoName, name: box.name, confidence: "confirmada", totalPorts: box.ports, ports };
   }
 }
 

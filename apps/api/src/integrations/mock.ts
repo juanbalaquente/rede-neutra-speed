@@ -1,4 +1,4 @@
-import type { CtoPorts, NearbyResult, NetworkMap } from "./types.js";
+import type { CtoPort, CtoPorts, NearbyResult, NetworkMap } from "./types.js";
 
 interface MockCto {
   name: string;
@@ -24,6 +24,7 @@ export class MockNetworkMap implements NetworkMap {
     const point = { lat: -19.9193, lng: -43.9385 };
     const ctos = this.ctos
       .map((c) => ({
+        ctoId: c.name,
         name: c.name,
         distanceM: Math.round(haversineM(point.lat, point.lng, c.lat, c.lng)),
         freePorts: c.totalPorts - c.occupied.length,
@@ -35,15 +36,17 @@ export class MockNetworkMap implements NetworkMap {
     return { point, ctos };
   }
 
-  async getCtoPorts(ctoName: string): Promise<CtoPorts | null> {
-    const cto = this.ctos.find((c) => c.name === ctoName);
+  async getCtoPorts(ctoId: string): Promise<CtoPorts | null> {
+    const cto = this.ctos.find((c) => c.name === ctoId);
     if (!cto) return null;
     return {
+      ctoId: cto.name,
       name: cto.name,
+      confidence: "confirmada",
       totalPorts: cto.totalPorts,
-      ports: Array.from({ length: cto.totalPorts }, (_, i) => ({
+      ports: Array.from({ length: cto.totalPorts }, (_, i): CtoPort => ({
         port: i + 1,
-        occupied: cto.occupied.includes(i + 1),
+        state: cto.occupied.includes(i + 1) ? "ocupada" : "livre",
       })),
     };
   }

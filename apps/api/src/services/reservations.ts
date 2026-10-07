@@ -90,7 +90,10 @@ export async function createReservation(
   if (!cto) throw new AppError(404, "cto_nao_encontrada", "CTO não encontrada.");
   const port = cto.ports.find((p) => p.port === input.port);
   if (!port) throw new AppError(422, "porta_inexistente", "Essa porta não existe nessa CTO.");
-  if (port.occupied) throw new AppError(409, "porta_ocupada", "Essa porta já está ocupada na rede.");
+  if (cto.confidence === "conferir" || port.state === "desconhecida") {
+    throw new AppError(409, "porta_nao_confirmada", "Não foi possível confirmar essa porta. A Speed precisa conferir a CTO.");
+  }
+  if (port.state === "ocupada") throw new AppError(409, "porta_ocupada", "Essa porta já está ocupada na rede.");
 
   const partnerId = user.partnerId;
   try {

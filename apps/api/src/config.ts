@@ -7,8 +7,16 @@ const envSchema = z.object({
   /** Segredo das sessões (JWT). Obrigatório em produção. */
   SESSION_SECRET: z.string().min(32).default("dev-only-secret-troque-em-producao-0000"),
   SESSION_HOURS: z.coerce.number().default(8),
-  /** mock = dados de exemplo; real = Codemaps/OLTCloud/Voalle de verdade. */
-  INTEGRATIONS_MODE: z.enum(["mock", "real"]).default("mock"),
+  /**
+   * mock = dados de exemplo; wiki = API versionada da SpeedWiki (caminho
+   * previsto para produção); real = Codemaps/OLTCloud/Voalle direto (só de
+   * servidor liberado por IP, usado para validação).
+   */
+  INTEGRATIONS_MODE: z.enum(["mock", "wiki", "real"]).default("mock"),
+  /** Base da SpeedWiki, sem o /proxy/redeneutra/v1. */
+  WIKI_BASE_URL: z.string().url().optional(),
+  /** Chave da integração, enviada em X-RedeNeutra-Key. Só no ambiente do servidor. */
+  WIKI_API_KEY: z.string().optional(),
   RESERVATION_HOURS: z.coerce.number().default(48),
   CODEMAPS_TOKEN: z.string().optional(),
   CODEMAPS_SECRET: z.string().optional(),

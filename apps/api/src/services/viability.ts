@@ -25,7 +25,7 @@ export interface ViabilityCto {
   totalPorts: number;
   freePorts: number[];
   /** Por que a CTO não serve para este parceiro, quando não serve. */
-  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | null;
+  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | "conferir" | null;
 }
 
 export interface ViabilityResult {
@@ -61,14 +61,15 @@ export async function runViability(
 
   const ctos: ViabilityCto[] = [];
   for (const c of candidates) {
-    const detail = await network.getCtoPorts(c.name);
+    const detail = await network.getCtoPorts(c.ctoId);
     if (!detail) {
       ctos.push({ name: c.name, distanceM: c.distanceM, location: c.location, totalPorts: 0, freePorts: [], blockedReason: "sem_dados_de_porta" });
       continue;
     }
     const taken = reserved.get(c.name) ?? new Set<number>();
-    const free = detail.ports.filter((p) => !p.occupied && !taken.has(p.port)).map((p) => p.port);
-    let blockedReason: ViabilityCto["blockedReason"] = free.length === 0 ? "sem_porta_livre" : null;
+    const free = detail.ports.filter((p) => p.state === "livre" && !taken.has(p.port)).map((p) => p.port);
+    let blockedReason: ViabilityCto["blockedReason"] =
+      detail.confidence === "conferir" ? "conferir" : free.length === 0 ? "sem_porta_livre" : null;
     if (!blockedReason && partner) {
       const used = usage.get(c.name) ?? 0;
       if (used + 1 > maxPortsForPartner(detail.totalPorts, partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";

@@ -9,6 +9,12 @@ export interface GeoPoint {
 }
 
 export interface NearbyCto {
+  /**
+   * Identificador estável da CTO (id da caixa). O nome não serve de chave: há
+   * nomes repetidos e caixas gêmeas. Nos clientes diretos antigos (Codemaps e
+   * OLTCloud sem a Wiki) o id é o próprio nome, e a limitação continua valendo.
+   */
+  ctoId: string;
   name: string;
   distanceM: number;
   /** Portas livres segundo o mapa (Codemaps), antes de descontar reservas do portal. */
@@ -22,13 +28,22 @@ export interface NearbyResult {
   ctos: NearbyCto[];
 }
 
+/**
+ * "desconhecida" = a fonte não consegue afirmar. Nunca vale como livre:
+ * ausência de marcação de ocupada não prova que a porta está livre.
+ */
+export type PortState = "livre" | "ocupada" | "desconhecida";
+
 export interface CtoPort {
   port: number;
-  occupied: boolean;
+  state: PortState;
 }
 
 export interface CtoPorts {
+  ctoId: string;
   name: string;
+  /** "conferir" quando as fontes divergem ou o dado é fraco: não oferecer porta. */
+  confidence: "confirmada" | "conferir";
   totalPorts: number;
   ports: CtoPort[];
 }
@@ -37,7 +52,7 @@ export interface CtoPorts {
 export interface NetworkMap {
   findNearbyCtos(address: string, radiusM: number): Promise<NearbyResult>;
   /** null quando a CTO não é encontrada na fonte de ocupação. */
-  getCtoPorts(ctoName: string): Promise<CtoPorts | null>;
+  getCtoPorts(ctoId: string): Promise<CtoPorts | null>;
 }
 
 export class IntegrationError extends Error {

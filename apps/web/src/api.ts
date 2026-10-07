@@ -12,7 +12,7 @@ export interface ViabilityCto {
   distanceM: number;
   totalPorts: number;
   freePorts: number[];
-  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | null;
+  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | "conferir" | null;
 }
 
 export interface ViabilityResult {

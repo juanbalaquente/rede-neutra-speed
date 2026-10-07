@@ -65,8 +65,9 @@ if (config.OLTCLOUD_USER && config.OLTCLOUD_PASS) {
     await step("oltcloud", "portas da CTO do Codemaps", async () => {
       const ports = await oc.getCtoPorts(name);
       if (!ports) return { status: "atencao", detail: `"${name}" não achada no box/list (nome diverge entre Codemaps e OLTCloud?)` };
-      const free = ports.ports.filter((p) => !p.occupied).length;
-      return `${ports.name}: ${ports.totalPorts} portas, ${free} livres`;
+      const free = ports.ports.filter((p) => p.state === "livre").length;
+      const unknown = ports.ports.filter((p) => p.state === "desconhecida").length;
+      return `${ports.name}: ${ports.totalPorts} portas, ${free} livres, ${unknown} sem registro`;
     });
   } else report("oltcloud", "portas da CTO do Codemaps", "pulado", "sem CTO do Codemaps para cruzar");
 

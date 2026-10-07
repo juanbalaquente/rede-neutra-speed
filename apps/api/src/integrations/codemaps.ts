@@ -64,6 +64,8 @@ export class CodemapsClient {
       ctos: (data.list ?? []).map((item) => {
         const g = item.geometry?.coordinates;
         return {
+          // Sem id estável vindo do Codemaps neste cliente: o nome é a chave (limitação conhecida).
+          ctoId: item.name,
           name: item.name,
           distanceM: Math.round(item.distance),
           freePorts: item.avaliable ?? 0,
