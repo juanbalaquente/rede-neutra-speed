@@ -23,27 +23,24 @@ export function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
   return (
     <div className="login-wrap">
       <form className="card login" onSubmit={submit}>
-        <div className="brand big">
-          <span className="brand-mark">speed</span> Rede Neutra
+        <div className="org">
+          <div className="lg"><i /></div>
+          <div>
+            <b>Rede Neutra</b>
+            <small>Portal do parceiro Speed</small>
+          </div>
         </div>
+        <h1>Entrar</h1>
         <label>
           E-mail
           <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
         <label>
           Senha
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
         {error && <p className="error">{error}</p>}
-        <button className="primary" disabled={busy}>
-          {busy ? "Entrando…" : "Entrar"}
-        </button>
+        <button className="btn" disabled={busy}>{busy ? "Entrando…" : "Entrar"}</button>
       </form>
     </div>
   );

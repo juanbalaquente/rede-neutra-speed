@@ -1,11 +1,28 @@
-import type { CtoPorts, NearbyResult, NetworkMap } from "./types.js";
+import type { CtoVagas, NearbyResult, NetworkMap } from "./types.js";
 
 interface MockCto {
+  /** Id da caixa; quando falta, o nome faz o papel de id. */
+  id?: string;
   name: string;
   lat: number;
   lng: number;
+  /** Total de vagas (saídas de splitter) da CTO. */
   totalPorts: number;
+  /** Vagas ocupadas: só a quantidade importa (a lista de números é herança do modelo antigo). */
   occupied: number[];
+  /** Sigla de região do nome da CTO; padrão "ITA". null = nome fora do padrão. */
+  regiao?: string | null;
+  /** Portas livres que o mapa (Codemaps) informa; quando falta, bate com a ocupação. Serve para simular divergência. */
+  mapFree?: number | null;
+  /** A Wiki não resolveu a caixa: ctoId nulo na viabilidade. */
+  unresolved?: boolean;
+  /** Há outra candidata a poucos metros. */
+  ambiguous?: boolean;
+  /** Idade do dado de ocupação, em minutos; padrão 0 (acabou de ler). */
+  ageMinutes?: number;
+  /** Força a confiança e os motivos que a fonte devolve. */
+  confidence?: "fontes_concordam" | "conferir";
+  motivos?: string[];
 }
 
 /** Rede de exemplo para desenvolvimento e testes. Nenhum dado real. */
@@ -24,28 +41,37 @@ export class MockNetworkMap implements NetworkMap {
     const point = { lat: -19.9193, lng: -43.9385 };
     const ctos = this.ctos
       .map((c) => ({
+        ctoId: c.unresolved ? null : (c.id ?? c.name),
         name: c.name,
+        regiao: c.regiao === undefined ? "ITA" : c.regiao,
         distanceM: Math.round(haversineM(point.lat, point.lng, c.lat, c.lng)),
-        freePorts: c.totalPorts - c.occupied.length,
+        freePorts: c.mapFree !== undefined ? c.mapFree : c.totalPorts - c.occupied.length,
         usagePct: Math.round((c.occupied.length / c.totalPorts) * 100),
         location: { lat: c.lat, lng: c.lng },
+        proximaAmbigua: c.ambiguous ?? false,
       }))
       .filter((c) => c.distanceM <= radiusM)
       .sort((a, b) => a.distanceM - b.distanceM);
     return { point, ctos };
   }
 
-  async getCtoPorts(ctoName: string): Promise<CtoPorts | null> {
-    const cto = this.ctos.find((c) => c.name === ctoName);
+  async getCtoVagas(ctoId: string, _opts?: { fresh?: boolean }): Promise<CtoVagas | null> {
+    const cto = this.ctos.find((c) => (c.id ?? c.name) === ctoId);
     if (!cto) return null;
     return {
+      ctoId,
       name: cto.name,
-      totalPorts: cto.totalPorts,
-      ports: Array.from({ length: cto.totalPorts }, (_, i) => ({
-        port: i + 1,
-        occupied: cto.occupied.includes(i + 1),
-      })),
+      regiao: cto.regiao === undefined ? "ITA" : cto.regiao,
+      vagasLivres: cto.totalPorts - cto.occupied.length,
+      totalVagas: cto.totalPorts,
+      confidence: cto.confidence ?? "fontes_concordam",
+      updatedAt: new Date(Date.now() - (cto.ageMinutes ?? 0) * 60_000).toISOString(),
+      motivos: cto.motivos ?? [],
     };
+  }
+
+  async health() {
+    return { ok: true, detail: "mock" };
   }
 }
 

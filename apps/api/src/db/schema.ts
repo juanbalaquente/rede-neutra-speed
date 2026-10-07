@@ -11,7 +11,6 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -29,10 +28,15 @@ export const partners = pgTable("partners", {
   status: partnerStatus("status").notNull().default("ativo"),
   /** Reservas simultâneas permitidas (evita travar CTOs sem vender). */
   maxActiveReservations: integer("max_active_reservations").notNull().default(10),
-  /** % máximo das portas de uma mesma CTO que o parceiro pode ocupar. */
+  /** % máximo das vagas de uma mesma CTO que o parceiro pode ocupar. */
   maxCtoOccupancyPct: integer("max_cto_occupancy_pct").notNull().default(50),
   /** Quantos usuários ativos o parceiro pode ter. */
   maxUsers: integer("max_users").notNull().default(10),
+  /**
+   * Siglas de região (R1, ITA, FAT...) que o parceiro pode vender, definidas pela Speed.
+   * Vazio = nenhuma CTO é oferecida (liberação explícita, nunca por omissão).
+   */
+  allowedRegions: text("allowed_regions").array().notNull().default(sql`'{}'::text[]`),
   createdAt: createdAt(),
 });
 
@@ -87,9 +91,9 @@ export const viabilityQueries = pgTable(
 );
 
 /**
- * Reserva de porta. Vive só no portal (o Codemaps não tem reserva).
- * O índice único parcial é a trava real: uma porta não pode ter duas
- * reservas vivas, nem em corrida entre dois parceiros.
+ * Reserva de vaga na CTO. Vive só no portal (o Codemaps não tem reserva).
+ * A trava é a contagem de reservas vivas da CTO contra as vagas livres, feita sob
+ * lock por CTO (pg_advisory_xact_lock) na transação de reserva.
  */
 export const portReservations = pgTable(
   "port_reservations",
@@ -97,8 +101,13 @@ export const portReservations = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     partnerId: uuid("partner_id").notNull().references(() => partners.id),
     userId: uuid("user_id").notNull().references(() => users.id),
+    /** Id estável da caixa (chave da reserva). O nome repete e não identifica a CTO. */
+    ctoId: text("cto_id").notNull(),
+    /** Só para exibição, como a fonte devolveu na hora da reserva. */
     ctoName: text("cto_name").notNull(),
-    port: integer("port").notNull(),
+    /** Reserva é por VAGA na CTO; o número da porta não importa. Só reservas antigas têm porta. */
+    port: integer("port"),
+    /** Total de vagas (saídas de splitter) da CTO na hora da reserva. */
     totalPorts: integer("total_ports"),
     address: text("address").notNull(),
     lat: doublePrecision("lat"),
@@ -112,8 +121,8 @@ export const portReservations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("port_reservations_live_port_uq")
-      .on(t.ctoName, t.port)
+    index("port_reservations_live_cto_idx")
+      .on(t.ctoId)
       .where(sql`${t.status} IN ('ativa', 'convertida')`),
     index("port_reservations_partner_idx").on(t.partnerId, t.status),
     check("port_reservations_port_positive", sql`${t.port} > 0`),

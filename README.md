@@ -2,6 +2,8 @@
 
 Portal onde um provedor parceiro vende e opera os próprios clientes na rede de fibra da Speed, sem acessar Voalle, OLTCloud ou Codemaps. O portal é uma camada de orquestração sobre esses sistemas: consome, orquestra e devolve só o recorte que o parceiro precisa.
 
+Contexto completo do projeto (regras de negócio, decisões, visual aprovado e integração com a SpeedWiki) em [docs/CONTEXTO.md](docs/CONTEXTO.md).
+
 ## O que já existe
 
 - Login com sessão em cookie httpOnly e três perfis: atendente, supervisor (do parceiro) e administrador Speed.

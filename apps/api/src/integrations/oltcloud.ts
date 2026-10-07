@@ -1,5 +1,5 @@
 import type { Http } from "./http.js";
-import { IntegrationError, type CtoPorts } from "./types.js";
+import { IntegrationError, type CtoVagas } from "./types.js";
 
 interface OcBoxPort {
   port: number;
@@ -75,18 +75,26 @@ export class OltcloudClient {
     return index;
   }
 
-  async getCtoPorts(ctoName: string): Promise<CtoPorts | null> {
+  /**
+   * Modo direto (só validação): vagas = portas explicitamente "Livre" da caixa. Não é o modelo
+   * de produção (diagrama do Codemaps + desconto do OLTCloud), que a Wiki calcula.
+   */
+  async getCtoVagas(ctoName: string): Promise<CtoVagas | null> {
     const index = await this.loadBoxIndex();
     const id = index.get(normalizeName(ctoName));
     if (id == null) return null;
     const { box } = await this.get<{ box: OcBox }>(`/api/v2/box/${id}`);
-    const occupation = new Map((box.occupation ?? []).map((p) => [p.port, p.status]));
-    const ports = Array.from({ length: box.ports }, (_, i) => {
-      const port = i + 1;
-      const status = occupation.get(port);
-      return { port, occupied: status != null && status !== "Livre" };
-    });
-    return { name: box.name, totalPorts: box.ports, ports };
+    const livres = (box.occupation ?? []).filter((p) => p.status === "Livre").length;
+    return {
+      ctoId: ctoName,
+      name: box.name,
+      regiao: null,
+      vagasLivres: livres,
+      totalVagas: box.ports,
+      confidence: "fontes_concordam",
+      updatedAt: new Date().toISOString(),
+      motivos: [],
+    };
   }
 }
 

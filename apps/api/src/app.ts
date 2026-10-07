@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, gte, like } from "drizzle-orm";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
@@ -6,11 +6,13 @@ import { hashPassword, isStrongPassword, verifyPassword } from "./auth/password.
 import { SESSION_COOKIE, signSession, verifySession, type Role, type SessionUser } from "./auth/session.js";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
-import { auditLog, partners, plans, users } from "./db/schema.js";
+import { auditLog, partners, plans, portReservations, users } from "./db/schema.js";
 import type { Integrations } from "./integrations/types.js";
 import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
+import { conferirCsv, conferirReport } from "./services/conferir-report.js";
+import { networkPanel } from "./services/network-panel.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
 import { runViability } from "./services/viability.js";
 
@@ -122,6 +124,24 @@ export function createApp({ db, config, integrations }: AppDeps) {
 
   app.get("/auth/me", requireUser, (c) => c.json({ user: c.get("user") }));
 
+  /** Nome e limites do parceiro da sessão. Administrador Speed não tem parceiro. */
+  app.get("/partner", requireUser, async (c) => {
+    const { partnerId } = c.get("user");
+    if (!partnerId) return c.json({ partner: null });
+    const [partner] = await db
+      .select({
+        id: partners.id,
+        name: partners.name,
+        maxActiveReservations: partners.maxActiveReservations,
+        maxCtoOccupancyPct: partners.maxCtoOccupancyPct,
+        maxUsers: partners.maxUsers,
+        allowedRegions: partners.allowedRegions,
+      })
+      .from(partners)
+      .where(eq(partners.id, partnerId));
+    return c.json({ partner: partner ?? null });
+  });
+
   // ── Viabilidade ───────────────────────────────────────────────────────────
   app.post("/viability", requireUser, async (c) => {
     const body = await parseBody(c, z.object({ address: z.string().min(8).max(300) }));
@@ -138,8 +158,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
     const body = await parseBody(
       c,
       z.object({
-        ctoName: z.string().min(1).max(120),
-        port: z.number().int().positive(),
+        ctoId: z.string().min(1).max(120),
         address: z.string().min(8).max(300),
         lat: z.number().nullable().optional(),
         lng: z.number().nullable().optional(),
@@ -166,6 +185,9 @@ export function createApp({ db, config, integrations }: AppDeps) {
   });
 
   // ── Usuários do parceiro (supervisor gerencia os dele) ────────────────────
+  /** Siglas de região liberadas ao parceiro (R1, ITA, FAT...). Vazio = nenhuma CTO é oferecida. */
+  const regionsSchema = z.array(z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,8}$/, "sigla de 1 a 8 letras ou números")).max(50);
+
   const newUserSchema = z.object({
     name: z.string().min(2).max(120),
     email: z.string().email(),
@@ -224,6 +246,21 @@ export function createApp({ db, config, integrations }: AppDeps) {
     const body = await parseBody(c, z.object({ active: z.boolean() }));
     if (id === me.id) throw new AppError(422, "proprio_usuario", "Você não pode desativar a si mesmo.");
     const scope = me.role === "admin_speed" ? eq(users.id, id) : and(eq(users.id, id), eq(users.partnerId, me.partnerId!));
+    // Reativar conta para o limite de usuários, como criar.
+    if (body.active) {
+      const [target] = await db.select({ partnerId: users.partnerId, active: users.active }).from(users).where(scope);
+      if (!target) throw new AppError(404, "usuario_nao_encontrado", "Usuário não encontrado.");
+      if (!target.active && target.partnerId) {
+        const [partner] = await db.select().from(partners).where(eq(partners.id, target.partnerId));
+        const [active] = await db
+          .select({ n: count() })
+          .from(users)
+          .where(and(eq(users.partnerId, target.partnerId), eq(users.active, true)));
+        if (partner && Number(active?.n ?? 0) >= partner.maxUsers) {
+          throw new AppError(409, "limite_usuarios", `Limite de ${partner.maxUsers} usuários atingido.`);
+        }
+      }
+    }
     const [updated] = await db.update(users).set({ active: body.active }).where(scope).returning({ id: users.id, partnerId: users.partnerId });
     if (!updated) throw new AppError(404, "usuario_nao_encontrado", "Usuário não encontrado.");
     await recordAudit(db, {
@@ -241,7 +278,25 @@ export function createApp({ db, config, integrations }: AppDeps) {
   const admin = new Hono<Env>();
   admin.use(requireUser, requireRole("admin_speed"));
 
-  admin.get("/partners", async (c) => c.json({ partners: await db.select().from(partners).orderBy(partners.name) }));
+  /** Parceiros com o uso atual (reservas abertas e usuários ativos), para a tela de gestão. */
+  admin.get("/partners", async (c) => {
+    const rows = await db.select().from(partners).orderBy(partners.name);
+    const open = await db
+      .select({ partnerId: portReservations.partnerId, n: count() })
+      .from(portReservations)
+      .where(eq(portReservations.status, "ativa"))
+      .groupBy(portReservations.partnerId);
+    const people = await db
+      .select({ partnerId: users.partnerId, n: count() })
+      .from(users)
+      .where(eq(users.active, true))
+      .groupBy(users.partnerId);
+    const openBy = new Map(open.map((r) => [r.partnerId, Number(r.n)]));
+    const peopleBy = new Map(people.map((r) => [r.partnerId, Number(r.n)]));
+    return c.json({
+      partners: rows.map((p) => ({ ...p, activeReservations: openBy.get(p.id) ?? 0, activeUsers: peopleBy.get(p.id) ?? 0 })),
+    });
+  });
 
   admin.post("/partners", async (c) => {
     const body = await parseBody(
@@ -252,6 +307,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
         maxActiveReservations: z.number().int().min(1).max(1000).optional(),
         maxCtoOccupancyPct: z.number().int().min(1).max(100).optional(),
         maxUsers: z.number().int().min(1).max(500).optional(),
+        allowedRegions: regionsSchema.optional(),
       }),
     );
     try {
@@ -274,6 +330,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
           maxActiveReservations: z.number().int().min(1).max(1000),
           maxCtoOccupancyPct: z.number().int().min(1).max(100),
           maxUsers: z.number().int().min(1).max(500),
+          allowedRegions: regionsSchema,
           /** Obrigatória para bloquear (confirmação dupla no front + registro aqui). */
           reason: z.string().max(500),
         })
@@ -290,14 +347,69 @@ export function createApp({ db, config, integrations }: AppDeps) {
     return c.json({ partner: updated });
   });
 
+  /** Estado da integração com a rede (Wiki, direto ou mock). 401/403 da Wiki aparece aqui como chave recusada. */
+  admin.get("/integrations/health", async (c) => {
+    const health = await integrations.network.health();
+    return c.json({ mode: config.INTEGRATIONS_MODE, ...health });
+  });
+
+  /** CTOs mais encontradas em "conferir" nas consultas: por onde a Speed começa a limpar o cadastro. ?format=csv baixa a planilha. */
+  admin.get("/cto-conferir", async (c) => {
+    const parsed = z.coerce.number().int().min(1).max(365).default(30).safeParse(c.req.query("days") || undefined);
+    if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 365.");
+    const days = parsed.data;
+    const rows = await conferirReport(db, days);
+    if (c.req.query("format") === "csv") {
+      c.header("Content-Type", "text/csv; charset=utf-8");
+      c.header("Content-Disposition", `attachment; filename="ctos-conferir-${days}d.csv"`);
+      return c.body(conferirCsv(rows));
+    }
+    return c.json({ days, rows });
+  });
+
+  /** Painel da Speed: consultas por dia e estado das CTOs vistas, por sigla. */
+  admin.get("/painel", async (c) => {
+    const parsed = z.coerce.number().int().min(1).max(90).default(30).safeParse(c.req.query("days") || undefined);
+    if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 90.");
+    return c.json(await networkPanel(db, parsed.data));
+  });
+
+  /** Trilha de auditoria com nome de quem fez e do parceiro. Filtros: parceiro, prefixo de ação, período. */
   admin.get("/audit", async (c) => {
-    const partnerId = c.req.query("partnerId");
+    const parsed = z
+      .object({
+        partnerId: z.string().uuid().optional(),
+        action: z.string().regex(/^[a-z_.]{1,40}$/).optional(),
+        days: z.coerce.number().int().min(1).max(365).default(30),
+        limit: z.coerce.number().int().min(1).max(1000).default(300),
+      })
+      .safeParse(Object.fromEntries(Object.entries(c.req.query()).filter(([, v]) => v !== "")));
+    if (!parsed.success) throw new AppError(400, "dados_invalidos", "Filtro inválido.");
+    const q = parsed.data;
+    const filters = [gte(auditLog.createdAt, new Date(Date.now() - q.days * 24 * 3600_000))];
+    if (q.partnerId) filters.push(eq(auditLog.partnerId, q.partnerId));
+    if (q.action) filters.push(like(auditLog.action, `${q.action}%`));
     const rows = await db
-      .select()
+      .select({
+        id: auditLog.id,
+        createdAt: auditLog.createdAt,
+        action: auditLog.action,
+        entity: auditLog.entity,
+        entityId: auditLog.entityId,
+        ip: auditLog.ip,
+        data: auditLog.data,
+        partnerId: auditLog.partnerId,
+        partnerName: partners.name,
+        userId: auditLog.userId,
+        userName: users.name,
+        userEmail: users.email,
+      })
       .from(auditLog)
-      .where(partnerId ? eq(auditLog.partnerId, partnerId) : undefined)
+      .leftJoin(users, eq(users.id, auditLog.userId))
+      .leftJoin(partners, eq(partners.id, auditLog.partnerId))
+      .where(and(...filters))
       .orderBy(desc(auditLog.id))
-      .limit(500);
+      .limit(q.limit);
     return c.json({ entries: rows });
   });
 

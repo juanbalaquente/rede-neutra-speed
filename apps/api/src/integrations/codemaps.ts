@@ -7,7 +7,7 @@ interface CodemapsNearbyItem {
   name: string;
   distance: number;
   /** Grafia do próprio Codemaps ("avaliable"). */
-  avaliable: number;
+  avaliable: number | null;
   usage: number | null;
   geometry?: { coordinates?: [number, number] };
 }
@@ -64,11 +64,17 @@ export class CodemapsClient {
       ctos: (data.list ?? []).map((item) => {
         const g = item.geometry?.coordinates;
         return {
+          // Sem id estável vindo do Codemaps neste cliente: o nome é a chave (limitação conhecida).
+          ctoId: item.name,
           name: item.name,
           distanceM: Math.round(item.distance),
-          freePorts: item.avaliable ?? 0,
+          // Nulo do mapa fica nulo: converter para 0 esconderia o "não sei".
+          freePorts: item.avaliable ?? null,
           usagePct: item.usage ?? null,
           location: g ? { lng: g[0], lat: g[1] } : null,
+          // Sem a regra de sigla neste cliente direto (a Wiki é quem a aplica): a CTO não é liberada a parceiro.
+          regiao: null,
+          proximaAmbigua: false,
         };
       }),
     };

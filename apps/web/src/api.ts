@@ -8,14 +8,45 @@ export interface User {
 }
 
 export interface ViabilityCto {
+  /** null = a Speed não resolveu a caixa: aparece, mas não vende. */
+  ctoId: string | null;
   name: string;
   distanceM: number;
-  totalPorts: number;
-  freePorts: number[];
-  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | null;
+  location: { lat: number; lng: number } | null;
+  regiao: string | null;
+  /** Total de vagas (saídas de splitter) da CTO. */
+  totalVagas: number;
+  /** Vagas que o parceiro pode reservar agora. */
+  vagas: number;
+  blockedReason: "sem_vaga_livre" | "limite_ocupacao" | "conferir" | null;
+  proximaAmbigua: boolean;
+  /** Só a Speed recebe os motivos; para o parceiro vai vazio. */
+  motivos: string[];
+}
+
+export interface ConferirRow {
+  ctoId: string | null;
+  name: string;
+  consultas: number;
+  enderecos: number;
+  parceiros: number;
+  ultima: string;
+  motivos: string[];
+}
+
+export interface Partner {
+  id: string;
+  name: string;
+  maxActiveReservations: number;
+  maxCtoOccupancyPct: number;
+  maxUsers: number;
+  /** Siglas de região liberadas pela Speed (R1, ITA, FAT...). */
+  allowedRegions: string[];
 }
 
 export interface ViabilityResult {
+  /** Havia CTOs perto, mas nenhuma na área liberada ao parceiro. */
+  foraDaArea: boolean;
   viable: boolean;
   point: { lat: number; lng: number } | null;
   ctos: ViabilityCto[];
@@ -23,9 +54,11 @@ export interface ViabilityResult {
 }
 
 export interface Reservation {
+  ctoId: string;
   id: string;
   ctoName: string;
-  port: number;
+  /** Reserva é por vaga; só reservas antigas têm número de porta. */
+  port: number | null;
   address: string;
   status: "ativa" | "convertida" | "cancelada" | "expirada";
   expiresAt: string | null;
@@ -59,9 +92,103 @@ export const api = {
   login: (email: string, password: string) => request<{ user: User }>("POST", "/auth/login", { email, password }),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
   me: () => request<{ user: User }>("GET", "/auth/me"),
+  conferir: (days: number) => request<{ days: number; rows: ConferirRow[] }>("GET", `/admin/cto-conferir?days=${days}`),
+  partner: () => request<{ partner: Partner | null }>("GET", "/partner"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),
   reservations: () => request<{ reservations: Reservation[] }>("GET", "/reservations"),
-  reserve: (input: { ctoName: string; port: number; address: string; lat?: number | null; lng?: number | null }) =>
+  reserve: (input: { ctoId: string; address: string; lat?: number | null; lng?: number | null }) =>
     request<{ reservation: Reservation }>("POST", "/reservations", input),
   cancel: (id: string, reason?: string) => request<{ reservation: Reservation }>("POST", `/reservations/${id}/cancel`, { reason }),
+
+  // ── Administração Speed ──
+  adminPartners: () => request<{ partners: AdminPartner[] }>("GET", "/admin/partners"),
+  createPartner: (input: PartnerLimits & { name: string; cnpj: string; allowedRegions: string[] }) =>
+    request<{ partner: AdminPartner }>("POST", "/admin/partners", input),
+  updatePartner: (id: string, changes: Partial<PartnerLimits> & { allowedRegions?: string[]; status?: AdminPartner["status"]; reason?: string }) =>
+    request<{ partner: AdminPartner }>("PATCH", `/admin/partners/${id}`, changes),
+  users: (partnerId?: string) => request<{ users: PartnerUser[] }>("GET", partnerId ? `/users?partnerId=${encodeURIComponent(partnerId)}` : "/users"),
+  createUser: (input: { partnerId?: string; name: string; email: string; password: string; role: "atendente" | "supervisor" }) =>
+    request<{ user: PartnerUser }>("POST", "/users", input),
+  setUserActive: (id: string, active: boolean) => request<{ ok: true }>("POST", `/users/${id}/active`, { active }),
+  audit: (filters: { partnerId?: string; action?: string; days: number }) =>
+    request<{ entries: AuditEntry[] }>("GET", `/admin/audit?${new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`),
+  painel: (days: number) => request<NetworkPanel>("GET", `/admin/painel?days=${days}`),
 };
+
+export interface AuditEntry {
+  id: number;
+  createdAt: string;
+  action: string;
+  entity: string | null;
+  entityId: string | null;
+  ip: string | null;
+  data: Record<string, unknown> | null;
+  partnerId: string | null;
+  partnerName: string | null;
+  userId: string | null;
+  userName: string | null;
+  userEmail: string | null;
+}
+
+export type CtoEstado = "com_vaga" | "sem_vaga" | "conferir";
+
+export interface PanelCto {
+  ctoId: string;
+  name: string;
+  regiao: string | null;
+  estado: CtoEstado;
+  livres: number | null;
+  totalVagas: number | null;
+  reservasAbertas: number;
+  vistoEm: string;
+}
+
+export interface PanelRegion {
+  regiao: string | null;
+  ctos: PanelCto[];
+  comVaga: number;
+  semVaga: number;
+  conferir: number;
+  vagasLivres: number;
+  reservasAbertas: number;
+}
+
+export interface PanelDay {
+  dia: string;
+  viavel: number;
+  semViabilidade: number;
+  foraDaArea: number;
+}
+
+export interface NetworkPanel {
+  days: number;
+  totals: { consultas: number; viaveis: number; foraDaArea: number; reservasAbertas: number; ctosVistas: number; ctosConferir: number };
+  porDia: PanelDay[];
+  regioes: PanelRegion[];
+}
+
+export interface PartnerLimits {
+  maxActiveReservations: number;
+  maxCtoOccupancyPct: number;
+  maxUsers: number;
+}
+
+export interface AdminPartner extends PartnerLimits {
+  id: string;
+  name: string;
+  cnpj: string;
+  status: "ativo" | "bloqueado";
+  allowedRegions: string[];
+  createdAt: string;
+  /** Uso atual, calculado na listagem. */
+  activeReservations: number;
+  activeUsers: number;
+}
+
+export interface PartnerUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  active: boolean;
+}
