@@ -6,7 +6,7 @@ import { hashPassword, isStrongPassword, verifyPassword } from "./auth/password.
 import { SESSION_COOKIE, signSession, verifySession, type Role, type SessionUser } from "./auth/session.js";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
-import { auditLog, partners, plans, users } from "./db/schema.js";
+import { auditLog, partners, plans, portReservations, users } from "./db/schema.js";
 import type { Integrations } from "./integrations/types.js";
 import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
@@ -245,6 +245,21 @@ export function createApp({ db, config, integrations }: AppDeps) {
     const body = await parseBody(c, z.object({ active: z.boolean() }));
     if (id === me.id) throw new AppError(422, "proprio_usuario", "Você não pode desativar a si mesmo.");
     const scope = me.role === "admin_speed" ? eq(users.id, id) : and(eq(users.id, id), eq(users.partnerId, me.partnerId!));
+    // Reativar conta para o limite de usuários, como criar.
+    if (body.active) {
+      const [target] = await db.select({ partnerId: users.partnerId, active: users.active }).from(users).where(scope);
+      if (!target) throw new AppError(404, "usuario_nao_encontrado", "Usuário não encontrado.");
+      if (!target.active && target.partnerId) {
+        const [partner] = await db.select().from(partners).where(eq(partners.id, target.partnerId));
+        const [active] = await db
+          .select({ n: count() })
+          .from(users)
+          .where(and(eq(users.partnerId, target.partnerId), eq(users.active, true)));
+        if (partner && Number(active?.n ?? 0) >= partner.maxUsers) {
+          throw new AppError(409, "limite_usuarios", `Limite de ${partner.maxUsers} usuários atingido.`);
+        }
+      }
+    }
     const [updated] = await db.update(users).set({ active: body.active }).where(scope).returning({ id: users.id, partnerId: users.partnerId });
     if (!updated) throw new AppError(404, "usuario_nao_encontrado", "Usuário não encontrado.");
     await recordAudit(db, {
@@ -262,7 +277,25 @@ export function createApp({ db, config, integrations }: AppDeps) {
   const admin = new Hono<Env>();
   admin.use(requireUser, requireRole("admin_speed"));
 
-  admin.get("/partners", async (c) => c.json({ partners: await db.select().from(partners).orderBy(partners.name) }));
+  /** Parceiros com o uso atual (reservas abertas e usuários ativos), para a tela de gestão. */
+  admin.get("/partners", async (c) => {
+    const rows = await db.select().from(partners).orderBy(partners.name);
+    const open = await db
+      .select({ partnerId: portReservations.partnerId, n: count() })
+      .from(portReservations)
+      .where(eq(portReservations.status, "ativa"))
+      .groupBy(portReservations.partnerId);
+    const people = await db
+      .select({ partnerId: users.partnerId, n: count() })
+      .from(users)
+      .where(eq(users.active, true))
+      .groupBy(users.partnerId);
+    const openBy = new Map(open.map((r) => [r.partnerId, Number(r.n)]));
+    const peopleBy = new Map(people.map((r) => [r.partnerId, Number(r.n)]));
+    return c.json({
+      partners: rows.map((p) => ({ ...p, activeReservations: openBy.get(p.id) ?? 0, activeUsers: peopleBy.get(p.id) ?? 0 })),
+    });
+  });
 
   admin.post("/partners", async (c) => {
     const body = await parseBody(

@@ -99,4 +99,41 @@ export const api = {
   reserve: (input: { ctoId: string; address: string; lat?: number | null; lng?: number | null }) =>
     request<{ reservation: Reservation }>("POST", "/reservations", input),
   cancel: (id: string, reason?: string) => request<{ reservation: Reservation }>("POST", `/reservations/${id}/cancel`, { reason }),
+
+  // ── Administração Speed ──
+  adminPartners: () => request<{ partners: AdminPartner[] }>("GET", "/admin/partners"),
+  createPartner: (input: PartnerLimits & { name: string; cnpj: string; allowedRegions: string[] }) =>
+    request<{ partner: AdminPartner }>("POST", "/admin/partners", input),
+  updatePartner: (id: string, changes: Partial<PartnerLimits> & { allowedRegions?: string[]; status?: AdminPartner["status"]; reason?: string }) =>
+    request<{ partner: AdminPartner }>("PATCH", `/admin/partners/${id}`, changes),
+  users: (partnerId: string) => request<{ users: PartnerUser[] }>("GET", `/users?partnerId=${encodeURIComponent(partnerId)}`),
+  createUser: (input: { partnerId: string; name: string; email: string; password: string; role: "atendente" | "supervisor" }) =>
+    request<{ user: PartnerUser }>("POST", "/users", input),
+  setUserActive: (id: string, active: boolean) => request<{ ok: true }>("POST", `/users/${id}/active`, { active }),
 };
+
+export interface PartnerLimits {
+  maxActiveReservations: number;
+  maxCtoOccupancyPct: number;
+  maxUsers: number;
+}
+
+export interface AdminPartner extends PartnerLimits {
+  id: string;
+  name: string;
+  cnpj: string;
+  status: "ativo" | "bloqueado";
+  allowedRegions: string[];
+  createdAt: string;
+  /** Uso atual, calculado na listagem. */
+  activeReservations: number;
+  activeUsers: number;
+}
+
+export interface PartnerUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  active: boolean;
+}
