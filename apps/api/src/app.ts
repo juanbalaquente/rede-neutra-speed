@@ -138,7 +138,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
     const body = await parseBody(
       c,
       z.object({
-        ctoName: z.string().min(1).max(120),
+        ctoId: z.string().min(1).max(120),
         port: z.number().int().positive(),
         address: z.string().min(8).max(300),
         lat: z.number().nullable().optional(),

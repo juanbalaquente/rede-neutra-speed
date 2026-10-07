@@ -8,6 +8,7 @@ export interface User {
 }
 
 export interface ViabilityCto {
+  ctoId: string;
   name: string;
   distanceM: number;
   totalPorts: number;
@@ -23,6 +24,7 @@ export interface ViabilityResult {
 }
 
 export interface Reservation {
+  ctoId: string;
   id: string;
   ctoName: string;
   port: number;
@@ -61,7 +63,7 @@ export const api = {
   me: () => request<{ user: User }>("GET", "/auth/me"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),
   reservations: () => request<{ reservations: Reservation[] }>("GET", "/reservations"),
-  reserve: (input: { ctoName: string; port: number; address: string; lat?: number | null; lng?: number | null }) =>
+  reserve: (input: { ctoId: string; port: number; address: string; lat?: number | null; lng?: number | null }) =>
     request<{ reservation: Reservation }>("POST", "/reservations", input),
   cancel: (id: string, reason?: string) => request<{ reservation: Reservation }>("POST", `/reservations/${id}/cancel`, { reason }),
 };

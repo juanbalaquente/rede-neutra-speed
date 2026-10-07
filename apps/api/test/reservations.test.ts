@@ -16,8 +16,10 @@ afterEach(async () => {
 
 const ADDRESS = "Rua dos Testes, 100, Belo Horizonte";
 
-async function reserve(cookie: string, ctoName: string, port: number) {
-  return ctx.call(cookie, "POST", "/reservations", { ctoName, port, address: ADDRESS });
+/** Reservar exige a viabilidade do endereço antes, como no fluxo real. */
+async function reserve(cookie: string, ctoId: string, port: number) {
+  await ctx.call(cookie, "POST", "/viability", { address: ADDRESS });
+  return ctx.call(cookie, "POST", "/reservations", { ctoId, port, address: ADDRESS });
 }
 
 describe("viabilidade", () => {

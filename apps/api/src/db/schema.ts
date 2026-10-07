@@ -97,6 +97,9 @@ export const portReservations = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     partnerId: uuid("partner_id").notNull().references(() => partners.id),
     userId: uuid("user_id").notNull().references(() => users.id),
+    /** Id estável da caixa (chave da reserva). O nome repete e não identifica a CTO. */
+    ctoId: text("cto_id").notNull(),
+    /** Só para exibição, como a fonte devolveu na hora da reserva. */
     ctoName: text("cto_name").notNull(),
     port: integer("port").notNull(),
     totalPorts: integer("total_ports"),
@@ -113,7 +116,7 @@ export const portReservations = pgTable(
   },
   (t) => [
     uniqueIndex("port_reservations_live_port_uq")
-      .on(t.ctoName, t.port)
+      .on(t.ctoId, t.port)
       .where(sql`${t.status} IN ('ativa', 'convertida')`),
     index("port_reservations_partner_idx").on(t.partnerId, t.status),
     check("port_reservations_port_positive", sql`${t.port} > 0`),

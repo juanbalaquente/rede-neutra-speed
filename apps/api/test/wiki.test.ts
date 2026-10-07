@@ -98,7 +98,7 @@ describe("dado fraco nunca vira porta livre", () => {
       const cto3 = body.ctos.find((c: { name: string }) => c.name === "CTO-TESTE-03");
       expect(cto3.blockedReason).toBe("conferir");
       expect(cto3.freePorts).toEqual([]);
-      const res = await ctx.call(cookie, "POST", "/reservations", { ctoName: "CTO-TESTE-03", port: 1, address: "Rua dos Testes, 100, BH" });
+      const res = await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-03", port: 1, address: "Rua dos Testes, 100, Belo Horizonte" });
       expect(res.status).toBe(409);
       expect((await res.json()).error).toBe("porta_nao_confirmada");
     } finally {
@@ -115,7 +115,7 @@ describe("dado fraco nunca vira porta livre", () => {
       const cto1 = body.ctos.find((c: { name: string }) => c.name === "CTO-TESTE-01");
       expect(cto1.freePorts).not.toContain(4);
       expect(cto1.freePorts).toContain(6);
-      const res = await ctx.call(cookie, "POST", "/reservations", { ctoName: "CTO-TESTE-01", port: 4, address: "Rua dos Testes, 100, BH" });
+      const res = await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", port: 4, address: "Rua dos Testes, 100, Belo Horizonte" });
       expect((await res.json()).error).toBe("porta_nao_confirmada");
     } finally {
       await ctx.close();

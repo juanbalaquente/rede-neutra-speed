@@ -1,6 +1,8 @@
 import type { CtoPort, CtoPorts, NearbyResult, NetworkMap } from "./types.js";
 
 interface MockCto {
+  /** Id da caixa; quando falta, o nome faz o papel de id. */
+  id?: string;
   name: string;
   lat: number;
   lng: number;
@@ -24,7 +26,7 @@ export class MockNetworkMap implements NetworkMap {
     const point = { lat: -19.9193, lng: -43.9385 };
     const ctos = this.ctos
       .map((c) => ({
-        ctoId: c.name,
+        ctoId: c.id ?? c.name,
         name: c.name,
         distanceM: Math.round(haversineM(point.lat, point.lng, c.lat, c.lng)),
         freePorts: c.totalPorts - c.occupied.length,
@@ -37,10 +39,10 @@ export class MockNetworkMap implements NetworkMap {
   }
 
   async getCtoPorts(ctoId: string): Promise<CtoPorts | null> {
-    const cto = this.ctos.find((c) => c.name === ctoId);
+    const cto = this.ctos.find((c) => (c.id ?? c.name) === ctoId);
     if (!cto) return null;
     return {
-      ctoId: cto.name,
+      ctoId,
       name: cto.name,
       confidence: "confirmada",
       totalPorts: cto.totalPorts,

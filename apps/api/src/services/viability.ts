@@ -19,6 +19,7 @@ const MAX_CTOS = 5;
 const PLUS_CODE_RE = /\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b/i;
 
 export interface ViabilityCto {
+  ctoId: string;
   name: string;
   distanceM: number;
   location: { lat: number; lng: number } | null;
@@ -55,26 +56,27 @@ export async function runViability(
 
   const nearby = await network.findNearbyCtos(trimmed, VIABILITY_RADIUS_M);
   const candidates = nearby.ctos.slice(0, MAX_CTOS);
-  const names = candidates.map((c) => c.name);
-  const reserved = await livePortsByCto(db, names);
-  const usage = partner ? await partnerUsageByCto(db, partner.id, names) : new Map<string, number>();
+  const ids = candidates.map((c) => c.ctoId);
+  const reserved = await livePortsByCto(db, ids);
+  const usage = partner ? await partnerUsageByCto(db, partner.id, ids) : new Map<string, number>();
 
   const ctos: ViabilityCto[] = [];
   for (const c of candidates) {
     const detail = await network.getCtoPorts(c.ctoId);
     if (!detail) {
-      ctos.push({ name: c.name, distanceM: c.distanceM, location: c.location, totalPorts: 0, freePorts: [], blockedReason: "sem_dados_de_porta" });
+      ctos.push({ ctoId: c.ctoId, name: c.name, distanceM: c.distanceM, location: c.location, totalPorts: 0, freePorts: [], blockedReason: "sem_dados_de_porta" });
       continue;
     }
-    const taken = reserved.get(c.name) ?? new Set<number>();
+    const taken = reserved.get(c.ctoId) ?? new Set<number>();
     const free = detail.ports.filter((p) => p.state === "livre" && !taken.has(p.port)).map((p) => p.port);
     let blockedReason: ViabilityCto["blockedReason"] =
       detail.confidence === "conferir" ? "conferir" : free.length === 0 ? "sem_porta_livre" : null;
     if (!blockedReason && partner) {
-      const used = usage.get(c.name) ?? 0;
+      const used = usage.get(c.ctoId) ?? 0;
       if (used + 1 > maxPortsForPartner(detail.totalPorts, partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";
     }
     ctos.push({
+      ctoId: c.ctoId,
       name: c.name,
       distanceM: c.distanceM,
       location: c.location,
@@ -104,7 +106,7 @@ export async function runViability(
       lng: nearby.point?.lng ?? null,
       viable,
       reason,
-      result: { ctos: ctos.map((c) => ({ name: c.name, free: c.freePorts.length, blocked: c.blockedReason })) },
+      result: { ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, free: c.freePorts.length, blocked: c.blockedReason })) },
     })
     .returning({ id: viabilityQueries.id });
   await recordAudit(db, {

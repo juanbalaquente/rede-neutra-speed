@@ -1,12 +1,15 @@
-import { and, count, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { partners, portReservations } from "../db/schema.js";
-import type { NetworkMap } from "../integrations/types.js";
+import { partners, portReservations, viabilityQueries } from "../db/schema.js";
+import { IntegrationError, type NetworkMap } from "../integrations/types.js";
 import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 
 export const LIVE_STATUSES = ["ativa", "convertida"] as const;
+
+/** Por quanto tempo uma consulta de viabilidade autoriza reservar as CTOs que listou. */
+const VIABILITY_VALID_MS = 24 * 3600_000;
 
 /** Expira reservas vencidas e devolve a porta ao pool. Idempotente. */
 export async function expireOverdueReservations(db: Db, now = new Date()): Promise<number> {
@@ -28,36 +31,36 @@ export async function expireOverdueReservations(db: Db, now = new Date()): Promi
 }
 
 /** Portas com reserva viva (de qualquer parceiro), por CTO. */
-export async function livePortsByCto(db: Db, ctoNames: string[]): Promise<Map<string, Set<number>>> {
+export async function livePortsByCto(db: Db, ctoIds: string[]): Promise<Map<string, Set<number>>> {
   const map = new Map<string, Set<number>>();
-  if (ctoNames.length === 0) return map;
+  if (ctoIds.length === 0) return map;
   const rows = await db
-    .select({ ctoName: portReservations.ctoName, port: portReservations.port })
+    .select({ ctoId: portReservations.ctoId, port: portReservations.port })
     .from(portReservations)
-    .where(and(inArray(portReservations.ctoName, ctoNames), inArray(portReservations.status, [...LIVE_STATUSES])));
+    .where(and(inArray(portReservations.ctoId, ctoIds), inArray(portReservations.status, [...LIVE_STATUSES])));
   for (const r of rows) {
-    if (!map.has(r.ctoName)) map.set(r.ctoName, new Set());
-    map.get(r.ctoName)!.add(r.port);
+    if (!map.has(r.ctoId)) map.set(r.ctoId, new Set());
+    map.get(r.ctoId)!.add(r.port);
   }
   return map;
 }
 
 /** Quantas portas o parceiro ocupa (reserva viva ou ativação) em cada CTO. */
-export async function partnerUsageByCto(db: Db, partnerId: string, ctoNames: string[]): Promise<Map<string, number>> {
+export async function partnerUsageByCto(db: Db, partnerId: string, ctoIds: string[]): Promise<Map<string, number>> {
   const map = new Map<string, number>();
-  if (ctoNames.length === 0) return map;
+  if (ctoIds.length === 0) return map;
   const rows = await db
-    .select({ ctoName: portReservations.ctoName, n: count() })
+    .select({ ctoId: portReservations.ctoId, n: count() })
     .from(portReservations)
     .where(
       and(
         eq(portReservations.partnerId, partnerId),
-        inArray(portReservations.ctoName, ctoNames),
+        inArray(portReservations.ctoId, ctoIds),
         inArray(portReservations.status, [...LIVE_STATUSES]),
       ),
     )
-    .groupBy(portReservations.ctoName);
-  for (const r of rows) map.set(r.ctoName, Number(r.n));
+    .groupBy(portReservations.ctoId);
+  for (const r of rows) map.set(r.ctoId, Number(r.n));
   return map;
 }
 
@@ -67,7 +70,7 @@ export function maxPortsForPartner(totalPorts: number, maxPct: number): number {
 }
 
 export interface CreateReservationInput {
-  ctoName: string;
+  ctoId: string;
   port: number;
   address: string;
   lat?: number | null;
@@ -85,9 +88,28 @@ export async function createReservation(
   const now = opts.now ?? new Date();
   await expireOverdueReservations(db, now);
 
+  // A porta só pode vir de uma consulta de viabilidade recente do próprio parceiro,
+  // para este endereço, que tenha listado esta CTO. Sem isso, qualquer CTO da rede seria reservável.
+  const [listed] = await db
+    .select({ id: viabilityQueries.id })
+    .from(viabilityQueries)
+    .where(
+      and(
+        eq(viabilityQueries.partnerId, user.partnerId),
+        eq(viabilityQueries.address, input.address.trim()),
+        gte(viabilityQueries.createdAt, new Date(now.getTime() - VIABILITY_VALID_MS)),
+        sql`${viabilityQueries.result} -> 'ctos' @> ${JSON.stringify([{ ctoId: input.ctoId }])}::jsonb`,
+      ),
+    )
+    .limit(1);
+  if (!listed) {
+    throw new AppError(422, "viabilidade_necessaria", "Consulte a viabilidade deste endereço antes de reservar (a consulta vale por 24 horas).");
+  }
+
   // Confere a porta na fonte da verdade antes de travar.
-  const cto = await network.getCtoPorts(input.ctoName);
+  const cto = await network.getCtoPorts(input.ctoId);
   if (!cto) throw new AppError(404, "cto_nao_encontrada", "CTO não encontrada.");
+  if (cto.ctoId !== input.ctoId) throw new IntegrationError("rede", "a fonte devolveu outro id de CTO");
   const port = cto.ports.find((p) => p.port === input.port);
   if (!port) throw new AppError(422, "porta_inexistente", "Essa porta não existe nessa CTO.");
   if (cto.confidence === "conferir" || port.state === "desconhecida") {
@@ -114,7 +136,7 @@ export async function createReservation(
         );
       }
 
-      const usage = (await partnerUsageByCto(tx as Db, partnerId, [cto.name])).get(cto.name) ?? 0;
+      const usage = (await partnerUsageByCto(tx as Db, partnerId, [input.ctoId])).get(input.ctoId) ?? 0;
       if (usage + 1 > maxPortsForPartner(cto.totalPorts, partner.maxCtoOccupancyPct)) {
         throw new AppError(409, "limite_ocupacao_cto", "Limite de ocupação dessa CTO para o parceiro atingido.");
       }
@@ -125,6 +147,7 @@ export async function createReservation(
         .values({
           partnerId,
           userId: user.id,
+          ctoId: input.ctoId,
           ctoName: cto.name,
           port: input.port,
           totalPorts: cto.totalPorts,
@@ -144,7 +167,7 @@ export async function createReservation(
         entity: "port_reservation",
         entityId: created!.id,
         ip: opts.ip,
-        data: { cto: cto.name, port: input.port, expiresAt },
+        data: { ctoId: input.ctoId, cto: cto.name, port: input.port, expiresAt },
       });
       return created!;
     });

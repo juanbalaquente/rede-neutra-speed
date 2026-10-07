@@ -33,12 +33,12 @@ export function ViabilityPage({ user, onReserved }: { user: User; onReserved: ()
   }
 
   async function reserve(cto: ViabilityCto, port: number) {
-    const key = `${cto.name}#${port}`;
+    const key = `${cto.ctoId}#${port}`;
     if (!confirm(`Reservar a porta ${port} da ${cto.name} por 48 horas?`)) return;
     setReserving(key);
     setError(null);
     try {
-      await api.reserve({ ctoName: cto.name, port, address: queried, lat: result?.point?.lat, lng: result?.point?.lng });
+      await api.reserve({ ctoId: cto.ctoId, port, address: queried, lat: result?.point?.lat, lng: result?.point?.lng });
       onReserved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao reservar.");
@@ -74,7 +74,7 @@ export function ViabilityPage({ user, onReserved }: { user: User; onReserved: ()
           )}
           <div className="cto-list">
             {result.ctos.map((cto) => (
-              <article key={cto.name} className="card cto">
+              <article key={cto.ctoId} className="card cto">
                 <header>
                   <strong>{cto.name}</strong>
                   <span className="muted">
@@ -93,7 +93,7 @@ export function ViabilityPage({ user, onReserved }: { user: User; onReserved: ()
                         title={canReserve ? "Reservar por 48h" : "Somente parceiros reservam"}
                         onClick={() => reserve(cto, port)}
                       >
-                        {reserving === `${cto.name}#${port}` ? "…" : `Porta ${port}`}
+                        {reserving === `${cto.ctoId}#${port}` ? "…" : `Porta ${port}`}
                       </button>
                     ))}
                   </div>
