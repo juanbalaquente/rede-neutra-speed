@@ -49,3 +49,13 @@ export const PeopleIcon = () => (
     <path d="M16 4.5a3.5 3.5 0 0 1 0 7M21 20c-.5-2.2-1.7-3.7-3.3-4.5" />
   </Icon>
 );
+export const ChartIcon = () => (
+  <Icon>
+    <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+  </Icon>
+);
+export const ListIcon = () => (
+  <Icon>
+    <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
+  </Icon>
+);

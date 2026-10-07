@@ -2,15 +2,18 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { api, type Partner, type Reservation, type User } from "./api";
 import { LoginPage } from "./pages/LoginPage";
 import { ConferirPage } from "./pages/ConferirPage";
+import { AuditPage } from "./pages/AuditPage";
+import { PanelPage } from "./pages/PanelPage";
 import { PartnersPage } from "./pages/PartnersPage";
+import { TeamPage } from "./pages/TeamPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
 import { CommandPalette, type Command } from "./ui/CommandPalette";
-import { ClockIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon, SunIcon } from "./ui/Icons";
+import { ChartIcon, ClockIcon, ListIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon, SunIcon } from "./ui/Icons";
 import { ToastProvider } from "./ui/Toast";
 import { useTheme } from "./ui/theme";
 
-type Tab = "viabilidade" | "reservas" | "conferir" | "parceiros";
+type Tab = "viabilidade" | "reservas" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
 
 const ROLE_LABEL: Record<User["role"], string> = {
   atendente: "Atendente",
@@ -18,7 +21,7 @@ const ROLE_LABEL: Record<User["role"], string> = {
   admin_speed: "Administrador Speed",
 };
 
-const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas", conferir: "CTOs para conferir", parceiros: "Parceiros" };
+const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
 
 export function App() {
   return (
@@ -44,7 +47,7 @@ function Portal() {
 function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { theme, toggle } = useTheme();
   // O administrador Speed começa pela gestão; o parceiro, pela venda.
-  const [tab, setTab] = useState<Tab>(user.role === "admin_speed" ? "parceiros" : "viabilidade");
+  const [tab, setTab] = useState<Tab>(user.role === "admin_speed" ? "painel" : "viabilidade");
   const [partner, setPartner] = useState<Partner | null>(null);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -85,6 +88,13 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const commands = useMemo<Command[]>(
     () => [
       { id: "go-viab", group: "Ir para", title: "Nova venda", icon: <PinIcon />, run: () => setTab("viabilidade") },
+      ...(user.role === "admin_speed"
+        ? [
+            { id: "go-painel", group: "Ir para", title: "Painel da rede", icon: <ChartIcon />, run: () => setTab("painel") },
+            { id: "go-auditoria", group: "Ir para", title: "Auditoria", icon: <ListIcon />, run: () => setTab("auditoria") },
+          ]
+        : []),
+      ...(user.role === "supervisor" ? [{ id: "go-equipe", group: "Ir para", title: "Equipe", icon: <PeopleIcon />, run: () => setTab("equipe") }] : []),
       ...(user.role === "admin_speed" ? [{ id: "go-parceiros", group: "Ir para", title: "Parceiros", icon: <PeopleIcon />, run: () => setTab("parceiros") }] : []),
       ...(user.role === "admin_speed" ? [{ id: "go-conferir", group: "Ir para", title: "CTOs para conferir", icon: <PinIcon />, run: () => setTab("conferir") }] : []),
       { id: "go-resv", group: "Ir para", title: "Reservas", hint: `${activeCount} abertas`, icon: <ClockIcon />, run: () => setTab("reservas") },
@@ -128,11 +138,25 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <button className={`nv ${tab === "reservas" ? "on" : ""}`} onClick={() => setTab("reservas")}>
             <ClockIcon />Reservas {reservations && <em>{activeCount}</em>}
           </button>
+          {user.role === "supervisor" && (
+            <>
+              <div className="grp">Gestão</div>
+              <button className={`nv ${tab === "equipe" ? "on" : ""}`} onClick={() => setTab("equipe")}>
+                <PeopleIcon />Equipe
+              </button>
+            </>
+          )}
           {user.role === "admin_speed" && (
             <>
               <div className="grp">Gestão</div>
+              <button className={`nv ${tab === "painel" ? "on" : ""}`} onClick={() => setTab("painel")}>
+                <ChartIcon />Painel da rede
+              </button>
               <button className={`nv ${tab === "parceiros" ? "on" : ""}`} onClick={() => setTab("parceiros")}>
                 <PeopleIcon />Parceiros
+              </button>
+              <button className={`nv ${tab === "auditoria" ? "on" : ""}`} onClick={() => setTab("auditoria")}>
+                <ListIcon />Auditoria
               </button>
               <div className="grp">Rede</div>
               <button className={`nv ${tab === "conferir" ? "on" : ""}`} onClick={() => setTab("conferir")}>
@@ -167,7 +191,13 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           </button>
         </header>
 
-        {tab === "parceiros" && user.role === "admin_speed" ? (
+        {tab === "painel" && user.role === "admin_speed" ? (
+          <PanelPage />
+        ) : tab === "auditoria" && user.role === "admin_speed" ? (
+          <AuditPage />
+        ) : tab === "equipe" && user.role === "supervisor" ? (
+          <TeamPage user={user} partner={partner} />
+        ) : tab === "parceiros" && user.role === "admin_speed" ? (
           <PartnersPage />
         ) : tab === "conferir" && user.role === "admin_speed" ? (
           <ConferirPage />
