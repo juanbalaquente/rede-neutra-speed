@@ -11,6 +11,7 @@ import type { Integrations } from "./integrations/types.js";
 import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
+import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
 import { runViability } from "./services/viability.js";
 
@@ -311,6 +312,20 @@ export function createApp({ db, config, integrations }: AppDeps) {
   admin.get("/integrations/health", async (c) => {
     const health = await integrations.network.health();
     return c.json({ mode: config.INTEGRATIONS_MODE, ...health });
+  });
+
+  /** CTOs mais encontradas em "conferir" nas consultas: por onde a Speed começa a limpar o cadastro. ?format=csv baixa a planilha. */
+  admin.get("/cto-conferir", async (c) => {
+    const parsed = z.coerce.number().int().min(1).max(365).default(30).safeParse(c.req.query("days") || undefined);
+    if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 365.");
+    const days = parsed.data;
+    const rows = await conferirReport(db, days);
+    if (c.req.query("format") === "csv") {
+      c.header("Content-Type", "text/csv; charset=utf-8");
+      c.header("Content-Disposition", `attachment; filename="ctos-conferir-${days}d.csv"`);
+      return c.body(conferirCsv(rows));
+    }
+    return c.json({ days, rows });
   });
 
   admin.get("/audit", async (c) => {

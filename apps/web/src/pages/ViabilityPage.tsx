@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, type Partner, type User, type ViabilityCto, type ViabilityResult } from "../api";
 import { PinIcon } from "../ui/Icons";
+import { motivoLabel } from "../motivos";
 import { MiniMap } from "../ui/MiniMap";
 import { useToast } from "../ui/Toast";
 
@@ -8,16 +9,6 @@ const BLOCKED: Record<NonNullable<ViabilityCto["blockedReason"]>, { label: strin
   sem_porta_livre: { label: "Sem porta livre", tone: "b-mute" },
   limite_ocupacao: { label: "Limite de ocupação atingido", tone: "b-warn" },
   conferir: { label: "A Speed precisa conferir esta CTO", tone: "b-warn" },
-};
-
-/** Motivos técnicos de "conferir": aparecem só para a Speed. */
-const MOTIVO: Record<string, string> = {
-  cto_sem_id: "A Wiki não resolveu a caixa (nome ambíguo)",
-  cto_nao_encontrada: "Caixa não encontrada na leitura (id recriado?)",
-  mapa_sem_contagem: "O mapa não informou portas livres",
-  mapa_diverge_ocupacao: "Mapa e ocupação divergem",
-  dado_antigo: "Ocupação lida há mais de 1 hora",
-  fonte_marcou_conferir: "A fonte marcou para conferência",
 };
 
 const STEPS = ["Endereço", "CTO e porta", "Reserva"];
@@ -143,7 +134,7 @@ export function ViabilityPage({
                     {blocked ? <span className={`badge ${blocked.tone}`}>{blocked.label}</span> : <span className="badge b-ok">{cto.freePorts.length} livres</span>}
                     <small>{cto.distanceM} m do endereço{cto.totalPorts > 0 ? ` · ${cto.totalPorts} portas` : ""}</small>
                     {cto.proximaAmbigua && <small style={{ color: "var(--warn)" }}>Há outra CTO muito próxima. A certa só se confirma em campo.</small>}
-                    {cto.motivos.length > 0 && <small>Motivo: {cto.motivos.map((m) => MOTIVO[m] ?? m).join("; ")}</small>}
+                    {cto.motivos.length > 0 && <small>Motivo: {cto.motivos.map((m) => motivoLabel(m)).join("; ")}</small>}
                     {!blocked && (
                       <div className="prt" role="group" aria-label={`Portas da ${cto.name}`}>
                         {Array.from({ length: cto.totalPorts }, (_, n) => n + 1).map((port) => {

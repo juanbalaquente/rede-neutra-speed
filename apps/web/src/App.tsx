@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, type Partner, type Reservation, type User } from "./api";
 import { LoginPage } from "./pages/LoginPage";
+import { ConferirPage } from "./pages/ConferirPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
 import { CommandPalette, type Command } from "./ui/CommandPalette";
@@ -8,7 +9,7 @@ import { ClockIcon, MoonIcon, OutIcon, PinIcon, SearchIcon, SunIcon } from "./ui
 import { ToastProvider } from "./ui/Toast";
 import { useTheme } from "./ui/theme";
 
-type Tab = "viabilidade" | "reservas";
+type Tab = "viabilidade" | "reservas" | "conferir";
 
 const ROLE_LABEL: Record<User["role"], string> = {
   atendente: "Atendente",
@@ -16,7 +17,7 @@ const ROLE_LABEL: Record<User["role"], string> = {
   admin_speed: "Administrador Speed",
 };
 
-const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas" };
+const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas", conferir: "CTOs para conferir" };
 
 export function App() {
   return (
@@ -82,11 +83,12 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const commands = useMemo<Command[]>(
     () => [
       { id: "go-viab", group: "Ir para", title: "Nova venda", icon: <PinIcon />, run: () => setTab("viabilidade") },
+      ...(user.role === "admin_speed" ? [{ id: "go-conferir", group: "Ir para", title: "CTOs para conferir", icon: <PinIcon />, run: () => setTab("conferir") }] : []),
       { id: "go-resv", group: "Ir para", title: "Reservas", hint: `${activeCount} abertas`, icon: <ClockIcon />, run: () => setTab("reservas") },
       { id: "theme", group: "Preferências", title: theme === "dark" ? "Usar tema claro" : "Usar tema escuro", icon: theme === "dark" ? <SunIcon /> : <MoonIcon />, run: toggle },
       { id: "out", group: "Preferências", title: "Sair", icon: <OutIcon />, run: () => void logout() },
     ],
-    [activeCount, theme, toggle, logout],
+    [activeCount, theme, toggle, logout, user.role],
   );
 
   const consult = useCallback((address: string) => {
@@ -123,6 +125,14 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <button className={`nv ${tab === "reservas" ? "on" : ""}`} onClick={() => setTab("reservas")}>
             <ClockIcon />Reservas {reservations && <em>{activeCount}</em>}
           </button>
+          {user.role === "admin_speed" && (
+            <>
+              <div className="grp">Rede</div>
+              <button className={`nv ${tab === "conferir" ? "on" : ""}`} onClick={() => setTab("conferir")}>
+                <SearchIcon size={16} />CTOs para conferir
+              </button>
+            </>
+          )}
         </nav>
         <div className="foot">
           <div className="av" aria-hidden="true">{initials}</div>
@@ -150,7 +160,9 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           </button>
         </header>
 
-        {tab === "viabilidade" ? (
+        {tab === "conferir" && user.role === "admin_speed" ? (
+          <ConferirPage />
+        ) : tab === "viabilidade" ? (
           <ViabilityPage
             user={user}
             partner={partner}

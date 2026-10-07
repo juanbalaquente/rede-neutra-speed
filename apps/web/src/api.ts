@@ -21,6 +21,16 @@ export interface ViabilityCto {
   motivos: string[];
 }
 
+export interface ConferirRow {
+  ctoId: string | null;
+  name: string;
+  consultas: number;
+  enderecos: number;
+  parceiros: number;
+  ultima: string;
+  motivos: string[];
+}
+
 export interface Partner {
   id: string;
   name: string;
@@ -74,6 +84,7 @@ export const api = {
   login: (email: string, password: string) => request<{ user: User }>("POST", "/auth/login", { email, password }),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
   me: () => request<{ user: User }>("GET", "/auth/me"),
+  conferir: (days: number) => request<{ days: number; rows: ConferirRow[] }>("GET", `/admin/cto-conferir?days=${days}`),
   partner: () => request<{ partner: Partner | null }>("GET", "/partner"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),
   reservations: () => request<{ reservations: Reservation[] }>("GET", "/reservations"),
