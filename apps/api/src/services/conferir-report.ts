@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
+import { rowsOf } from "../db/rows.js";
 
 export interface ConferirRow {
   ctoId: string | null;
@@ -38,8 +39,7 @@ export async function conferirReport(db: Db, days: number, limit = 200): Promise
     ORDER BY "consultas" DESC, "ultima" DESC
     LIMIT ${limit}
   `);
-  // postgres-js devolve a lista direto; PGlite devolve { rows }.
-  const rows = (Array.isArray(result) ? result : (result as unknown as { rows: Record<string, unknown>[] }).rows) as Record<string, unknown>[];
+  const rows = rowsOf(result);
   return rows.map((r) => ({
     ctoId: (r.ctoId as string | null) ?? null,
     name: String(r.name),

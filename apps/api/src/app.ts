@@ -12,6 +12,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
+import { networkPanel } from "./services/network-panel.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
 import { runViability } from "./services/viability.js";
 
@@ -364,6 +365,13 @@ export function createApp({ db, config, integrations }: AppDeps) {
       return c.body(conferirCsv(rows));
     }
     return c.json({ days, rows });
+  });
+
+  /** Painel da Speed: consultas por dia e estado das CTOs vistas, por sigla. */
+  admin.get("/painel", async (c) => {
+    const parsed = z.coerce.number().int().min(1).max(90).default(30).safeParse(c.req.query("days") || undefined);
+    if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 90.");
+    return c.json(await networkPanel(db, parsed.data));
   });
 
   /** Trilha de auditoria com nome de quem fez e do parceiro. Filtros: parceiro, prefixo de ação, período. */

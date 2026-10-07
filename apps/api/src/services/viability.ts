@@ -76,6 +76,8 @@ export async function runViability(
   const usage = partner ? await partnerUsageByCto(db, partner.id, ids) : new Map<string, number>();
 
   const ctos: ViabilityCto[] = [];
+  /** Vagas livres reais de cada CTO lida (antes do limite do parceiro), para o painel da Speed. */
+  const livresById = new Map<string, number>();
   for (const c of candidates) {
     const base = { ctoId: c.ctoId, name: c.name, distanceM: c.distanceM, location: c.location, regiao: c.regiao, proximaAmbigua: c.proximaAmbigua };
     const conferir = (motivos: string[], totalVagas = 0): ViabilityCto => ({ ...base, totalVagas, vagas: 0, blockedReason: "conferir", motivos });
@@ -105,6 +107,7 @@ export async function runViability(
       continue;
     }
     const livres = Math.max(0, detail.vagasLivres - (reserved.get(c.ctoId) ?? 0));
+    livresById.set(c.ctoId, livres);
     let blockedReason: ViabilityCto["blockedReason"] = livres === 0 ? "sem_vaga_livre" : null;
     if (!blockedReason && partner) {
       const used = usage.get(c.ctoId) ?? 0;
@@ -135,7 +138,17 @@ export async function runViability(
       viable,
       reason,
       result: {
-        ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, regiao: c.regiao, vagas: c.vagas, blocked: c.blockedReason, ambiguous: c.proximaAmbigua, motivos: c.motivos })),
+        ctos: ctos.map((c) => ({
+          ctoId: c.ctoId,
+          name: c.name,
+          regiao: c.regiao,
+          vagas: c.vagas,
+          livres: c.ctoId !== null ? (livresById.get(c.ctoId) ?? null) : null,
+          totalVagas: c.totalVagas,
+          blocked: c.blockedReason,
+          ambiguous: c.proximaAmbigua,
+          motivos: c.motivos,
+        })),
         // Contagem do mapa, para a Speed entender por que uma CTO ficou em "conferir".
         sources: candidates.map((c) => ({ ctoId: c.ctoId, mapFree: c.freePorts })),
         // CTOs perto do endereço que ficaram fora da área liberada (demanda fora do piloto).

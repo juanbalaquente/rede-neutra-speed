@@ -110,7 +110,62 @@ export const api = {
   createUser: (input: { partnerId?: string; name: string; email: string; password: string; role: "atendente" | "supervisor" }) =>
     request<{ user: PartnerUser }>("POST", "/users", input),
   setUserActive: (id: string, active: boolean) => request<{ ok: true }>("POST", `/users/${id}/active`, { active }),
+  audit: (filters: { partnerId?: string; action?: string; days: number }) =>
+    request<{ entries: AuditEntry[] }>("GET", `/admin/audit?${new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`),
+  painel: (days: number) => request<NetworkPanel>("GET", `/admin/painel?days=${days}`),
 };
+
+export interface AuditEntry {
+  id: number;
+  createdAt: string;
+  action: string;
+  entity: string | null;
+  entityId: string | null;
+  ip: string | null;
+  data: Record<string, unknown> | null;
+  partnerId: string | null;
+  partnerName: string | null;
+  userId: string | null;
+  userName: string | null;
+  userEmail: string | null;
+}
+
+export type CtoEstado = "com_vaga" | "sem_vaga" | "conferir";
+
+export interface PanelCto {
+  ctoId: string;
+  name: string;
+  regiao: string | null;
+  estado: CtoEstado;
+  livres: number | null;
+  totalVagas: number | null;
+  reservasAbertas: number;
+  vistoEm: string;
+}
+
+export interface PanelRegion {
+  regiao: string | null;
+  ctos: PanelCto[];
+  comVaga: number;
+  semVaga: number;
+  conferir: number;
+  vagasLivres: number;
+  reservasAbertas: number;
+}
+
+export interface PanelDay {
+  dia: string;
+  viavel: number;
+  semViabilidade: number;
+  foraDaArea: number;
+}
+
+export interface NetworkPanel {
+  days: number;
+  totals: { consultas: number; viaveis: number; foraDaArea: number; reservasAbertas: number; ctosVistas: number; ctosConferir: number };
+  porDia: PanelDay[];
+  regioes: PanelRegion[];
+}
 
 export interface PartnerLimits {
   maxActiveReservations: number;
