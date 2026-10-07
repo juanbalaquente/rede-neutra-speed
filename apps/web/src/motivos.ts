@@ -5,6 +5,10 @@ export const MOTIVO: Record<string, string> = {
   mapa_sem_contagem: "O mapa não informou portas livres",
   mapa_diverge_ocupacao: "Mapa e ocupação divergem",
   dado_antigo: "Ocupação lida há mais de 1 hora",
+  nome_repetido: "Nome repetido sem coincidência de coordenada",
+  gemea_total_diferente: "Caixas gêmeas com total de portas diferente",
+  gemea_nao_resolvida: "Caixa gêmea não resolvida",
+  snapshot_antigo: "Leitura da Wiki desatualizada",
   fonte_marcou_conferir: "A fonte marcou para conferência",
 };
 
