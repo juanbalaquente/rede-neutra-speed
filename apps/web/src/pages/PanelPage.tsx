@@ -94,7 +94,7 @@ function DailyChart({ days }: { days: PanelDay[] }) {
             )}
           </div>
           <div className="xl">
-            {days.map((d, i) => <span key={d.dia} style={{ visibility: i % labelEvery === 0 || i === days.length - 1 ? "visible" : "hidden" }}>{fmtDay(d.dia)}</span>)}
+            {days.map((d, i) => <span key={d.dia} style={{ visibility: i === days.length - 1 || (i % labelEvery === 0 && days.length - 1 - i >= labelEvery) ? "visible" : "hidden" }}>{fmtDay(d.dia)}</span>)}
           </div>
         </div>
       )}
@@ -103,7 +103,7 @@ function DailyChart({ days }: { days: PanelDay[] }) {
 }
 
 function RegionCard({ region }: { region: PanelRegion }) {
-  const [hover, setHover] = useState<{ cto: PanelCto; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState<{ cto: PanelCto; x: number; y: number; flip: "left" | "right" | null } | null>(null);
   const [table, setTable] = useState(false);
   const estado = (c: PanelCto) => (c.estado === "conferir" ? "A Speed precisa conferir" : c.estado === "com_vaga" ? "Com vaga" : "Sem vaga");
 
@@ -144,7 +144,10 @@ function RegionCard({ region }: { region: PanelRegion }) {
               const show = (el: HTMLElement) => {
                 const box = el.parentElement!.getBoundingClientRect();
                 const r = el.getBoundingClientRect();
-                setHover({ cto: c, x: r.left - box.left + r.width / 2, y: r.top - box.top - 6 });
+                const x = r.left - box.left + r.width / 2;
+                // Abre abaixo da célula; perto da borda, ancora na lateral para não sair do cartão.
+                const flip = x < 110 ? "left" : x > box.width - 110 ? "right" : null;
+                setHover({ cto: c, x: flip === "left" ? r.left - box.left : flip === "right" ? r.right - box.left : x, y: r.bottom - box.top + 6, flip });
               };
               return (
                 <button
@@ -161,7 +164,7 @@ function RegionCard({ region }: { region: PanelRegion }) {
               );
             })}
             {hover && (
-              <div className="tip" style={{ left: hover.x, top: hover.y }}>
+              <div className="tip" style={{ left: hover.x, top: hover.y, transform: hover.flip === "left" ? "none" : hover.flip === "right" ? "translateX(-100%)" : "translateX(-50%)" }}>
                 <b className="mono">{hover.cto.name}</b>
                 <div><span>Situação</span><span>{estado(hover.cto)}</span></div>
                 {hover.cto.livres !== null && <div><span>Vagas livres</span><span className="tab">{hover.cto.livres}{hover.cto.totalVagas ? ` de ${hover.cto.totalVagas}` : ""}</span></div>}
