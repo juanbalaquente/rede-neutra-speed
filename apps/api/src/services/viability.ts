@@ -69,8 +69,14 @@ export async function runViability(
     }
     const taken = reserved.get(c.ctoId) ?? new Set<number>();
     const free = detail.ports.filter((p) => p.state === "livre" && !taken.has(p.port)).map((p) => p.port);
+    // Duas fontes precisam concordar: o mapa (Codemaps) diz quantas portas estão livres e a
+    // ocupação (OLTCloud) diz quais. Porta sem registro ainda pode ser livre, então entra na
+    // conta, mas nunca é oferecida. Qualquer outra diferença: a Speed confere antes de vender.
+    const confirmed = detail.ports.filter((p) => p.state === "livre").length;
+    const unknown = detail.ports.filter((p) => p.state === "desconhecida").length;
+    const sourcesDiverge = c.freePorts !== confirmed + unknown;
     let blockedReason: ViabilityCto["blockedReason"] =
-      detail.confidence === "conferir" ? "conferir" : free.length === 0 ? "sem_porta_livre" : null;
+      detail.confidence === "conferir" || sourcesDiverge ? "conferir" : free.length === 0 ? "sem_porta_livre" : null;
     if (!blockedReason && partner) {
       const used = usage.get(c.ctoId) ?? 0;
       if (used + 1 > maxPortsForPartner(detail.totalPorts, partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";
@@ -106,7 +112,11 @@ export async function runViability(
       lng: nearby.point?.lng ?? null,
       viable,
       reason,
-      result: { ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, free: c.freePorts.length, blocked: c.blockedReason })) },
+      result: {
+        ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, free: c.freePorts.length, blocked: c.blockedReason })),
+        // Contagem de cada fonte, para a Speed entender por que uma CTO ficou em "conferir".
+        sources: candidates.map((c) => ({ ctoId: c.ctoId, mapFree: c.freePorts })),
+      },
     })
     .returning({ id: viabilityQueries.id });
   await recordAudit(db, {

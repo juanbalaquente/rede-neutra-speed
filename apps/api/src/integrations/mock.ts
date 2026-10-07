@@ -8,6 +8,8 @@ interface MockCto {
   lng: number;
   totalPorts: number;
   occupied: number[];
+  /** Portas livres que o mapa (Codemaps) informa; quando falta, bate com a ocupação. Serve para simular divergência. */
+  mapFree?: number;
 }
 
 /** Rede de exemplo para desenvolvimento e testes. Nenhum dado real. */
@@ -29,7 +31,7 @@ export class MockNetworkMap implements NetworkMap {
         ctoId: c.id ?? c.name,
         name: c.name,
         distanceM: Math.round(haversineM(point.lat, point.lng, c.lat, c.lng)),
-        freePorts: c.totalPorts - c.occupied.length,
+        freePorts: c.mapFree ?? c.totalPorts - c.occupied.length,
         usagePct: Math.round((c.occupied.length / c.totalPorts) * 100),
         location: { lat: c.lat, lng: c.lng },
       }))

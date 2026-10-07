@@ -80,3 +80,40 @@ describe("reserva exige viabilidade do endereço", () => {
     }
   });
 });
+
+describe("cruzamento das duas fontes de porta livre", () => {
+  const net = (mapFree?: number) =>
+    new MockNetworkMap([{ id: "caixa-9", name: "CTO-CRUZA", lat: -19.9191, lng: -43.9386, totalPorts: 8, occupied: [1, 2], mapFree }]);
+  const reserve = (ctx: Awaited<ReturnType<typeof setup>>, cookie: string, port: number) =>
+    ctx.call(cookie, "POST", "/reservations", { ctoId: "caixa-9", port, address: ADDRESS });
+
+  it("fontes concordando oferecem as portas livres", async () => {
+    const ctx = await setup(net());
+    try {
+      const a = await ctx.createPartner("A", "11111111000111");
+      const cookie = await ctx.login(a.atendente);
+      const body = await (await ctx.call(cookie, "POST", "/viability", { address: ADDRESS })).json();
+      expect(body.ctos[0].blockedReason).toBeNull();
+      expect(body.ctos[0].freePorts).toEqual([3, 4, 5, 6, 7, 8]);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  it("mapa e ocupação divergindo: CTO em 'conferir', sem porta e sem reserva", async () => {
+    const ctx = await setup(net(3)); // o mapa diz 3 livres; a ocupação mostra 6 livres
+    try {
+      const a = await ctx.createPartner("A", "11111111000111");
+      const cookie = await ctx.login(a.atendente);
+      const body = await (await ctx.call(cookie, "POST", "/viability", { address: ADDRESS })).json();
+      expect(body.ctos[0].blockedReason).toBe("conferir");
+      expect(body.ctos[0].freePorts).toEqual([]);
+      expect(body.viable).toBe(false);
+      const res = await reserve(ctx, cookie, 3);
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toBe("porta_nao_confirmada");
+    } finally {
+      await ctx.close();
+    }
+  });
+});

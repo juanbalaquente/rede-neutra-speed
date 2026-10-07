@@ -91,7 +91,7 @@ export async function createReservation(
   // A porta só pode vir de uma consulta de viabilidade recente do próprio parceiro,
   // para este endereço, que tenha listado esta CTO. Sem isso, qualquer CTO da rede seria reservável.
   const [listed] = await db
-    .select({ id: viabilityQueries.id })
+    .select({ result: viabilityQueries.result })
     .from(viabilityQueries)
     .where(
       and(
@@ -101,9 +101,15 @@ export async function createReservation(
         sql`${viabilityQueries.result} -> 'ctos' @> ${JSON.stringify([{ ctoId: input.ctoId }])}::jsonb`,
       ),
     )
+    .orderBy(desc(viabilityQueries.createdAt))
     .limit(1);
   if (!listed) {
     throw new AppError(422, "viabilidade_necessaria", "Consulte a viabilidade deste endereço antes de reservar (a consulta vale por 24 horas).");
+  }
+  // A consulta mais recente marcou a CTO para conferência (fontes divergentes ou dado fraco).
+  const entry = (listed.result as { ctos?: { ctoId: string; blocked: string | null }[] } | null)?.ctos?.find((c) => c.ctoId === input.ctoId);
+  if (entry?.blocked === "conferir") {
+    throw new AppError(409, "porta_nao_confirmada", "As fontes de dados divergem nessa CTO. A Speed precisa conferir antes de vender.");
   }
 
   // Confere a porta na fonte da verdade antes de travar.
