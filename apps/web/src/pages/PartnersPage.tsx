@@ -357,7 +357,7 @@ export function PartnersPage() {
 
       <div className="g11">
         <div className="card">
-          <div className="ch"><h3>{list ? `${list.length} parceiros` : "Carregando…"}</h3><small>clique para editar</small></div>
+          <div className="ch"><h3>{list ? `${list.length} ${list.length === 1 ? "parceiro" : "parceiros"}` : "Carregando…"}</h3><small>clique para editar</small></div>
           {list && list.length === 0 && <p className="empty">Nenhum parceiro ainda.</p>}
           {list && list.length > 0 && (
             <table className="hist plist">

@@ -73,7 +73,7 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .nav-hl { position: absolute; left: 0; right: 0; top: 0; height: 34px; border-radius: 8px; background: var(--hover); box-shadow: inset 0 0 0 1px var(--line); transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 0; }
 .side .foot { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-top: 1px solid var(--line); }
 .av { width: 30px; height: 30px; border-radius: 50%; background: var(--hover); border: 1px solid var(--line2); display: grid; place-items: center; font-weight: 600; font-size: 12px; flex: none; }
-.side .foot div { min-width: 0; flex: 1; }
+.side .foot > div:not(.av) { min-width: 0; flex: 1; }
 .side .foot b { display: block; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side .foot small { color: var(--mute); font-size: 12px; }
 .linkbtn { border: 0; background: none; color: var(--mute); padding: 4px 6px; border-radius: 6px; font-size: 12.5px; }
@@ -241,7 +241,7 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .vbar .fill { background: var(--data); border-radius: 4px; flex: none; transition: width 0.4s; }
 
 /* ── formulários de gestão ── */
-.fld { display: grid; gap: 6px; font-size: 13px; min-width: 0; }
+.fld { display: grid; gap: 6px; font-size: 13px; min-width: 0; align-content: start; }
 .fld > span:first-child { color: var(--ink2); font-weight: 500; }
 .fld small { color: var(--mute); font-size: 12px; }
 .fld input, .fld select { border: 1px solid var(--line2); border-radius: 9px; padding: 9px 11px; background: var(--surf); color: var(--ink); width: 100%; min-width: 0; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
