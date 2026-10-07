@@ -307,6 +307,12 @@ export function createApp({ db, config, integrations }: AppDeps) {
     return c.json({ partner: updated });
   });
 
+  /** Estado da integração com a rede (Wiki, direto ou mock). 401/403 da Wiki aparece aqui como chave recusada. */
+  admin.get("/integrations/health", async (c) => {
+    const health = await integrations.network.health();
+    return c.json({ mode: config.INTEGRATIONS_MODE, ...health });
+  });
+
   admin.get("/audit", async (c) => {
     const partnerId = c.req.query("partnerId");
     const rows = await db

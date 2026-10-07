@@ -13,14 +13,17 @@ export interface NearbyCto {
    * Identificador estável da CTO (id da caixa). O nome não serve de chave: há
    * nomes repetidos e caixas gêmeas. Nos clientes diretos antigos (Codemaps e
    * OLTCloud sem a Wiki) o id é o próprio nome, e a limitação continua valendo.
+   * null = a fonte não conseguiu resolver a caixa: a CTO aparece, mas não vende.
    */
-  ctoId: string;
+  ctoId: string | null;
   name: string;
   distanceM: number;
-  /** Portas livres segundo o mapa (Codemaps), antes de descontar reservas do portal. */
-  freePorts: number;
+  /** Portas livres segundo o mapa (Codemaps), antes de descontar reservas do portal. null = o mapa não informou. */
+  freePorts: number | null;
   usagePct: number | null;
   location: GeoPoint | null;
+  /** Há outra candidata a poucos metros: a CTO certa só se confirma em campo. */
+  proximaAmbigua: boolean;
 }
 
 export interface NearbyResult {
@@ -42,8 +45,16 @@ export interface CtoPort {
 export interface CtoPorts {
   ctoId: string;
   name: string;
-  /** "conferir" quando as fontes divergem ou o dado é fraco: não oferecer porta. */
-  confidence: "confirmada" | "conferir";
+  /**
+   * "fontes_concordam" NÃO é garantia de que a porta está livre: só diz que as fontes
+   * não se contradizem (porta livre com ONU não vinculada ainda parece livre).
+   * "conferir" quando divergem ou o dado é fraco: não oferecer porta.
+   */
+  confidence: "fontes_concordam" | "conferir";
+  /** Quando a fonte leu a ocupação (ISO 8601). null = a fonte não informou. */
+  updatedAt: string | null;
+  /** Por que a CTO está em "conferir" (para a Speed, nunca para o parceiro). */
+  motivos: string[];
   totalPorts: number;
   ports: CtoPort[];
 }
@@ -51,8 +62,14 @@ export interface CtoPorts {
 /** Mapa de rede: Codemaps (endereço → CTOs) + OLTCloud (ocupação porta a porta). */
 export interface NetworkMap {
   findNearbyCtos(address: string, radiusM: number): Promise<NearbyResult>;
-  /** null quando a CTO não é encontrada na fonte de ocupação. */
-  getCtoPorts(ctoId: string): Promise<CtoPorts | null>;
+  /**
+   * null quando a CTO não é encontrada na fonte de ocupação (a caixa pode ter sido
+   * recriada com outro id: tratar como "conferir", não como "CTO sumiu").
+   * fresh = lê direto da fonte, sem snapshot; usado na reserva.
+   */
+  getCtoPorts(ctoId: string, opts?: { fresh?: boolean }): Promise<CtoPorts | null>;
+  /** A integração está de pé e a chave vale? Nunca lança. */
+  health(): Promise<{ ok: boolean; detail: string }>;
 }
 
 export class IntegrationError extends Error {

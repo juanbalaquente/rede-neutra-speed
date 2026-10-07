@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { partners, plans, viabilityQueries } from "../db/schema.js";
 import type { NetworkMap } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
+import { isStale } from "./freshness.js";
 import { recordAudit } from "./audit.js";
 import {
   expireOverdueReservations,
@@ -19,14 +20,19 @@ const MAX_CTOS = 5;
 const PLUS_CODE_RE = /\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b/i;
 
 export interface ViabilityCto {
-  ctoId: string;
+  /** null = a fonte não resolveu a caixa: a CTO aparece, mas não vende. */
+  ctoId: string | null;
   name: string;
   distanceM: number;
   location: { lat: number; lng: number } | null;
   totalPorts: number;
   freePorts: number[];
   /** Por que a CTO não serve para este parceiro, quando não serve. */
-  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | "conferir" | null;
+  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "conferir" | null;
+  /** Há outra CTO muito próxima: a certa só se confirma em campo. */
+  proximaAmbigua: boolean;
+  /** Por que está em "conferir". Só a Speed vê; para o parceiro vai vazio. */
+  motivos: string[];
 }
 
 export interface ViabilityResult {
@@ -56,40 +62,50 @@ export async function runViability(
 
   const nearby = await network.findNearbyCtos(trimmed, VIABILITY_RADIUS_M);
   const candidates = nearby.ctos.slice(0, MAX_CTOS);
-  const ids = candidates.map((c) => c.ctoId);
+  const ids = candidates.map((c) => c.ctoId).filter((id): id is string => id !== null);
   const reserved = await livePortsByCto(db, ids);
   const usage = partner ? await partnerUsageByCto(db, partner.id, ids) : new Map<string, number>();
 
   const ctos: ViabilityCto[] = [];
   for (const c of candidates) {
-    const detail = await network.getCtoPorts(c.ctoId);
-    if (!detail) {
-      ctos.push({ ctoId: c.ctoId, name: c.name, distanceM: c.distanceM, location: c.location, totalPorts: 0, freePorts: [], blockedReason: "sem_dados_de_porta" });
+    const base = { ctoId: c.ctoId, name: c.name, distanceM: c.distanceM, location: c.location, proximaAmbigua: c.proximaAmbigua };
+    const conferir = (motivos: string[], totalPorts = 0): ViabilityCto => ({ ...base, totalPorts, freePorts: [], blockedReason: "conferir", motivos });
+
+    // Sem id a caixa não é reservável, mas a consulta (e a demanda) continua registrada.
+    if (c.ctoId === null) {
+      ctos.push(conferir(["cto_sem_id"]));
       continue;
     }
+    const detail = await network.getCtoPorts(c.ctoId);
+    // A caixa pode ter sido recriada com outro id: é "conferir", não "CTO sumiu".
+    if (!detail) {
+      ctos.push(conferir(["cto_nao_encontrada"]));
+      continue;
+    }
+
     const taken = reserved.get(c.ctoId) ?? new Set<number>();
     const free = detail.ports.filter((p) => p.state === "livre" && !taken.has(p.port)).map((p) => p.port);
     // Duas fontes precisam concordar: o mapa (Codemaps) diz quantas portas estão livres e a
     // ocupação (OLTCloud) diz quais. Porta sem registro ainda pode ser livre, então entra na
-    // conta, mas nunca é oferecida. Qualquer outra diferença: a Speed confere antes de vender.
+    // conta, mas nunca é oferecida. Mapa sem contagem (null) também não prova nada.
     const confirmed = detail.ports.filter((p) => p.state === "livre").length;
     const unknown = detail.ports.filter((p) => p.state === "desconhecida").length;
-    const sourcesDiverge = c.freePorts !== confirmed + unknown;
-    let blockedReason: ViabilityCto["blockedReason"] =
-      detail.confidence === "conferir" || sourcesDiverge ? "conferir" : free.length === 0 ? "sem_porta_livre" : null;
+    const portalMotivos: string[] = [];
+    if (c.freePorts === null) portalMotivos.push("mapa_sem_contagem");
+    else if (c.freePorts !== confirmed + unknown) portalMotivos.push("mapa_diverge_ocupacao");
+    if (isStale(detail.updatedAt)) portalMotivos.push("dado_antigo");
+    const motivos = [...detail.motivos, ...portalMotivos];
+
+    if (detail.confidence === "conferir" || portalMotivos.length > 0) {
+      ctos.push(conferir(motivos.length ? motivos : ["fonte_marcou_conferir"], detail.totalPorts));
+      continue;
+    }
+    let blockedReason: ViabilityCto["blockedReason"] = free.length === 0 ? "sem_porta_livre" : null;
     if (!blockedReason && partner) {
       const used = usage.get(c.ctoId) ?? 0;
       if (used + 1 > maxPortsForPartner(detail.totalPorts, partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";
     }
-    ctos.push({
-      ctoId: c.ctoId,
-      name: c.name,
-      distanceM: c.distanceM,
-      location: c.location,
-      totalPorts: detail.totalPorts,
-      freePorts: blockedReason ? [] : free,
-      blockedReason,
-    });
+    ctos.push({ ...base, totalPorts: detail.totalPorts, freePorts: blockedReason ? [] : free, blockedReason, motivos: [] });
   }
 
   const viable = ctos.some((c) => c.blockedReason === null);
@@ -113,7 +129,7 @@ export async function runViability(
       viable,
       reason,
       result: {
-        ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, free: c.freePorts.length, blocked: c.blockedReason })),
+        ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, free: c.freePorts.length, blocked: c.blockedReason, ambiguous: c.proximaAmbigua, motivos: c.motivos })),
         // Contagem de cada fonte, para a Speed entender por que uma CTO ficou em "conferir".
         sources: candidates.map((c) => ({ ctoId: c.ctoId, mapFree: c.freePorts })),
       },
@@ -129,5 +145,7 @@ export async function runViability(
     data: { viable },
   });
 
-  return { queryId: saved!.id, viable, point: nearby.point, ctos, plans: activePlans };
+  // Os motivos técnicos são da Speed: o parceiro só vê "a Speed precisa conferir".
+  const visible = user.role === "admin_speed" ? ctos : ctos.map((c) => ({ ...c, motivos: [] }));
+  return { queryId: saved!.id, viable, point: nearby.point, ctos: visible, plans: activePlans };
 }

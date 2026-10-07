@@ -41,19 +41,20 @@ export function MiniMap({
   }
   const project = projector([point, ...located.map((c) => c.location)]);
   const home = project(point);
-  const target = located.find((c) => c.ctoId === selectedId) ?? located[0]!;
+  const isSel = (c: ViabilityCto) => selectedId !== null && c.ctoId === selectedId;
+  const target = located.find(isSel) ?? located[0]!;
   const t = project(target.location);
 
   return (
     <div className="mini-map">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Posição do endereço e das caixas próximas">
         <path className="fb" d={`M${home.x} ${home.y} L${t.x} ${t.y}`} />
-        {located.map((c) => {
+        {located.map((c, i) => {
           const p = project(c.location);
           const full = c.blockedReason !== null;
           return (
-            <g key={c.ctoId}>
-              <circle className={`cto ${full ? "full" : ""}`} cx={p.x} cy={p.y} r={c.ctoId === selectedId ? 7 : 5} />
+            <g key={c.ctoId ?? `sem-id-${i}`}>
+              <circle className={`cto ${full ? "full" : ""}`} cx={p.x} cy={p.y} r={isSel(c) ? 7 : 5} />
               <text x={p.x + 10} y={p.y + 3}>{short(c.name)}</text>
             </g>
           );

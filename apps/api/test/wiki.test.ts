@@ -24,7 +24,9 @@ const PORTS = {
   ctoId: "box-17",
   name: "CTO-X",
   totalPorts: 4,
-  confidence: "confirmada",
+  confidence: "fontes_concordam",
+  updatedAt: "2026-10-07T14:00:00-03:00",
+  motivos: [],
   ports: [
     { port: 1, state: "livre" },
     { port: 2, state: "ocupada" },
@@ -78,6 +80,9 @@ class FragileNetwork implements NetworkMap {
   private readonly base = new MockNetworkMap();
   findNearbyCtos(address: string, radiusM: number) {
     return this.base.findNearbyCtos(address, radiusM);
+  }
+  health() {
+    return this.base.health();
   }
   async getCtoPorts(ctoId: string): Promise<CtoPorts | null> {
     const cto = await this.base.getCtoPorts(ctoId);

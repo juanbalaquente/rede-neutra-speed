@@ -88,7 +88,7 @@ export class OltcloudClient {
       const state = status == null ? "desconhecida" : status === "Livre" ? "livre" : "ocupada";
       return { port, state } as const;
     });
-    return { ctoId: ctoName, name: box.name, confidence: "confirmada", totalPorts: box.ports, ports };
+    return { ctoId: ctoName, name: box.name, confidence: "fontes_concordam", updatedAt: new Date().toISOString(), motivos: [], totalPorts: box.ports, ports };
   }
 }
 

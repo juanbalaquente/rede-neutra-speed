@@ -29,6 +29,7 @@ export function createIntegrations(config: Config, log: ApiCallLogger): Integrat
   const network: NetworkMap = {
     findNearbyCtos: (address, radiusM) => codemaps.findNearby(address, radiusM),
     getCtoPorts: (name) => oltcloud.getCtoPorts(name),
+    health: async () => ({ ok: true, detail: "modo direto: sem verificação de saúde" }),
   };
   return { network };
 }

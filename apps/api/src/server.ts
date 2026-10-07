@@ -21,6 +21,17 @@ setInterval(() => {
   expireOverdueReservations(db).catch((e) => console.error("expirar reservas", e));
 }, 60_000);
 
+// Avisa no log quando a integração cai ou a chave da Wiki é recusada (o administrador também vê em /admin/integrations/health).
+let lastHealthy = true;
+async function checkIntegrations() {
+  const h = await integrations.network.health();
+  if (!h.ok) console.error(`[integração] FORA: ${h.detail}`);
+  else if (!lastHealthy) console.log(`[integração] voltou: ${h.detail}`);
+  lastHealthy = h.ok;
+}
+void checkIntegrations();
+setInterval(() => void checkIntegrations(), 5 * 60_000);
+
 serve({ fetch: app.fetch, port: config.PORT }, (info) => {
   console.log(`API Rede Neutra em http://localhost:${info.port} (integrações: ${config.INTEGRATIONS_MODE})`);
 });

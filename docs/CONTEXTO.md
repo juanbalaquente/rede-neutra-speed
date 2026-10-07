@@ -83,7 +83,7 @@ Variáveis de integração (`.env.example`): `INTEGRATIONS_MODE` (`mock` ou `rea
 
 ## 6. Estado do código
 
-**Atualização de 7 out 2026 (sessão do portal), 33 testes passando:**
+**Atualização de 7 out 2026 (sessão do portal), 44 testes passando:**
 
 - **Integração por interface:** `NetworkMap` usa `ctoId` estável (não o nome) e porta em três estados (`livre`, `ocupada`, `desconhecida`). Há o modo `INTEGRATIONS_MODE=wiki` (`integrations/wiki.ts`), só leitura, que valida a resposta contra o contrato proposto em [`CONTRATO-WIKI-V1.md`](CONTRATO-WIKI-V1.md). Esse contrato **ainda não existe na Wiki**: é uma proposta do portal.
 - **Reserva por id:** a trava é `(cto_id, port)` (migration 0001). Reservar exige uma viabilidade do mesmo parceiro, para o mesmo endereço, nas últimas 24 h que tenha listado a CTO.

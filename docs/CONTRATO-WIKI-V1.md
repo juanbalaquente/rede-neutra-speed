@@ -1,28 +1,29 @@
-# Contrato proposto: portal Rede Neutra ↔ SpeedWiki (v1)
+# Contrato portal Rede Neutra ↔ SpeedWiki (v1)
 
-Proposta do **portal** para a API que a SpeedWiki vai expor em `/proxy/redeneutra/v1/*`. Nada aqui existe na Wiki ainda: é o formato que o cliente do portal (`apps/api/src/integrations/wiki.ts`) já espera e valida. Se a Wiki preferir outro formato, **o ajuste é só naquele arquivo**; peço que a divergência seja registrada neste documento.
+API que a SpeedWiki expõe em `/proxy/redeneutra/v1/*` para o portal. Revisado em 7 out 2026 com as respostas do time da Wiki. O cliente do portal que consome este contrato é `apps/api/src/integrations/wiki.ts`; o formato inteiro vive só nele.
 
-Escopo desta versão: **somente leitura**. Nenhuma rota escreve em Voalle, OLTCloud ou Codemaps.
+**Estado:** a Wiki ainda **não implementou** nada disto. O portal já está pronto do lado dele (`INTEGRATIONS_MODE=wiki`, com testes contra respostas simuladas). Divergências: comentar no PR ou registrar aqui.
+
+Escopo da v1: **somente leitura**. Nenhuma rota escreve em Voalle, OLTCloud ou Codemaps.
 
 ## Princípios
 
-1. **Versão no caminho.** Mudança que quebra o formato vira `/v2`, com as duas convivendo um tempo. Campo novo opcional não quebra: o portal ignora campos que não conhece.
-2. **Resposta fora do contrato é erro.** O portal valida cada resposta. O que não bate vira falha explícita (502 para o usuário), nunca um palpite.
-3. **A Wiki entrega o dado já tratado.** Caixas gêmeas, nomes repetidos, sentinela -99.99 e cruzamento Codemaps × OLTCloud ficam do lado da Wiki. O portal não lê tabelas da Wiki.
-4. **Ausência de marcação não é "livre".** Porta sem confirmação é `desconhecida`, e o portal nunca a oferece.
+1. **Versão no caminho.** Quebra de formato vira `/v2`, com as duas convivendo um tempo. Campo novo opcional não quebra: o portal ignora o que não conhece.
+2. **Resposta fora do contrato é erro.** O portal valida cada resposta com schema. Campo obrigatório ausente ou com tipo errado vira falha explícita (o usuário vê "sistema indisponível"), nunca um palpite.
+3. **A Wiki entrega o dado já tratado:** caixas gêmeas, nomes repetidos, sentinela -99.99 e cruzamento Codemaps × OLTCloud. O portal não lê tabelas da Wiki.
+4. **Ausência de marcação de ocupada não é porta livre.** Porta sem confirmação é `desconhecida` e nunca é oferecida.
+5. **Nulo é nulo.** `null` significa "a fonte não informou" e nunca vira zero.
 
-## Autenticação
+## Autenticação e operação
 
-- Header `X-RedeNeutra-Key: <chave>`, no modelo do `X-SpeedParceiros-Key`.
-- Uma chave por integração (o portal é o único chamador). O isolamento entre parceiros é feito **no portal**; a Wiki não sabe quem é o parceiro nesta versão.
-- A chave fica só no ambiente do servidor do portal (`WIKI_API_KEY`). Na Wiki, precisa entrar também no item `speedwiki-proxy-env` do Vaultwarden (senão o sincronizador a apaga).
-- Rate limit: o portal chama a partir de um IP próprio. Estimativa inicial: uma viabilidade por consulta de atendente e uma leitura de portas por CTO candidata (até 5 por consulta) mais uma na reserva.
+- Header `X-RedeNeutra-Key`, uma chave para a integração, no modelo do `X-SpeedParceiros-Key`.
+- O portal é o único chamador. O isolamento entre parceiros é feito **no portal**; a Wiki não sabe quem é o parceiro nesta versão.
+- A chave só existe em variável de ambiente (`WIKI_API_KEY` no portal). Na Wiki, entra no arquivo de ambiente **e** no item `speedwiki-proxy-env` do Vaultwarden, senão o sincronizador a apaga.
+- Rate limit (proposta da Wiki, aceita): `/viabilidade` 30/min e `/portas` 150/min, cada um com chave própria, por IP. O servidor do portal terá IP fixo. Estimativa do portal por consulta de atendente: 1 `/viabilidade`, até 5 `/portas` (snapshot) e 1 `/portas?fresh=true` na reserva.
 
 ## Rotas
 
 ### `GET /proxy/redeneutra/v1/viabilidade?endereco=<texto>&raio=<metros>`
-
-CTOs próximas do endereço, ordenadas da mais próxima para a mais distante.
 
 ```json
 {
@@ -34,25 +35,29 @@ CTOs próximas do endereço, ordenadas da mais próxima para a mais distante.
       "distanceM": 120,
       "freePorts": 3,
       "usagePct": 81,
-      "location": { "lat": -19.9191, "lng": -43.9386 }
+      "location": { "lat": -19.9191, "lng": -43.9386 },
+      "proximaAmbigua": false
     }
   ]
 }
 ```
 
-- `point` é `null` se o endereço não geocodificar. Plus Code: `422` com `plus_code_not_supported`, como na rota de parceiros (o portal já recusa antes de chamar).
-- **`ctoId`** é o id estável da caixa (id do OLTCloud ou par de ids; a Wiki decide, desde que seja estável e único). Nunca o nome.
-- `freePorts` é a contagem **segundo o mapa (Codemaps)**. O portal a cruza com a lista de portas abaixo (ver "Cruzamento").
-- `raio` é do portal (hoje 300 m). **Pergunta aberta:** qual critério único de raio? Ver "Perguntas".
+- **Raio:** o portal pede 300 m (padrão). A Wiki aceita até 1.000 m e devolve **todas** as candidatas do raio, da mais próxima à mais distante.
+- `point` é `null` se o endereço não geocodificar. Plus Code: `422` com `plus_code_not_supported` (o portal já recusa antes de chamar).
+- **`ctoId`:** id da caixa **principal** do OLTCloud, como string (o mesmo do `cto-off-monitor`). Pode ser `null` quando a Wiki não resolve o nome do Codemaps para uma caixa (nome repetido sem coincidência única de coordenada). A CTO continua na lista: o portal não oferece porta dela e registra a demanda.
+- **`freePorts`:** contagem segundo o mapa (Codemaps, campo `avaliable`). Pode ser `null`. O portal trata `null` como "conferir".
+- **`proximaAmbigua`:** `true` quando duas candidatas estão a menos de ~25 m uma da outra (valor a calibrar). Opcional; ausente vale `false`. O portal mostra o aviso "a CTO certa só se confirma em campo" e **nunca escolhe a mais próxima sozinho**. A confirmação definitiva é em campo, na ativação.
 
-### `GET /proxy/redeneutra/v1/ctos/{ctoId}/portas`
+### `GET /proxy/redeneutra/v1/ctos/{ctoId}/portas[?fresh=true]`
 
 ```json
 {
   "ctoId": "17342",
   "name": "CTO-EXEMPLO-01",
   "totalPorts": 16,
-  "confidence": "confirmada",
+  "confidence": "fontes_concordam",
+  "updatedAt": "2026-10-07T14:10:00-03:00",
+  "motivos": [],
   "ports": [
     { "port": 1, "state": "ocupada" },
     { "port": 2, "state": "livre" },
@@ -62,33 +67,48 @@ CTOs próximas do endereço, ordenadas da mais próxima para a mais distante.
 ```
 
 - `state`: `livre` | `ocupada` | `desconhecida`.
-- `confidence`: `confirmada` | `conferir`. A Wiki devolve `conferir` quando sabe que o dado é fraco: fontes divergentes, caixa gêmea com clientes divididos, ONUs sem vínculo com a caixa, nome repetido. Com `conferir`, o portal **não oferece nenhuma porta** da CTO e mostra "a Speed precisa conferir".
-- Com caixas gêmeas, `ports` deve refletir a **soma** das duas caixas (porta ocupada em qualquer uma conta como ocupada) ou a Wiki devolve `conferir`.
-- CTO inexistente: `404`.
+- Em caixas gêmeas, `ports` é a **união** das duas (ocupada em qualquer uma conta como ocupada).
+- **`confidence`:** `fontes_concordam` | `conferir`.
+  - **`fontes_concordam` não é garantia.** Só diz que as fontes não se contradizem. A Wiki não distingue "livre de verdade" de "livre mas com ONU não vinculada". Por isso o portal nunca usa a palavra "garantida": a interface diz "livre segundo os sistemas da Speed, com confirmação final em campo".
+  - **`conferir`:** a Wiki devolve quando uma regra determinística dispara: nome repetido sem coincidência única de coordenada; gêmea anexada com `totalPorts` diferente entre as duas caixas; Codemaps (`avaliable`) diferente das portas livres do OLTCloud; snapshot velho demais. O critério "muitas ONUs sem vínculo na PON" **não** é implementável hoje (só ~28% das caixas têm `pon_id`).
+- **`updatedAt`** (obrigatório, ISO 8601 com fuso): quando a ocupação foi lida. **Idade máxima:** 15 min no normal; acima de 1 h a Wiki devolve `conferir`. O portal aplica o mesmo limite de 1 h como segunda barreira (e dado sem data conta como velho).
+- **`motivos`** (opcional, lista de códigos): por que está em `conferir`, para a Speed saber o que checar. **Aparece só para a Speed**; o parceiro vê só "a Speed precisa conferir".
+- **`?fresh=true`:** a Wiki consulta só aquela caixa (e a gêmea) direto no OLTCloud, sem varredura. O portal usa na **reserva**. A viabilidade usa o snapshot.
+- **404:** caixa não encontrada. Se a caixa for recriada no OLTCloud o id muda e vem 404. **O portal trata como "conferir", não como "CTO sumiu"**, e guarda também o nome na reserva.
 
-## Cruzamento de fontes (lado do portal)
+### `GET /proxy/redeneutra/v1/health`
 
-O portal compara `freePorts` de `/viabilidade` (Codemaps) com a quantidade de portas `livre` de `/portas` (OLTCloud). Se divergirem, a CTO sai como "conferir". Ficam na Wiki as regras de tratamento; o portal só aplica esse teste final, como segunda barreira.
+```json
+{ "ok": true }
+```
+
+Para o portal alertar quando a chave falhar. `401`/`403` aparece para o administrador Speed como "chave recusada pela Wiki"; o servidor do portal também registra no log a cada 5 min enquanto estiver fora.
+
+## Como o portal aplica o contrato
+
+Uma CTO só oferece portas se **todas** estas condições valem; senão sai como "conferir" e o parceiro não vê nenhuma porta dela:
+
+1. `ctoId` não nulo.
+2. `/portas` não devolveu 404.
+3. `confidence` é `fontes_concordam`.
+4. `freePorts` não nulo e igual a `livres + desconhecidas` de `/portas` (segunda barreira do portal).
+5. `updatedAt` com menos de 1 h.
+
+Porta `desconhecida` nunca é oferecida, mesmo com a CTO ok. A reserva é chaveada por `ctoId` e exige uma consulta de viabilidade recente (24 h) do mesmo parceiro e endereço que tenha listado a CTO.
 
 ## Erros
 
-| Status | Significado para o portal |
+| Status | O que o portal faz |
 |---|---|
-| 401 / 403 | chave inválida: erro de configuração, 502 para o usuário e alerta |
-| 404 em `/portas` | CTO não encontrada (vira `null`) |
+| 401 / 403 | erro de configuração: o usuário vê "sistema indisponível" e o administrador vê "chave recusada" |
+| 404 em `/portas` | "conferir" |
 | 422 | pedido inválido (ex.: Plus Code) |
-| 429 | limite atingido: o portal não repete em laço |
-| 5xx / timeout (15 s) | sistema de origem indisponível, 502 para o usuário |
+| 429 | não repete em laço |
+| 5xx / timeout (15 s) | "sistema indisponível" |
 
-## O que fica para depois
+## Em aberto
 
-Chamados de infraestrutura (abrir e consultar), status de contrato, média de sinal por CTO (trava de sinal, sem o sentinela -99.99), webhooks de CTO caída e escrita (contrato, autorizar ONU). Cada um ganha seção aqui quando a Wiki responder as perguntas abaixo.
-
-## Perguntas para o time da Wiki
-
-1. **O que é o `ctoId`?** id da caixa do OLTCloud, id do Codemaps, ou um id próprio da Wiki que resolve gêmeas?
-2. **Raio:** 300 m (portal), 1 km (rota de parceiros) ou 150 m (URA)? Qual critério para a CTO mais próxima errada?
-3. **Latência:** o `box/list` leva ~40 s. A Wiki pode servir `/portas` de cache atualizado em segundo plano? Qual a idade máxima do dado, e ela pode vir em um campo `updatedAt`?
-4. **Como a Wiki sabe que uma CTO é `conferir`?** Quais critérios já existem hoje (gêmeas, ONU sem vínculo, nomes repetidos)?
-5. **Reservas do portal são invisíveis para a Speed.** A Wiki consegue expor ao comercial da Speed as portas reservadas, ou o portal precisa publicar as reservas por uma rota/webhook?
-6. **Rate limit** por `${ip}:${rota}`: o volume do portal cabe no padrão?
+- **Reservas invisíveis para a Speed (v1.1, depende de decisão do Juan).** A reserva vive só no banco do portal; o comercial da Speed não a enxerga e dois lados podem vender a mesma porta. Proposta da Wiki: o portal publica eventos (criada, cancelada, expirada, convertida) numa rota de **escrita** da Wiki, que mantém uma tabela espelho; a viabilidade interna subtrai as portas reservadas. Isso escreve no banco **da própria Wiki** (não nos sistemas de origem), mas muda o escopo "somente leitura". `/portas` continua devolvendo só a verdade da rede (se subtraísse as reservas do portal, o portal contaria em dobro). Condições do portal: os eventos saem de uma fila no banco do portal com reenvio até a Wiki confirmar, e cada evento traz o id da reserva, para receber o mesmo evento duas vezes não duplicar.
+- **Discrepância de regra de "ocupada".** O cliente direto do portal (modo `real`) usa `status !== "Livre"`; o `cto-off-monitor` da Wiki usa `client_id`/`pppoe` na porta. Pode divergir. No modo `wiki` quem decide é a Wiki, então não bloqueia o portal. Pendente: amostra real de leitura do `box/list` (depende de autorização do Juan).
+- **Calibrar** a distância de `proximaAmbigua` (~25 m).
+- Chamados de infraestrutura (abrir e consultar), média de sinal por CTO sem o sentinela -99.99 (trava de sinal) e webhooks de CTO caída ficam para a v1.1.

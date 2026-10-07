@@ -5,6 +5,7 @@ import { partners, portReservations, viabilityQueries } from "../db/schema.js";
 import { IntegrationError, type NetworkMap } from "../integrations/types.js";
 import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
+import { isStale } from "./freshness.js";
 
 export const LIVE_STATUSES = ["ativa", "convertida"] as const;
 
@@ -113,12 +114,14 @@ export async function createReservation(
   }
 
   // Confere a porta na fonte da verdade antes de travar.
-  const cto = await network.getCtoPorts(input.ctoId);
-  if (!cto) throw new AppError(404, "cto_nao_encontrada", "CTO não encontrada.");
+  // Na reserva a leitura é fresca (só aquela caixa e a gêmea), não o snapshot da viabilidade.
+  const cto = await network.getCtoPorts(input.ctoId, { fresh: true });
+  // Caixa recriada com outro id não é "CTO sumiu": a Speed confere.
+  if (!cto) throw new AppError(409, "porta_nao_confirmada", "Não encontramos essa CTO na leitura atual da rede. A Speed precisa conferir antes de vender.");
   if (cto.ctoId !== input.ctoId) throw new IntegrationError("rede", "a fonte devolveu outro id de CTO");
   const port = cto.ports.find((p) => p.port === input.port);
   if (!port) throw new AppError(422, "porta_inexistente", "Essa porta não existe nessa CTO.");
-  if (cto.confidence === "conferir" || port.state === "desconhecida") {
+  if (cto.confidence === "conferir" || port.state === "desconhecida" || isStale(cto.updatedAt)) {
     throw new AppError(409, "porta_nao_confirmada", "Não foi possível confirmar essa porta. A Speed precisa conferir a CTO.");
   }
   if (port.state === "ocupada") throw new AppError(409, "porta_ocupada", "Essa porta já está ocupada na rede.");

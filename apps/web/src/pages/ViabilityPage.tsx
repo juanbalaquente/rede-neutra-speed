@@ -7,8 +7,17 @@ import { useToast } from "../ui/Toast";
 const BLOCKED: Record<NonNullable<ViabilityCto["blockedReason"]>, { label: string; tone: string }> = {
   sem_porta_livre: { label: "Sem porta livre", tone: "b-mute" },
   limite_ocupacao: { label: "Limite de ocupação atingido", tone: "b-warn" },
-  sem_dados_de_porta: { label: "Sem dados de porta", tone: "b-mute" },
   conferir: { label: "A Speed precisa conferir esta CTO", tone: "b-warn" },
+};
+
+/** Motivos técnicos de "conferir": aparecem só para a Speed. */
+const MOTIVO: Record<string, string> = {
+  cto_sem_id: "A Wiki não resolveu a caixa (nome ambíguo)",
+  cto_nao_encontrada: "Caixa não encontrada na leitura (id recriado?)",
+  mapa_sem_contagem: "O mapa não informou portas livres",
+  mapa_diverge_ocupacao: "Mapa e ocupação divergem",
+  dado_antigo: "Ocupação lida há mais de 1 hora",
+  fonte_marcou_conferir: "A fonte marcou para conferência",
 };
 
 const STEPS = ["Endereço", "CTO e porta", "Reserva"];
@@ -66,6 +75,7 @@ export function ViabilityPage({
     setReserving(true);
     setError(null);
     try {
+      if (sel.cto.ctoId === null) return;
       await api.reserve({ ctoId: sel.cto.ctoId, port: sel.port, address: queried, lat: result?.point?.lat, lng: result?.point?.lng });
       say(`Porta ${sel.port} da ${sel.cto.name} reservada por 48 horas`);
       onReserved();
@@ -128,15 +138,17 @@ export function ViabilityPage({
                 const free = new Set(cto.freePorts);
                 const blocked = cto.blockedReason ? BLOCKED[cto.blockedReason] : null;
                 return (
-                  <div className="ctor" key={cto.ctoId} style={{ animationDelay: `${i * 60}ms` }}>
+                  <div className="ctor" key={cto.ctoId ?? `sem-id-${i}`} style={{ animationDelay: `${i * 60}ms` }}>
                     <b>{cto.name}</b>
                     {blocked ? <span className={`badge ${blocked.tone}`}>{blocked.label}</span> : <span className="badge b-ok">{cto.freePorts.length} livres</span>}
                     <small>{cto.distanceM} m do endereço{cto.totalPorts > 0 ? ` · ${cto.totalPorts} portas` : ""}</small>
+                    {cto.proximaAmbigua && <small style={{ color: "var(--warn)" }}>Há outra CTO muito próxima. A certa só se confirma em campo.</small>}
+                    {cto.motivos.length > 0 && <small>Motivo: {cto.motivos.map((m) => MOTIVO[m] ?? m).join("; ")}</small>}
                     {!blocked && (
                       <div className="prt" role="group" aria-label={`Portas da ${cto.name}`}>
                         {Array.from({ length: cto.totalPorts }, (_, n) => n + 1).map((port) => {
                           const isFree = free.has(port);
-                          const selected = sel?.cto.ctoId === cto.ctoId && sel.port === port;
+                          const selected = sel?.cto.ctoId === cto.ctoId && sel?.port === port;
                           return (
                             <button
                               key={port}
@@ -181,6 +193,7 @@ export function ViabilityPage({
               </>
             )}
             {result?.viable && !sel && <p className="muted" style={{ margin: 0 }}>Escolha uma porta livre para reservar.</p>}
+            {result?.viable && <p className="note">Livre segundo os sistemas da Speed. A confirmação final é feita em campo, na ativação.</p>}
             {result?.viable && (
               <button className="btn" disabled={!sel || !canReserve || reserving} onClick={reserve} title={canReserve ? undefined : "Somente parceiros reservam"}>
                 {reserving ? "Reservando…" : sel ? `Reservar porta ${sel.port}` : "Reservar porta"}

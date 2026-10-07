@@ -8,13 +8,17 @@ export interface User {
 }
 
 export interface ViabilityCto {
-  ctoId: string;
+  /** null = a Speed não resolveu a caixa: aparece, mas não vende. */
+  ctoId: string | null;
   name: string;
   distanceM: number;
   location: { lat: number; lng: number } | null;
   totalPorts: number;
   freePorts: number[];
-  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | "conferir" | null;
+  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "conferir" | null;
+  proximaAmbigua: boolean;
+  /** Só a Speed recebe os motivos; para o parceiro vai vazio. */
+  motivos: string[];
 }
 
 export interface Partner {
