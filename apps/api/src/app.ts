@@ -134,6 +134,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
         maxActiveReservations: partners.maxActiveReservations,
         maxCtoOccupancyPct: partners.maxCtoOccupancyPct,
         maxUsers: partners.maxUsers,
+        allowedRegions: partners.allowedRegions,
       })
       .from(partners)
       .where(eq(partners.id, partnerId));
@@ -157,7 +158,6 @@ export function createApp({ db, config, integrations }: AppDeps) {
       c,
       z.object({
         ctoId: z.string().min(1).max(120),
-        port: z.number().int().positive(),
         address: z.string().min(8).max(300),
         lat: z.number().nullable().optional(),
         lng: z.number().nullable().optional(),
@@ -184,6 +184,9 @@ export function createApp({ db, config, integrations }: AppDeps) {
   });
 
   // ── Usuários do parceiro (supervisor gerencia os dele) ────────────────────
+  /** Siglas de região liberadas ao parceiro (R1, ITA, FAT...). Vazio = nenhuma CTO é oferecida. */
+  const regionsSchema = z.array(z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,8}$/, "sigla de 1 a 8 letras ou números")).max(50);
+
   const newUserSchema = z.object({
     name: z.string().min(2).max(120),
     email: z.string().email(),
@@ -270,6 +273,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
         maxActiveReservations: z.number().int().min(1).max(1000).optional(),
         maxCtoOccupancyPct: z.number().int().min(1).max(100).optional(),
         maxUsers: z.number().int().min(1).max(500).optional(),
+        allowedRegions: regionsSchema.optional(),
       }),
     );
     try {
@@ -292,6 +296,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
           maxActiveReservations: z.number().int().min(1).max(1000),
           maxCtoOccupancyPct: z.number().int().min(1).max(100),
           maxUsers: z.number().int().min(1).max(500),
+          allowedRegions: regionsSchema,
           /** Obrigatória para bloquear (confirmação dupla no front + registro aqui). */
           reason: z.string().max(500),
         })

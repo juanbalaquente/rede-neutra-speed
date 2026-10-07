@@ -13,9 +13,12 @@ export interface ViabilityCto {
   name: string;
   distanceM: number;
   location: { lat: number; lng: number } | null;
-  totalPorts: number;
-  freePorts: number[];
-  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "conferir" | null;
+  regiao: string | null;
+  /** Total de vagas (saídas de splitter) da CTO. */
+  totalVagas: number;
+  /** Vagas que o parceiro pode reservar agora. */
+  vagas: number;
+  blockedReason: "sem_vaga_livre" | "limite_ocupacao" | "conferir" | null;
   proximaAmbigua: boolean;
   /** Só a Speed recebe os motivos; para o parceiro vai vazio. */
   motivos: string[];
@@ -37,9 +40,13 @@ export interface Partner {
   maxActiveReservations: number;
   maxCtoOccupancyPct: number;
   maxUsers: number;
+  /** Siglas de região liberadas pela Speed (R1, ITA, FAT...). */
+  allowedRegions: string[];
 }
 
 export interface ViabilityResult {
+  /** Havia CTOs perto, mas nenhuma na área liberada ao parceiro. */
+  foraDaArea: boolean;
   viable: boolean;
   point: { lat: number; lng: number } | null;
   ctos: ViabilityCto[];
@@ -50,7 +57,8 @@ export interface Reservation {
   ctoId: string;
   id: string;
   ctoName: string;
-  port: number;
+  /** Reserva é por vaga; só reservas antigas têm número de porta. */
+  port: number | null;
   address: string;
   status: "ativa" | "convertida" | "cancelada" | "expirada";
   expiresAt: string | null;
@@ -88,7 +96,7 @@ export const api = {
   partner: () => request<{ partner: Partner | null }>("GET", "/partner"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),
   reservations: () => request<{ reservations: Reservation[] }>("GET", "/reservations"),
-  reserve: (input: { ctoId: string; port: number; address: string; lat?: number | null; lng?: number | null }) =>
+  reserve: (input: { ctoId: string; address: string; lat?: number | null; lng?: number | null }) =>
     request<{ reservation: Reservation }>("POST", "/reservations", input),
   cancel: (id: string, reason?: string) => request<{ reservation: Reservation }>("POST", `/reservations/${id}/cancel`, { reason }),
 };

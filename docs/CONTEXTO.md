@@ -29,7 +29,7 @@ Piloto com **um parceiro** (um cliente que já compra link da Speed), mas multi-
   - *Administrador Speed*: cadastra parceiros, define limites e preços, vê auditoria, bloqueia um parceiro inteiro.
 - **Fluxo de um cliente (etapas do PDF):**
   1. Viabilidade no Codemaps (CTOs próximas, portas livres de verdade, planos). Toda consulta é registrada, mesmo sem viabilidade (mostra demanda reprimida).
-  2. Reserva da porta por **48 h**, só no banco do portal (o Codemaps não tem reserva). Expira sozinha, pode ser cancelada, tem limite de reservas simultâneas.
+  2. Reserva de **vaga** na CTO por **48 h** (decisão de 7 out 2026: o número da porta não importa; qualquer saída de splitter pode ir para cliente), só no banco do portal (o Codemaps não tem reserva). Expira sozinha, pode ser cancelada, tem limite de reservas simultâneas.
   3. Contrato no Voalle por automação: cria no nome do parceiro, vincula CTO/porta, gera PPPoE, **preenche o ponto de acesso (concentrador)** e devolve o número do contrato. O parceiro dá o aceite no portal, a automação aprova no Voalle e o portal mostra PPPoE e senha.
   4. Agenda de visita (calendário) e envio do roteiro ao técnico por WhatsApp (módulo opcional, instância separada do parceiro, não usa o Omni da Speed).
   5. Liberação da ONU pelo OLTCloud: técnico busca a SN entre as não autorizadas, o portal valida o sinal, autoriza, mostra a VLAN e confirma que a ONU subiu e o PPPoE autenticou. **Trava de sinal:** se o sinal medido diferir mais de **1,5** da média da CTO, só prossegue com justificativa, que abre chamado automático para a Infra.
@@ -83,11 +83,12 @@ Variáveis de integração (`.env.example`): `INTEGRATIONS_MODE` (`mock` ou `rea
 
 ## 6. Estado do código
 
-**Atualização de 7 out 2026 (sessão do portal), 44 testes passando:**
+**Atualização de 7 out 2026 (sessão do portal), 53 testes passando:**
 
-- **Integração por interface:** `NetworkMap` usa `ctoId` estável (não o nome) e porta em três estados (`livre`, `ocupada`, `desconhecida`). Há o modo `INTEGRATIONS_MODE=wiki` (`integrations/wiki.ts`), só leitura, que valida a resposta contra o contrato proposto em [`CONTRATO-WIKI-V1.md`](CONTRATO-WIKI-V1.md). Esse contrato **ainda não existe na Wiki**: é uma proposta do portal.
+- **Modelo de vagas (decisões do Juan, 7 out 2026):** reserva por vaga, não por porta. Vaga = saída de splitter livre no diagrama do Codemaps, descontando clientes que o OLTCloud tem a mais; só Codemaps e OLTCloud entram na conta (Voalle e as caixas "nativas" ficam fora). CTO sem caixa no OLTCloud ou com dado velho (mais de 1 h) é "conferir". **Área do piloto por sigla no nome da CTO:** R1 (Backbone Central), ITA (Itacolomi) e FAT (Fátima); o administrador Speed define as siglas liberadas por parceiro (`allowedRegions`, vazio = nada é oferecido).
+- **Integração por interface:** `NetworkMap` usa `ctoId` (id do Codemaps) e `getCtoVagas`. Modo `INTEGRATIONS_MODE=wiki` (`integrations/wiki.ts`), só leitura, valida a resposta contra [`CONTRATO-WIKI-V1.md`](CONTRATO-WIKI-V1.md). A Wiki **ainda não implementou** as rotas (`/viabilidade`, `/ctos/{id}/vagas`, `/health`).
 - **Reserva por id:** a trava é `(cto_id, port)` (migration 0001). Reservar exige uma viabilidade do mesmo parceiro, para o mesmo endereço, nas últimas 24 h que tenha listado a CTO.
-- **Porta livre exige duas fontes:** a contagem do mapa precisa bater com `livres + desconhecidas` da ocupação; se divergir, a CTO fica em "conferir" e não oferece porta. Porta desconhecida nunca é oferecida.
+- **Reserva:** a trava virou contagem sob lock por CTO (reservas vivas de todos os parceiros + 1 ≤ vagas livres), com limite de 50% de `totalVagas` por parceiro, leitura `?fresh=true` e área conferida de novo no servidor. Migration 0002.
 - **Front:** o visual do modelo 4 já está em Nova venda e Reservas (casca, Ctrl K, tema, anéis). As demais telas do protótipo ainda não existem. **Não foi verificado em navegador nesta sessão**; só typecheck e build.
 - **Cobertura real:** os testes cobrem viabilidade, reserva, isolamento entre parceiros, login, cliente da Wiki e `/partner`. Não cobrem criação de parceiro e de usuário com limite, nem `GET /admin/audit`.
 - **Pendências do portal:** trava de sinal (depende da média por CTO vinda da Wiki), limpeza do contador de login em memória, `clientIp` confiando em `x-forwarded-for`, ciclo de vida da reserva `convertida`.

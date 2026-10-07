@@ -32,7 +32,7 @@ describe("relatório de CTOs em conferir", () => {
       const names = body.rows.map((r: { name: string }) => r.name);
       expect(names).not.toContain("CTO-OK");
       const div = body.rows.find((r: { name: string }) => r.name === "CTO-DIVERGE");
-      expect(div).toMatchObject({ ctoId: "div", consultas: 4, enderecos: 2, parceiros: 2, motivos: ["mapa_diverge_ocupacao"] });
+      expect(div).toMatchObject({ ctoId: "div", consultas: 4, enderecos: 2, parceiros: 2, motivos: ["vagas_acima_do_mapa"] });
       const semId = body.rows.find((r: { name: string }) => r.name === "=CTO-SEM-ID");
       expect(semId).toMatchObject({ ctoId: null, consultas: 4, motivos: ["cto_sem_id"] });
       expect(body.rows[0].consultas).toBeGreaterThanOrEqual(body.rows[1].consultas);

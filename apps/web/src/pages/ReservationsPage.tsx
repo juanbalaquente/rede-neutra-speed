@@ -75,7 +75,7 @@ export function ReservationsPage({
     setBusy(true);
     try {
       await api.cancel(r.id, isAdmin ? reason.trim() : undefined);
-      say(`Porta ${r.port} da ${r.ctoName} liberada`);
+      say(`Vaga liberada na ${r.ctoName}`);
       setAsking(null);
       setReason("");
       await reload();
@@ -97,7 +97,7 @@ export function ReservationsPage({
       <div className="ph">
         <div>
           <h1>Reservas</h1>
-          <p>Cada porta fica guardada por 48 horas. O anel mostra quanto tempo falta.</p>
+          <p>Cada vaga fica guardada por 48 horas. O anel mostra quanto tempo falta.</p>
         </div>
       </div>
 
@@ -131,7 +131,7 @@ export function ReservationsPage({
               <div className="card rcard" key={r.id}>
                 <Ring left={expires - now} total={total} />
                 <div>
-                  <h4>{r.ctoName} · porta {pad(r.port)}</h4>
+                  <h4>{r.ctoName}</h4>
                   <p>{r.address}</p>
                   {asking !== r.id && (
                     <div className="acts2">
@@ -141,11 +141,11 @@ export function ReservationsPage({
                 </div>
                 {asking === r.id && (
                   <div className="ask">
-                    <span>{isAdmin ? "Informe o motivo. Ele fica registrado na auditoria." : "A porta volta a ficar livre na hora."}</span>
+                    <span>{isAdmin ? "Informe o motivo. Ele fica registrado na auditoria." : "A vaga volta a ficar livre na hora."}</span>
                     {isAdmin && <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo do cancelamento" aria-label="Motivo do cancelamento" />}
                     <div className="acts2">
                       <button className="btn sm" disabled={busy || (isAdmin && !reason.trim())} onClick={() => cancel(r)}>
-                        {busy ? "Cancelando…" : "Sim, liberar a porta"}
+                        {busy ? "Cancelando…" : "Sim, liberar a vaga"}
                       </button>
                       <button className="btn sec sm" onClick={() => setAsking(null)}>Voltar</button>
                     </div>
@@ -162,12 +162,12 @@ export function ReservationsPage({
           <div className="ch"><h3>Histórico</h3><small>últimas {past.length}</small></div>
           <table className="hist">
             <thead>
-              <tr><th>CTO / porta</th><th>Endereço</th><th>Situação</th></tr>
+              <tr><th>CTO</th><th>Endereço</th><th>Situação</th></tr>
             </thead>
             <tbody>
               {past.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.ctoName} · {pad(r.port)}</td>
+                  <td>{r.ctoName}{r.port !== null ? ` · porta ${pad(r.port)}` : ""}</td>
                   <td>{r.address}</td>
                   <td>
                     <span className={`badge ${STATUS[r.status].tone}`}>{STATUS[r.status].label}</span>

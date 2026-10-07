@@ -62,14 +62,12 @@ if (config.OLTCLOUD_USER && config.OLTCLOUD_PASS) {
 
   if (firstCtoName) {
     const name = firstCtoName;
-    await step("oltcloud", "portas da CTO do Codemaps", async () => {
-      const ports = await oc.getCtoPorts(name);
-      if (!ports) return { status: "atencao", detail: `"${name}" não achada no box/list (nome diverge entre Codemaps e OLTCloud?)` };
-      const free = ports.ports.filter((p) => p.state === "livre").length;
-      const unknown = ports.ports.filter((p) => p.state === "desconhecida").length;
-      return `${ports.name}: ${ports.totalPorts} portas, ${free} livres, ${unknown} sem registro`;
+    await step("oltcloud", "caixa da CTO do Codemaps", async () => {
+      const vagas = await oc.getCtoVagas(name);
+      if (!vagas) return { status: "atencao", detail: `"${name}" não achada no box/list (nome diverge entre Codemaps e OLTCloud?)` };
+      return `${vagas.name}: ${vagas.totalVagas} saídas, ${vagas.vagasLivres} livres na caixa (modo direto, só validação)`;
     });
-  } else report("oltcloud", "portas da CTO do Codemaps", "pulado", "sem CTO do Codemaps para cruzar");
+  } else report("oltcloud", "caixa da CTO do Codemaps", "pulado", "sem CTO do Codemaps para cruzar");
 
   // O ponto que decide o desenho: existe rota de autorização de ONU na API?
   await step("oltcloud", "rotas de liberação de ONU na API", async () => {

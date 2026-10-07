@@ -18,7 +18,9 @@ export interface NearbyCto {
   ctoId: string | null;
   name: string;
   distanceM: number;
-  /** Portas livres segundo o mapa (Codemaps), antes de descontar reservas do portal. null = o mapa não informou. */
+  /** Sigla de região do nome da CTO (R1, ITA, FAT...); null se o nome não segue o padrão. */
+  regiao: string | null;
+  /** Vagas livres segundo o mapa (Codemaps, "avaliable"), antes de descontar reservas do portal. null = o mapa não informou. */
   freePorts: number | null;
   usagePct: number | null;
   location: GeoPoint | null;
@@ -32,42 +34,40 @@ export interface NearbyResult {
 }
 
 /**
- * "desconhecida" = a fonte não consegue afirmar. Nunca vale como livre:
- * ausência de marcação de ocupada não prova que a porta está livre.
+ * Vagas de uma CTO: saídas de splitter livres, não portas numeradas. Qualquer saída pode ir
+ * para cliente, então só a contagem importa. Base: saídas livres no diagrama do Codemaps,
+ * descontando clientes que o OLTCloud tem vinculados à caixa além dos desenhados.
  */
-export type PortState = "livre" | "ocupada" | "desconhecida";
-
-export interface CtoPort {
-  port: number;
-  state: PortState;
-}
-
-export interface CtoPorts {
+export interface CtoVagas {
   ctoId: string;
   name: string;
+  /** Sigla de região tirada do nome da CTO (R1, ITA, FAT...); null se o nome não segue o padrão. */
+  regiao: string | null;
+  /** Vagas livres segundo as fontes, antes de descontar as reservas do portal. */
+  vagasLivres: number;
+  /** Total de vagas (saídas de splitter) da CTO: base do limite de ocupação por parceiro. */
+  totalVagas: number;
   /**
-   * "fontes_concordam" NÃO é garantia de que a porta está livre: só diz que as fontes
-   * não se contradizem (porta livre com ONU não vinculada ainda parece livre).
-   * "conferir" quando divergem ou o dado é fraco: não oferecer porta.
+   * "fontes_concordam" NÃO é garantia de vaga livre: só diz que as fontes não se contradizem
+   * (cliente instalado que não está desenhado nem vinculado é invisível às duas).
+   * "conferir" quando o dado é fraco: não oferecer vaga.
    */
   confidence: "fontes_concordam" | "conferir";
-  /** Quando a fonte leu a ocupação (ISO 8601). null = a fonte não informou. */
+  /** Quando a fonte leu a ocupação (ISO 8601). */
   updatedAt: string | null;
-  /** Por que a CTO está em "conferir" (para a Speed, nunca para o parceiro). */
+  /** Motivos para a Speed; só "conferir" bloqueia, os informativos não. */
   motivos: string[];
-  totalPorts: number;
-  ports: CtoPort[];
 }
 
-/** Mapa de rede: Codemaps (endereço → CTOs) + OLTCloud (ocupação porta a porta). */
+/** Mapa de rede: Codemaps (endereço → CTOs, diagrama de splitters) + OLTCloud (clientes vinculados). */
 export interface NetworkMap {
   findNearbyCtos(address: string, radiusM: number): Promise<NearbyResult>;
   /**
-   * null quando a CTO não é encontrada na fonte de ocupação (a caixa pode ter sido
-   * recriada com outro id: tratar como "conferir", não como "CTO sumiu").
+   * null quando a CTO não tem caixa na fonte de ocupação ou não existe (a caixa pode ter sido
+   * recriada com outro id): tratar como "conferir", não como "CTO sumiu".
    * fresh = lê direto da fonte, sem snapshot; usado na reserva.
    */
-  getCtoPorts(ctoId: string, opts?: { fresh?: boolean }): Promise<CtoPorts | null>;
+  getCtoVagas(ctoId: string, opts?: { fresh?: boolean }): Promise<CtoVagas | null>;
   /** A integração está de pé e a chave vale? Nunca lança. */
   health(): Promise<{ ok: boolean; detail: string }>;
 }

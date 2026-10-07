@@ -4,12 +4,13 @@ import type { Db } from "../db/client.js";
 import { partners, plans, viabilityQueries } from "../db/schema.js";
 import type { NetworkMap } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
-import { isStale } from "./freshness.js";
 import { recordAudit } from "./audit.js";
+import { isStale } from "./freshness.js";
 import {
   expireOverdueReservations,
-  livePortsByCto,
-  maxPortsForPartner,
+  isRegionAllowed,
+  liveReservationsByCto,
+  maxVagasForPartner,
   partnerUsageByCto,
 } from "./reservations.js";
 
@@ -25,19 +26,24 @@ export interface ViabilityCto {
   name: string;
   distanceM: number;
   location: { lat: number; lng: number } | null;
-  totalPorts: number;
-  freePorts: number[];
+  regiao: string | null;
+  /** Total de vagas (saídas de splitter) da CTO. */
+  totalVagas: number;
+  /** Vagas que este parceiro pode reservar agora (livres menos reservas vivas); 0 se bloqueada. */
+  vagas: number;
   /** Por que a CTO não serve para este parceiro, quando não serve. */
-  blockedReason: "sem_porta_livre" | "limite_ocupacao" | "conferir" | null;
+  blockedReason: "sem_vaga_livre" | "limite_ocupacao" | "conferir" | null;
   /** Há outra CTO muito próxima: a certa só se confirma em campo. */
   proximaAmbigua: boolean;
-  /** Por que está em "conferir". Só a Speed vê; para o parceiro vai vazio. */
+  /** Por que está em "conferir" (ou motivo informativo). Só a Speed vê; para o parceiro vai vazio. */
   motivos: string[];
 }
 
 export interface ViabilityResult {
   queryId: string;
   viable: boolean;
+  /** Havia CTOs perto, mas nenhuma na área liberada ao parceiro. */
+  foraDaArea: boolean;
   point: { lat: number; lng: number } | null;
   ctos: ViabilityCto[];
   plans: { id: string; name: string; speedMbps: number }[];
@@ -61,51 +67,51 @@ export async function runViability(
     : undefined;
 
   const nearby = await network.findNearbyCtos(trimmed, VIABILITY_RADIUS_M);
-  const candidates = nearby.ctos.slice(0, MAX_CTOS);
+  // Só a área liberada ao parceiro: CTO com sigla fora da lista (ou sem sigla) não é oferecida.
+  const inArea = partner ? nearby.ctos.filter((c) => isRegionAllowed(partner.allowedRegions, c.regiao)) : nearby.ctos;
+  const foraDaArea = nearby.ctos.length > 0 && inArea.length === 0;
+  const candidates = inArea.slice(0, MAX_CTOS);
   const ids = candidates.map((c) => c.ctoId).filter((id): id is string => id !== null);
-  const reserved = await livePortsByCto(db, ids);
+  const reserved = await liveReservationsByCto(db, ids);
   const usage = partner ? await partnerUsageByCto(db, partner.id, ids) : new Map<string, number>();
 
   const ctos: ViabilityCto[] = [];
   for (const c of candidates) {
-    const base = { ctoId: c.ctoId, name: c.name, distanceM: c.distanceM, location: c.location, proximaAmbigua: c.proximaAmbigua };
-    const conferir = (motivos: string[], totalPorts = 0): ViabilityCto => ({ ...base, totalPorts, freePorts: [], blockedReason: "conferir", motivos });
+    const base = { ctoId: c.ctoId, name: c.name, distanceM: c.distanceM, location: c.location, regiao: c.regiao, proximaAmbigua: c.proximaAmbigua };
+    const conferir = (motivos: string[], totalVagas = 0): ViabilityCto => ({ ...base, totalVagas, vagas: 0, blockedReason: "conferir", motivos });
 
     // Sem id a caixa não é reservável, mas a consulta (e a demanda) continua registrada.
     if (c.ctoId === null) {
       ctos.push(conferir(["cto_sem_id"]));
       continue;
     }
-    const detail = await network.getCtoPorts(c.ctoId);
-    // A caixa pode ter sido recriada com outro id: é "conferir", não "CTO sumiu".
+    const detail = await network.getCtoVagas(c.ctoId);
+    // Sem caixa no OLTCloud (ou caixa recriada com outro id): é "conferir", não "CTO sumiu".
     if (!detail) {
-      ctos.push(conferir(["cto_nao_encontrada"]));
+      ctos.push(conferir(["sem_caixa_oltcloud"]));
       continue;
     }
 
-    const taken = reserved.get(c.ctoId) ?? new Set<number>();
-    const free = detail.ports.filter((p) => p.state === "livre" && !taken.has(p.port)).map((p) => p.port);
-    // Duas fontes precisam concordar: o mapa (Codemaps) diz quantas portas estão livres e a
-    // ocupação (OLTCloud) diz quais. Porta sem registro ainda pode ser livre, então entra na
-    // conta, mas nunca é oferecida. Mapa sem contagem (null) também não prova nada.
-    const confirmed = detail.ports.filter((p) => p.state === "livre").length;
-    const unknown = detail.ports.filter((p) => p.state === "desconhecida").length;
+    // O mapa (Codemaps) é a base das vagas; a Wiki já descontou o excesso do OLTCloud. Vaga
+    // livre acima do que o mapa informa seria inconsistente. Mapa sem contagem não prova nada.
     const portalMotivos: string[] = [];
     if (c.freePorts === null) portalMotivos.push("mapa_sem_contagem");
-    else if (c.freePorts !== confirmed + unknown) portalMotivos.push("mapa_diverge_ocupacao");
+    else if (detail.vagasLivres > c.freePorts) portalMotivos.push("vagas_acima_do_mapa");
     if (isStale(detail.updatedAt)) portalMotivos.push("dado_antigo");
     const motivos = [...detail.motivos, ...portalMotivos];
 
     if (detail.confidence === "conferir" || portalMotivos.length > 0) {
-      ctos.push(conferir(motivos.length ? motivos : ["fonte_marcou_conferir"], detail.totalPorts));
+      ctos.push(conferir(motivos.length ? motivos : ["fonte_marcou_conferir"], detail.totalVagas));
       continue;
     }
-    let blockedReason: ViabilityCto["blockedReason"] = free.length === 0 ? "sem_porta_livre" : null;
+    const livres = Math.max(0, detail.vagasLivres - (reserved.get(c.ctoId) ?? 0));
+    let blockedReason: ViabilityCto["blockedReason"] = livres === 0 ? "sem_vaga_livre" : null;
     if (!blockedReason && partner) {
       const used = usage.get(c.ctoId) ?? 0;
-      if (used + 1 > maxPortsForPartner(detail.totalPorts, partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";
+      if (used + 1 > maxVagasForPartner(detail.totalVagas, partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";
     }
-    ctos.push({ ...base, totalPorts: detail.totalPorts, freePorts: blockedReason ? [] : free, blockedReason, motivos: [] });
+    // Motivos informativos (não bloqueiam) seguem para a Speed.
+    ctos.push({ ...base, totalVagas: detail.totalVagas, vagas: blockedReason ? 0 : livres, blockedReason, motivos: detail.motivos });
   }
 
   const viable = ctos.some((c) => c.blockedReason === null);
@@ -117,7 +123,7 @@ export async function runViability(
         .orderBy(plans.speedMbps)
     : [];
 
-  const reason = viable ? null : ctos.length === 0 ? "nenhuma_cto_no_raio" : "sem_porta_disponivel";
+  const reason = viable ? null : foraDaArea ? "fora_da_area" : ctos.length === 0 ? "nenhuma_cto_no_raio" : "sem_vaga_disponivel";
   const [saved] = await db
     .insert(viabilityQueries)
     .values({
@@ -129,9 +135,11 @@ export async function runViability(
       viable,
       reason,
       result: {
-        ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, free: c.freePorts.length, blocked: c.blockedReason, ambiguous: c.proximaAmbigua, motivos: c.motivos })),
-        // Contagem de cada fonte, para a Speed entender por que uma CTO ficou em "conferir".
+        ctos: ctos.map((c) => ({ ctoId: c.ctoId, name: c.name, regiao: c.regiao, vagas: c.vagas, blocked: c.blockedReason, ambiguous: c.proximaAmbigua, motivos: c.motivos })),
+        // Contagem do mapa, para a Speed entender por que uma CTO ficou em "conferir".
         sources: candidates.map((c) => ({ ctoId: c.ctoId, mapFree: c.freePorts })),
+        // CTOs perto do endereço que ficaram fora da área liberada (demanda fora do piloto).
+        foraDaAreaCount: nearby.ctos.length - inArea.length,
       },
     })
     .returning({ id: viabilityQueries.id });
@@ -147,5 +155,5 @@ export async function runViability(
 
   // Os motivos técnicos são da Speed: o parceiro só vê "a Speed precisa conferir".
   const visible = user.role === "admin_speed" ? ctos : ctos.map((c) => ({ ...c, motivos: [] }));
-  return { queryId: saved!.id, viable, point: nearby.point, ctos: visible, plans: activePlans };
+  return { queryId: saved!.id, viable, foraDaArea, point: nearby.point, ctos: visible, plans: activePlans };
 }

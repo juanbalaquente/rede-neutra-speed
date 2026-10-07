@@ -15,6 +15,13 @@
       "when": 1791384278432,
       "tag": "0001_cto_id",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791397776301,
+      "tag": "0002_vagas_e_regioes",
+      "breakpoints": true
     }
   ]
 }

@@ -232,3 +232,10 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .login input:focus { border-color: var(--data); box-shadow: 0 0 0 4px var(--data-soft); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ── vagas da CTO ── */
+.ctor.sel { background: color-mix(in srgb, var(--data-soft) 55%, transparent); box-shadow: -14px 0 0 var(--data-soft), 14px 0 0 var(--data-soft); border-radius: 4px; }
+.vbar { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--hover); overflow: hidden; display: flex; gap: 2px; }
+.vbar i { flex: 1; background: var(--line2); transition: background 0.4s; }
+.vbar i.on { background: var(--data); }
+.vbar .fill { background: var(--data); border-radius: 4px; flex: none; transition: width 0.4s; }

@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Http } from "../src/integrations/http.js";
-import { MockNetworkMap } from "../src/integrations/mock.js";
-import { IntegrationError, type CtoPorts, type NetworkMap } from "../src/integrations/types.js";
+import { IntegrationError } from "../src/integrations/types.js";
 import { WikiNetworkMap } from "../src/integrations/wiki.js";
-import { setup } from "./helpers.js";
 
 function fakeHttp(respond: (url: string, init?: RequestInit) => Response) {
   const calls: { url: string; headers: Record<string, string> }[] = [];
@@ -15,115 +13,102 @@ function fakeHttp(respond: (url: string, init?: RequestInit) => Response) {
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const wikiWith = (respond: (url: string) => Response) => {
+  const f = fakeHttp(respond);
+  return { wiki: new WikiNetworkMap(f.http, "https://wiki.exemplo/", "chave-de-teste"), calls: f.calls };
+};
 
 const NEARBY = {
   point: { lat: -19.9, lng: -43.9 },
-  ctos: [{ ctoId: "box-17", name: "CTO-X", distanceM: 120, freePorts: 3, usagePct: 80, location: { lat: -19.9, lng: -43.9 } }],
+  ctos: [{ ctoId: "17342", name: "CTO_01_ITA_X", distanceM: 120, freePorts: 3, usagePct: 80, location: { lat: -19.9, lng: -43.9 }, regiao: "ITA" }],
 };
-const PORTS = {
-  ctoId: "box-17",
-  name: "CTO-X",
-  totalPorts: 4,
+const VAGAS = {
+  ctoId: "17342",
+  name: "CTO_01_ITA_X",
+  regiao: "ITA",
+  vagasLivres: 4,
+  totalVagas: 16,
   confidence: "fontes_concordam",
   updatedAt: "2026-10-07T14:00:00-03:00",
   motivos: [],
-  ports: [
-    { port: 1, state: "livre" },
-    { port: 2, state: "ocupada" },
-    { port: 3, state: "desconhecida" },
-    { port: 4, state: "livre" },
-  ],
 };
 
 describe("WikiNetworkMap", () => {
-  it("chama /proxy/redeneutra/v1 com a chave e devolve CTOs com id", async () => {
-    const { http, calls } = fakeHttp(() => json(NEARBY));
-    const wiki = new WikiNetworkMap(http, "https://wiki.exemplo/", "chave-de-teste");
-    const r = await wiki.findNearbyCtos("Rua A, 10, BH", 300);
-    expect(r.ctos[0]?.ctoId).toBe("box-17");
+  it("chama /proxy/redeneutra/v1 com a chave e devolve CTOs com id do Codemaps e região", async () => {
+    const { wiki, calls } = wikiWith(() => json(NEARBY));
+    const r = await wiki.findNearbyCtos("Rua A, 10, Sabará", 300);
+    expect(r.ctos[0]).toMatchObject({ ctoId: "17342", regiao: "ITA" });
     const call = calls[0]!;
     expect(call.url.startsWith("https://wiki.exemplo/proxy/redeneutra/v1/viabilidade?")).toBe(true);
     expect(new URL(call.url).searchParams.get("raio")).toBe("300");
     expect(call.headers["X-RedeNeutra-Key"]).toBe("chave-de-teste");
   });
 
-  it("lê portas com três estados e usa o id codificado na URL", async () => {
-    const { http, calls } = fakeHttp(() => json(PORTS));
-    const wiki = new WikiNetworkMap(http, "https://wiki.exemplo", "k");
-    const ports = await wiki.getCtoPorts("box/17");
-    expect(ports?.ports.map((p) => p.state)).toEqual(["livre", "ocupada", "desconhecida", "livre"]);
-    expect(calls[0]!.url).toBe("https://wiki.exemplo/proxy/redeneutra/v1/ctos/box%2F17/portas");
+  it("lê as vagas (sem lista de portas) e codifica o id na URL", async () => {
+    const { wiki, calls } = wikiWith(() => json(VAGAS));
+    const v = await wiki.getCtoVagas("17/342");
+    expect(v).toMatchObject({ vagasLivres: 4, totalVagas: 16, regiao: "ITA", confidence: "fontes_concordam" });
+    expect(v).not.toHaveProperty("ports");
+    expect(calls[0]!.url).toBe("https://wiki.exemplo/proxy/redeneutra/v1/ctos/17%2F342/vagas");
   });
 
-  it("404 em portas vira null", async () => {
-    const wiki = new WikiNetworkMap(fakeHttp(() => json({}, 404)).http, "https://wiki.exemplo", "k");
-    expect(await wiki.getCtoPorts("nao-existe")).toBeNull();
+  it("fresh=true vai na URL só quando pedido", async () => {
+    const { wiki, calls } = wikiWith(() => json(VAGAS));
+    await wiki.getCtoVagas("1");
+    await wiki.getCtoVagas("1", { fresh: true });
+    expect(calls[0]!.url).toMatch(/vagas$/);
+    expect(calls[1]!.url).toMatch(/vagas\?fresh=true$/);
+  });
+
+  it("404 em vagas vira null (sem caixa no OLTCloud ou inexistente)", async () => {
+    const { wiki } = wikiWith(() => json({}, 404));
+    expect(await wiki.getCtoVagas("nao-existe")).toBeNull();
+  });
+
+  it("freePorts, ctoId e regiao nulos são aceitos, sem virar zero; proximaAmbigua ausente vale false", async () => {
+    const { wiki } = wikiWith(() =>
+      json({
+        point: null,
+        ctos: [
+          { ctoId: null, name: "SEM-ID", distanceM: 10, freePorts: null, usagePct: null, location: null, regiao: null, proximaAmbigua: true },
+          { ctoId: "9", name: "OK", distanceM: 20, freePorts: 2, usagePct: 50, location: null },
+        ],
+      }),
+    );
+    const r = await wiki.findNearbyCtos("Rua A, 10, BH", 300);
+    expect(r.ctos[0]).toMatchObject({ ctoId: null, freePorts: null, regiao: null, proximaAmbigua: true });
+    expect(r.ctos[1]).toMatchObject({ regiao: null, proximaAmbigua: false });
   });
 
   it("resposta fora do contrato vira erro, não palpite", async () => {
-    const bad = { ...PORTS, ports: [{ port: 1, state: "talvez" }] };
-    const wiki = new WikiNetworkMap(fakeHttp(() => json(bad)).http, "https://wiki.exemplo", "k");
-    await expect(wiki.getCtoPorts("box-17")).rejects.toThrow(IntegrationError);
-    const noId = { point: null, ctos: [{ name: "CTO-X", distanceM: 1, freePorts: 1, usagePct: null, location: null }] };
-    const wiki2 = new WikiNetworkMap(fakeHttp(() => json(noId)).http, "https://wiki.exemplo", "k");
-    await expect(wiki2.findNearbyCtos("Rua A, 10, BH", 300)).rejects.toThrow(/contrato v1/);
+    const bad = (patch: Record<string, unknown>) => wikiWith(() => json({ ...VAGAS, ...patch })).wiki.getCtoVagas("17342");
+    await expect(bad({ confidence: "confirmada" })).rejects.toThrow(IntegrationError); // nome antigo
+    await expect(bad({ vagasLivres: -1 })).rejects.toThrow(/contrato v1/);
+    await expect(bad({ totalVagas: undefined })).rejects.toThrow(/contrato v1/);
+    await expect(bad({ updatedAt: "ontem" })).rejects.toThrow(/contrato v1/);
+    await expect(bad({ updatedAt: undefined })).rejects.toThrow(/contrato v1/);
+    const noId = { point: null, ctos: [{ name: "X", distanceM: 1, freePorts: 1, usagePct: null, location: null }] };
+    await expect(wikiWith(() => json(noId)).wiki.findNearbyCtos("Rua A, 10, BH", 300)).rejects.toThrow(/contrato v1/);
   });
 
   it("erro HTTP da Wiki vira IntegrationError com o status", async () => {
-    const wiki = new WikiNetworkMap(fakeHttp(() => json({}, 401)).http, "https://wiki.exemplo", "k");
+    const { wiki } = wikiWith(() => json({}, 401));
     await expect(wiki.findNearbyCtos("Rua A, 10, BH", 300)).rejects.toMatchObject({ system: "wiki", status: 401 });
   });
-});
 
-/** Rede de teste: uma CTO "conferir" e outra com porta de estado desconhecido. */
-class FragileNetwork implements NetworkMap {
-  private readonly base = new MockNetworkMap();
-  findNearbyCtos(address: string, radiusM: number) {
-    return this.base.findNearbyCtos(address, radiusM);
-  }
-  health() {
-    return this.base.health();
-  }
-  async getCtoPorts(ctoId: string): Promise<CtoPorts | null> {
-    const cto = await this.base.getCtoPorts(ctoId);
-    if (!cto) return null;
-    if (ctoId === "CTO-TESTE-03") return { ...cto, confidence: "conferir" };
-    if (ctoId === "CTO-TESTE-01") return { ...cto, ports: cto.ports.map((p) => (p.port === 4 ? { ...p, state: "desconhecida" as const } : p)) };
-    return cto;
-  }
-}
-
-describe("dado fraco nunca vira porta livre", () => {
-  it("CTO 'conferir' não oferece porta e não aceita reserva", async () => {
-    const ctx = await setup(new FragileNetwork());
-    try {
-      const a = await ctx.createPartner("A", "11111111000111");
-      const cookie = await ctx.login(a.atendente);
-      const body = await (await ctx.call(cookie, "POST", "/viability", { address: "Rua dos Testes, 100, Belo Horizonte" })).json();
-      const cto3 = body.ctos.find((c: { name: string }) => c.name === "CTO-TESTE-03");
-      expect(cto3.blockedReason).toBe("conferir");
-      expect(cto3.freePorts).toEqual([]);
-      const res = await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-03", port: 1, address: "Rua dos Testes, 100, Belo Horizonte" });
-      expect(res.status).toBe(409);
-      expect((await res.json()).error).toBe("porta_nao_confirmada");
-    } finally {
-      await ctx.close();
-    }
-  });
-
-  it("porta 'desconhecida' fica fora da lista e não pode ser reservada", async () => {
-    const ctx = await setup(new FragileNetwork());
-    try {
-      const a = await ctx.createPartner("A", "11111111000111");
-      const cookie = await ctx.login(a.atendente);
-      const body = await (await ctx.call(cookie, "POST", "/viability", { address: "Rua dos Testes, 100, Belo Horizonte" })).json();
-      const cto1 = body.ctos.find((c: { name: string }) => c.name === "CTO-TESTE-01");
-      expect(cto1.freePorts).not.toContain(4);
-      expect(cto1.freePorts).toContain(6);
-      const res = await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", port: 4, address: "Rua dos Testes, 100, Belo Horizonte" });
-      expect((await res.json()).error).toBe("porta_nao_confirmada");
-    } finally {
-      await ctx.close();
-    }
+  it("health separa ok, chave recusada e Wiki fora do ar, sem lançar", async () => {
+    expect((await wikiWith(() => json({ ok: true })).wiki.health()).ok).toBe(true);
+    const denied = await wikiWith(() => json({}, 401)).wiki.health();
+    expect(denied.ok).toBe(false);
+    expect(denied.detail).toMatch(/chave recusada/);
+    expect((await wikiWith(() => json({}, 503)).wiki.health()).ok).toBe(false);
+    const down = new WikiNetworkMap(
+      async () => {
+        throw new Error("ECONNREFUSED");
+      },
+      "https://wiki.exemplo",
+      "k",
+    );
+    expect(await down.health()).toMatchObject({ ok: false, detail: "ECONNREFUSED" });
   });
 });

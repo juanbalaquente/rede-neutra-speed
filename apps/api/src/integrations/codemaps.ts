@@ -72,6 +72,8 @@ export class CodemapsClient {
           freePorts: item.avaliable ?? null,
           usagePct: item.usage ?? null,
           location: g ? { lng: g[0], lat: g[1] } : null,
+          // Sem a regra de sigla neste cliente direto (a Wiki é quem a aplica): a CTO não é liberada a parceiro.
+          regiao: null,
           proximaAmbigua: false,
         };
       }),

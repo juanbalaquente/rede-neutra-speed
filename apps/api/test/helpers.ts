@@ -43,7 +43,7 @@ export async function setup(network: NetworkMap = new MockNetworkMap()) {
   }
 
   async function createPartner(name: string, cnpj: string, extra: Partial<typeof partners.$inferInsert> = {}) {
-    const [p] = await db.insert(partners).values({ name, cnpj, ...extra }).returning();
+    const [p] = await db.insert(partners).values({ name, cnpj, allowedRegions: ["ITA"], ...extra }).returning();
     const hash = await hashPassword(PASSWORD);
     const slug = cnpj.slice(0, 4);
     await db.insert(users).values([

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Http } from "./http.js";
-import { IntegrationError, type CtoPorts, type NearbyResult, type NetworkMap } from "./types.js";
+import { IntegrationError, type CtoVagas, type NearbyResult, type NetworkMap } from "./types.js";
 
 /**
  * Cliente da API versionada da SpeedWiki (/proxy/redeneutra/v1/*), só leitura.
@@ -22,19 +22,22 @@ const nearbySchema = z.object({
       freePorts: z.number().int().nonnegative().nullable(),
       usagePct: z.number().nullable(),
       location: geoPoint.nullable(),
+      /** Sigla de região do nome (R1, ITA, FAT...); null = nome fora do padrão (a CTO não é oferecida). */
+      regiao: z.string().min(1).nullable().default(null),
       proximaAmbigua: z.boolean().default(false),
     }),
   ),
 });
 
-const portsSchema = z.object({
+const vagasSchema = z.object({
   ctoId: z.string().min(1),
   name: z.string(),
-  totalPorts: z.number().int().nonnegative(),
+  regiao: z.string().min(1).nullable().default(null),
+  vagasLivres: z.number().int().nonnegative(),
+  totalVagas: z.number().int().nonnegative(),
   confidence: z.enum(["fontes_concordam", "conferir"]),
   updatedAt: z.string().datetime({ offset: true }),
   motivos: z.array(z.string()).default([]),
-  ports: z.array(z.object({ port: z.number().int().positive(), state: z.enum(["livre", "ocupada", "desconhecida"]) })),
 });
 
 const healthSchema = z.object({ ok: z.boolean() });
@@ -76,11 +79,11 @@ export class WikiNetworkMap implements NetworkMap {
     return this.parse(nearbySchema, body, "viabilidade");
   }
 
-  async getCtoPorts(ctoId: string, opts: { fresh?: boolean } = {}): Promise<CtoPorts | null> {
+  async getCtoVagas(ctoId: string, opts: { fresh?: boolean } = {}): Promise<CtoVagas | null> {
     const query = opts.fresh ? "?fresh=true" : "";
-    const { status, body } = await this.get(`/ctos/${encodeURIComponent(ctoId)}/portas${query}`);
+    const { status, body } = await this.get(`/ctos/${encodeURIComponent(ctoId)}/vagas${query}`);
     if (status === 404) return null;
-    return this.parse(portsSchema, body, "portas");
+    return this.parse(vagasSchema, body, "vagas");
   }
 
   async health(): Promise<{ ok: boolean; detail: string }> {
