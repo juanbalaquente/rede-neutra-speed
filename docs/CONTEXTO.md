@@ -83,7 +83,16 @@ Variáveis de integração (`.env.example`): `INTEGRATIONS_MODE` (`mock` ou `rea
 
 ## 6. Estado do código
 
-**Pronto e testado (18 testes):**
+**Atualização de 7 out 2026 (sessão do portal), 33 testes passando:**
+
+- **Integração por interface:** `NetworkMap` usa `ctoId` estável (não o nome) e porta em três estados (`livre`, `ocupada`, `desconhecida`). Há o modo `INTEGRATIONS_MODE=wiki` (`integrations/wiki.ts`), só leitura, que valida a resposta contra o contrato proposto em [`CONTRATO-WIKI-V1.md`](CONTRATO-WIKI-V1.md). Esse contrato **ainda não existe na Wiki**: é uma proposta do portal.
+- **Reserva por id:** a trava é `(cto_id, port)` (migration 0001). Reservar exige uma viabilidade do mesmo parceiro, para o mesmo endereço, nas últimas 24 h que tenha listado a CTO.
+- **Porta livre exige duas fontes:** a contagem do mapa precisa bater com `livres + desconhecidas` da ocupação; se divergir, a CTO fica em "conferir" e não oferece porta. Porta desconhecida nunca é oferecida.
+- **Front:** o visual do modelo 4 já está em Nova venda e Reservas (casca, Ctrl K, tema, anéis). As demais telas do protótipo ainda não existem. **Não foi verificado em navegador nesta sessão**; só typecheck e build.
+- **Cobertura real:** os testes cobrem viabilidade, reserva, isolamento entre parceiros, login, cliente da Wiki e `/partner`. Não cobrem criação de parceiro e de usuário com limite, nem `GET /admin/audit`.
+- **Pendências do portal:** trava de sinal (depende da média por CTO vinda da Wiki), limpeza do contador de login em memória, `clientIp` confiando em `x-forwarded-for`, ciclo de vida da reserva `convertida`.
+
+**Pronto e testado até 6 out (18 testes):**
 
 - Login, sessão, três perfis, trava de tentativas de login.
 - Isolamento por `partner_id` validado no servidor; recurso de outro parceiro responde 404.
