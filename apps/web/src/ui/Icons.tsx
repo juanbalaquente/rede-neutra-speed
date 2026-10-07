@@ -42,3 +42,10 @@ export const OutIcon = () => (
     <path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9" />
   </Icon>
 );
+export const PeopleIcon = () => (
+  <Icon>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M3 20c.8-3.3 3.3-5 6-5s5.2 1.7 6 5" />
+    <path d="M16 4.5a3.5 3.5 0 0 1 0 7M21 20c-.5-2.2-1.7-3.7-3.3-4.5" />
+  </Icon>
+);
