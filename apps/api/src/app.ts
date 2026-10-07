@@ -122,6 +122,23 @@ export function createApp({ db, config, integrations }: AppDeps) {
 
   app.get("/auth/me", requireUser, (c) => c.json({ user: c.get("user") }));
 
+  /** Nome e limites do parceiro da sessão. Administrador Speed não tem parceiro. */
+  app.get("/partner", requireUser, async (c) => {
+    const { partnerId } = c.get("user");
+    if (!partnerId) return c.json({ partner: null });
+    const [partner] = await db
+      .select({
+        id: partners.id,
+        name: partners.name,
+        maxActiveReservations: partners.maxActiveReservations,
+        maxCtoOccupancyPct: partners.maxCtoOccupancyPct,
+        maxUsers: partners.maxUsers,
+      })
+      .from(partners)
+      .where(eq(partners.id, partnerId));
+    return c.json({ partner: partner ?? null });
+  });
+
   // ── Viabilidade ───────────────────────────────────────────────────────────
   app.post("/viability", requireUser, async (c) => {
     const body = await parseBody(c, z.object({ address: z.string().min(8).max(300) }));

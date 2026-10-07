@@ -11,9 +11,18 @@ export interface ViabilityCto {
   ctoId: string;
   name: string;
   distanceM: number;
+  location: { lat: number; lng: number } | null;
   totalPorts: number;
   freePorts: number[];
   blockedReason: "sem_porta_livre" | "limite_ocupacao" | "sem_dados_de_porta" | "conferir" | null;
+}
+
+export interface Partner {
+  id: string;
+  name: string;
+  maxActiveReservations: number;
+  maxCtoOccupancyPct: number;
+  maxUsers: number;
 }
 
 export interface ViabilityResult {
@@ -61,6 +70,7 @@ export const api = {
   login: (email: string, password: string) => request<{ user: User }>("POST", "/auth/login", { email, password }),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
   me: () => request<{ user: User }>("GET", "/auth/me"),
+  partner: () => request<{ partner: Partner | null }>("GET", "/partner"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),
   reservations: () => request<{ reservations: Reservation[] }>("GET", "/reservations"),
   reserve: (input: { ctoId: string; port: number; address: string; lat?: number | null; lng?: number | null }) =>
