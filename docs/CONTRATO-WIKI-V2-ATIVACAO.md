@@ -95,18 +95,24 @@ Só em `aguardando_decisao`.
 - `prosseguir`: exige justificativa (mínimo 10 caracteres); a Wiki provisiona **e abre chamado para a Infra** com sinal medido, média e justificativa.
 - `cancelar`: a Wiki desautoriza antes de provisionar; o cliente nunca teve serviço.
 
-## Trava de sinal [DECIDIR]
+## Trava de sinal (regra da Speed, confirmada pelo Juan em 9 out 2026)
 
-**Divergência entre a proposta da Wiki e o planejamento original:**
-- **Wiki:** sinal reprovado → desautoriza automaticamente.
-- **Planejamento (PDF):** diferença acima de 1,5 da média da CTO → "só prossegue com **justificativa**, que abre chamado automático para a Infra".
+**Como a Speed trabalha hoje:**
+1. Ao chegar no cliente, o técnico **mede o sinal na CTO** (na porta que vai usar) e **tira uma foto** da medição.
+2. Instala o cliente.
+3. O sinal na ONU do cliente pode ser no máximo **1,5 dB pior** que o sinal medido na CTO.
 
-**Proposta do portal:** seguir o planejamento, com o estado `aguardando_decisao` acima. O técnico em campo decide entre remedir, prosseguir com justificativa (e chamado) ou cancelar, e a Wiki nunca provisiona sem uma das três. Desautorizar sozinho tiraria do técnico a chance de corrigir um conector, e um id novo é gerado a cada reautorização.
+**No portal e no contrato:**
+- A foto e o valor medido na CTO são **obrigatórios antes de pedir a ativação**. A foto fica no portal (com data, hora, GPS do aparelho e contrato), como previsto para o módulo de fotos.
+- `POST /ativacoes` passa a levar `sinalCtoDbm` (o valor medido pelo técnico) e `limiteDb` (o limite vigente).
+- **O limite é um parâmetro da Speed, não um número fixo no código:** hoje 1,5 dB, editável pelo administrador Speed no portal, com registro na auditoria. Cada ativação guarda o limite que valeu para ela.
+- A Wiki autoriza, lê o sinal da ONU na janela "Inativo" e calcula a perda: `perda = sinalCtoDbm - sinalOnuDbm` (ex.: CTO -20,0 dBm e ONU -21,6 dBm → perda 1,6 dB → acima de 1,5, reprova).
+- A média do OLTCloud (`box/attenuations`, sem o sentinela -99,99) deixa de ser a referência. Vira só informação extra na resposta, útil para a Infra quando o próprio sinal da CTO estiver ruim.
+- Resposta da Wiki: `sinal: { ctoDbm, onuDbm, perdaDb, limiteDb, mediaOltcloudDbm, amostras }`.
 
-**Regras do cálculo (para a Wiki confirmar):**
-- A média da CTO exclui o sentinela `-99.99` e ONUs offline.
-- **Amostra mínima:** com menos de N leituras na CTO (sugestão: 3), a média não serve. É o caso comum na FAT, com 19 clientes para 111 CTOs. Nesse caso, comparar com uma **faixa absoluta** a definir pela Infra (ex.: entre -27 e -15 dBm).
-- A resposta traz `amostras` para o técnico ver em que se baseia a trava.
+**O que acontece quando reprova [DECIDIR]:**
+- **Proposta do portal** (segue o planejamento original): a ativação para em `aguardando_decisao`, e o técnico escolhe entre `remedir`, `prosseguir` com justificativa (abre chamado para a Infra com as duas medições e a foto) ou `cancelar` (a Wiki desautoriza antes de provisionar).
+- **Proposta da Wiki:** desautorizar automaticamente.
 
 ## Falha pela metade [DECIDIR]
 
