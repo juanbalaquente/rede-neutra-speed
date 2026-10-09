@@ -21,7 +21,7 @@ Piloto com **um parceiro** (um cliente que já compra link da Speed), mas multi-
 
 ## 2. Conceitos e regras de negócio
 
-- **Chave única = número do contrato Voalle**, padrão `CONTRATO-PRIMEIRONOME`. O mesmo código identifica a porta na CTO, o registro no Codemaps, o cadastro no OLTCloud e o usuário PPPoE. Toda busca parte dele.
+- **Chave única = número do contrato Voalle**, padrão `CONTRATO-PRIMEIRONOME`, em que o nome é o do **provedor parceiro** (decisão do Juan, 9 out 2026: o login PPPoE é o próprio código do contrato; parceiro do piloto **JHV**, ex.: `12345-JHV`). Nenhum nome de assinante entra no identificador. O mesmo código identifica a porta na CTO, o registro no Codemaps, o cadastro no OLTCloud e o usuário PPPoE. Toda busca parte dele.
 - **Contratos no nome do parceiro.** Juridicamente o cliente da Speed é o parceiro. O portal tem um campo livre de *apelido* para o nome do assinante final, que nunca vai para o Voalle.
 - **Perfis:**
   - *Atendente* (do parceiro): viabilidade, reserva, contrato, agenda, liberação de ONU, chamado, bloqueio/desbloqueio.

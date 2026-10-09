@@ -112,11 +112,14 @@ Só em `aguardando_decisao`.
 
 Proposta da Wiki, com a qual o portal concorda: autorizou e provisionar falhou → até 2 novas tentativas; persistindo, fica **autorizada**, estado `falha_provisionamento` e chamado/card para o NOC. Não desautoriza sozinha (o técnico está em campo; desautorizar gera id novo). Única exceção: o técnico cancelar na trava de sinal.
 
-## Cliente e alias [DECIDIR]
+## Cliente e alias (decidido pelo Juan, 9 out 2026)
 
+- **O login PPPoE é o próprio código do contrato**, no padrão `CONTRATO-NOMEDOPROVEDOR`. O nome no padrão é o do **provedor parceiro**, não o do assinante: o contrato está no nome do parceiro, e o nome do assinante final continua sem ir para o Voalle, a OLT ou o OLTCloud.
+- Parceiro do piloto: **JHV**. Exemplo: contrato `12345` → PPPoE `12345-JHV`.
+- No AUTENTICADOR: `ppp_login` = `alias` = `<contrato>-JHV`. No corpo de `POST /ativacoes`, `pppLogin` e `alias` levam o mesmo valor.
+- No portal, cada parceiro ganha um **código curto** (ex.: `JHV`), cadastrado pela Speed, usado para montar esse identificador.
 - Ordem: contrato no Voalle → cliente aparece no OLTCloud (sincronização, tempo **não medido**) → autorizar. Se demorar, existe `POST /api/v2/client/create`.
-- `ppp_login` = login PPPoE ("L"); depende da Tarefa 1 do analista (PPPoE gerado pelo Voalle ou informado).
-- **`alias`:** a Wiki sugeriu `CONTRATO-PRIMEIRONOME`. O contrato está no nome do **parceiro**, e o CONTEXTO diz que o nome do assinante final **nunca** vai para o Voalle. Se "PRIMEIRONOME" for do assinante, ele passa a aparecer na OLT e no OLTCloud, visível a toda a equipe da Speed, o que contradiz o isolamento e a LGPD. Proposta: `alias = <contrato>-<sigla do parceiro>` (ex.: `12345-NETVALE`), sem nome de pessoa.
+- Ainda depende da Tarefa 1 do analista: quem gera o código (o Voalle ou a automação) e se o Voalle aceita esse formato como login PPPoE.
 
 ## Volume e suporte [DECIDIR]
 
