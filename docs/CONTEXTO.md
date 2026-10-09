@@ -83,6 +83,8 @@ Variáveis de integração (`.env.example`): `INTEGRATIONS_MODE` (`mock` ou `rea
 
 ## 6. Estado do código
 
+**Liberação de ONU (9 out 2026, teste da Wiki em produção, autorizado pelo Juan, numa ONU da própria Speed):** funciona por automação a partir da Wiki. Desautorizar e autorizar pela rota do **painel** do OLTCloud (sessão web, a mesma que a Wiki usa para criar usuário; campos `onu` = onu_hash da lista de pendentes, `id_olt_id`, `id_cliente_id`, `alias`, `xgspon`, `id_cto_porta_id` opcional), depois provisionar pela API (`POST /api/v2/ftth/equipment/{id}/{script}/script` com `alias` e `ppp_login`, script "AUTENTICADOR (OLT_X)"). ONU voltou Online em ~50 s com o mesmo PPPoE e VLANs. A rota de autorização da **API** existe, mas recusou o corpo (não documentado). Para o portal: identificar a ONU sempre pela **serial** (o id muda a cada reautorização); o IP de gerência muda a cada provisionamento; a saída do script traz a senha PPPoE em texto puro e **nunca** é exibida nem guardada (só sucesso/falha). A escrita continua passando pela Wiki (contrato v2, escrita), com validação do Juan antes de ligar.
+
 **Atualização de 7 out 2026 (sessão do portal), 67 testes passando:**
 
 - **Modelo de vagas (decisões do Juan, 7 out 2026):** reserva por vaga, não por porta. Vaga = saída de splitter livre no diagrama do Codemaps, descontando clientes que o OLTCloud tem a mais; só Codemaps e OLTCloud entram na conta (Voalle e as caixas "nativas" ficam fora). CTO sem caixa no OLTCloud ou com dado velho (mais de 1 h) é "conferir". **Área do piloto por sigla no nome da CTO:** R1 (Backbone Central), ITA (Itacolomi) e FAT (Fátima); o administrador Speed define as siglas liberadas por parceiro (`allowedRegions`, vazio = nada é oferecido).
