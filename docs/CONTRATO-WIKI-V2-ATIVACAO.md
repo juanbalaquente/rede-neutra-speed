@@ -23,7 +23,7 @@ Complementa o [contrato v1](CONTRATO-WIKI-V1.md) (leitura). Mesmo modelo: rotas 
 
 ### `GET /proxy/redeneutra/v2/onus/pendentes?ctoId=<id do Codemaps>`
 
-ONUs aguardando autorização na OLT que atende a CTO. Só o necessário para o técnico achar a dele.
+ONUs aguardando autorização na **OLT** que atende a CTO. A Wiki filtra pela OLT (via sigla do nome da CTO), não pela PON: 72% das caixas não têm PON no OLTCloud. A lista é curta (hoje 1 a 8 pendentes por OLT) e o técnico escolhe pela serial. O portal mostra modelo e há quanto tempo a ONU apareceu, e pede ao técnico que **confirme a serial impressa na etiqueta da ONU** (últimos dígitos) antes de enviar, para ninguém ativar a ONU pendente de outro técnico.
 
 ```json
 { "onus": [{ "serial": "ZTEGC1234567", "modelo": "F670L", "vistaEm": "2026-10-09T10:02:00-03:00" }] }
@@ -40,17 +40,19 @@ Slot, pon e onu_hash ficam na Wiki.
   "porta": 5,
   "serial": "ZTEGC1234567",
   "contrato": "12345",
-  "pppLogin": "L12345",
-  "alias": "12345-…"
+  "pppLogin": "12345-JHV",
+  "alias": "12345-JHV",
+  "sinalCtoDbm": -20.0,
+  "limiteDb": 1.5
 }
 ```
 
 Responde `202` com `{ "ativacaoId": "...", "estado": "recebida" }`. Mesma `idempotencyKey` → mesma ativação, nunca uma segunda.
 
-A Wiki, antes de qualquer escrita:
+A Wiki, antes de qualquer escrita (a janela "Inativo" usa leitura **fresca** do sinal, não a última em cache; a confirmar no próximo teste):
 - confere que a serial está **pendente** (senão `409 serial_nao_pendente`);
 - traduz `ctoId` + `porta` para o `id_cto_porta_id` interno (rota `cto_data` do painel) e confere que a porta está livre (senão `409 porta_ocupada`);
-- confere que o cliente já existe no OLTCloud (sincronizado do Voalle); se não, a ativação fica em `aguardando_cliente`;
+- confere que o cliente já existe no OLTCloud (sincronizado do Voalle), achando-o pelo login PPPoE (rota de busca a mapear); se não, a ativação fica em `aguardando_cliente`;
 - **serializa**: uma ativação por OLT (no piloto, uma de cada vez no total). Outra em andamento → fica na fila, estado `recebida`.
 
 ### `GET /proxy/redeneutra/v2/ativacoes/{ativacaoId}`
@@ -60,7 +62,8 @@ A Wiki, antes de qualquer escrita:
   "ativacaoId": "...",
   "estado": "aguardando_decisao",
   "serial": "ZTEGC1234567",
-  "sinal": { "medidoDbm": -24.9, "mediaCtoDbm": -21.8, "diferenca": 3.1, "amostras": 7 },
+  "sinal": { "ctoDbm": -20.0, "onuDbm": -21.6, "perdaDb": 1.6, "limiteDb": 1.5, "mediaOltcloudDbm": -21.8, "amostras": 7 },
+  "prazoDecisaoAte": "2026-10-09T10:35:12-03:00",
   "motivo": null,
   "atualizadoEm": "2026-10-09T10:05:12-03:00"
 }
@@ -76,23 +79,23 @@ Estados:
 | `medindo_sinal` | autorizada, sem serviço; lendo o sinal |
 | `aguardando_decisao` | sinal fora da trava; espera o técnico (ver abaixo) |
 | `provisionando` | etapa 2 (AUTENTICADOR), até 2 novas tentativas |
-| `online` | ONU Online e PPPoE autenticou |
+| `online` | ONU Online (OLTCloud) **e** PPPoE autenticado no concentrador (a Wiki consulta o NE40). Só entra neste estado quando os dois confirmam |
 | `falha_provisionamento` | autorizada, provisionar falhou 3 vezes; chamado aberto ao NOC; **não desautoriza** |
-| `cancelada` | desautorizada antes de provisionar (decisão do técnico) |
+| `cancelada` | desautorizada antes de provisionar (decisão do técnico, ou sem decisão em 30 min) |
 | `falhou` | erro antes de autorizar; `motivo` diz qual |
 
 O portal consulta a cada poucos segundos enquanto o técnico acompanha. Webhook fica para depois.
 
 ### `POST /proxy/redeneutra/v2/ativacoes/{ativacaoId}/decisao`
 
-Só em `aguardando_decisao`.
+Só em `aguardando_decisao`, com **prazo de 30 min** (`prazoDecisaoAte`). Sem decisão no prazo, a Wiki cancela e desautoriza (a ONU nunca teve serviço); o portal mostra a contagem regressiva e, se o prazo vencer, o técnico recomeça com uma nova ativação.
 
 ```json
 { "acao": "prosseguir", "justificativa": "Conector refeito, medição repetida com power meter." }
 ```
 
 - `remedir`: a Wiki lê o sinal de novo (o técnico ajustou algo).
-- `prosseguir`: exige justificativa (mínimo 10 caracteres); a Wiki provisiona **e abre chamado para a Infra** com sinal medido, média e justificativa.
+- `prosseguir`: exige justificativa (mínimo 10 caracteres); a Wiki provisiona **e abre um card no Kanban da Infra** com as duas medições, a justificativa e o link da foto (a Wiki ainda não tem rota externa de incidente). **Atenção ao link da foto:** as fotos ficam no portal, que exige login, e a Infra não é usuária do portal. Opções: contas `admin_speed` para a Infra, ou link assinado que expira. Decidir antes de ligar.
 - `cancelar`: a Wiki desautoriza antes de provisionar; o cliente nunca teve serviço.
 
 ## Trava de sinal (regra da Speed, confirmada pelo Juan em 9 out 2026)
