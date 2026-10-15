@@ -44,6 +44,24 @@ Preencher: `NODE_ENV=production`, `PORTAL_DOMAIN`, `PUBLIC_BASE_URL`, `SESSION_S
 
 **O `.env` não vai para o git.** Guarde uma cópia no Vaultwarden (Nota Segura `rede-neutra-env`): se o servidor se perder, a senha do banco e o `SESSION_SECRET` se perdem junto. A sincronização automática da Wiki (`README-vault-sync.md`) só compensa quando houver credenciais que mudam, como `WIKI_API_KEY` e `WIKI_WRITE_KEY`.
 
+## Segundo fator (TOTP)
+
+Em produção, **supervisor e administrador Speed precisam de segundo fator** (código de 6 dígitos de um aplicativo autenticador). No primeiro login depois da senha, o portal mostra o QR code e, uma única vez, 10 códigos de recuperação (guarde no Vaultwarden). O atendente não é obrigado. Para ligar ou desligar à força: `MFA_REQUIRED=true|false`.
+
+**Antes de qualquer pessoa configurar o 2FA, defina a `TOTP_KEY` no `.env`** (`openssl rand -hex 32`). Ela cifra os segredos TOTP no banco. Sem ela a chave deriva do `SESSION_SECRET`, e trocar o `SESSION_SECRET` (por exemplo, para derrubar sessões) invalidaria todos os segundos fatores. Depois que houver 2FA configurado, **não troque a `TOTP_KEY`**: guarde-a no Vaultwarden junto do `.env`.
+
+```
+echo "TOTP_KEY=$(openssl rand -hex 32)" >> /opt/rede-neutra/.env
+```
+
+**Recuperação:**
+- Usuário que perdeu o celular: o administrador Speed usa **Redefinir 2FA** na lista de usuários do parceiro (fica na auditoria). Na próxima entrada ele configura de novo.
+- O próprio administrador (que não redefine a si mesmo), sem celular e sem códigos de recuperação, no servidor:
+  ```
+  cd /opt/rede-neutra && sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api node dist/scripts/reset-2fa.js <e-mail>
+  ```
+  Fica na auditoria como `auth.2fa_redefinido`, sem usuário.
+
 ## 4. Subir
 
 ```
