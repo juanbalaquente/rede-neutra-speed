@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { api, type Partner, type Reservation, type User } from "./api";
+import { api, type MfaState, type Partner, type Reservation, type User } from "./api";
 import { LoginPage } from "./pages/LoginPage";
+import { MfaSetupPage } from "./pages/MfaSetupPage";
 import { ConferirPage } from "./pages/ConferirPage";
 import { AuditPage } from "./pages/AuditPage";
 import { PanelPage } from "./pages/PanelPage";
@@ -36,14 +37,44 @@ export function App() {
 
 function Portal() {
   const [user, setUser] = useState<User | null>(null);
+  const [mfa, setMfa] = useState<MfaState | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.me().then((r) => setUser(r.user)).catch(() => setUser(null)).finally(() => setLoading(false));
+    api
+      .me()
+      .then((r) => {
+        setUser(r.user);
+        setMfa(r.mfa);
+      })
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="center muted">Carregando…</div>;
-  if (!user) return <LoginPage onLogin={setUser} />;
+  if (!user) {
+    return (
+      <LoginPage
+        onLogin={(u, m) => {
+          setUser(u);
+          setMfa(m);
+        }}
+      />
+    );
+  }
+  // Supervisor e administrador só passam daqui com o segundo fator configurado.
+  if (mfa?.setupRequired) {
+    return (
+      <MfaSetupPage
+        user={user}
+        onDone={() => setMfa({ ...mfa, enabled: true, setupRequired: false })}
+        onLogout={() => {
+          void api.logout().catch(() => {});
+          setUser(null);
+        }}
+      />
+    );
+  }
   return <Shell user={user} onLogout={() => setUser(null)} />;
 }
 

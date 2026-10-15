@@ -7,6 +7,16 @@ export interface User {
   name: string;
 }
 
+/** Segundo fator: ligado? obrigatório para este perfil? falta configurar? */
+export interface MfaState {
+  enabled: boolean;
+  required: boolean;
+  setupRequired: boolean;
+}
+
+/** Senha certa: ou entrou (sessão), ou falta o código do aplicativo (desafio). */
+export type LoginResult = { user: User; mfa: MfaState } | { mfa: "required"; challenge: string };
+
 export interface ViabilityCto {
   /** null = a Speed não resolveu a caixa: aparece, mas não vende. */
   ctoId: string | null;
@@ -111,9 +121,14 @@ async function upload<T>(path: string, input: { kind: string; file: Blob; lat?: 
 }
 
 export const api = {
-  login: (email: string, password: string) => request<{ user: User }>("POST", "/auth/login", { email, password }),
+  login: (email: string, password: string) => request<LoginResult>("POST", "/auth/login", { email, password }),
+  login2fa: (challenge: string, input: { code: string } | { recoveryCode: string }) =>
+    request<{ user: User; mfa: MfaState }>("POST", "/auth/login/2fa", { challenge, ...input }),
+  setup2fa: () => request<{ secret: string; otpauthUrl: string; qr: string }>("POST", "/auth/2fa/setup"),
+  enable2fa: (code: string) => request<{ recoveryCodes: string[] }>("POST", "/auth/2fa/enable", { code }),
+  reset2fa: (userId: string) => request<{ ok: true }>("POST", `/admin/users/${userId}/2fa/reset`),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
-  me: () => request<{ user: User }>("GET", "/auth/me"),
+  me: () => request<{ user: User; mfa: MfaState }>("GET", "/auth/me"),
   conferir: (days: number) => request<{ days: number; rows: ConferirRow[] }>("GET", `/admin/cto-conferir?days=${days}`),
   partner: () => request<{ partner: Partner | null }>("GET", "/partner"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),
@@ -268,6 +283,8 @@ export interface PartnerUser {
   email: string;
   role: Role;
   active: boolean;
+  /** Só o administrador Speed enxerga o estado do segundo fator dos outros. */
+  totpEnabled?: boolean;
 }
 
 export type PhotoKind = "cto_aberta" | "etiqueta_porta" | "medicao" | "sobra_fibra" | "onu_instalada";

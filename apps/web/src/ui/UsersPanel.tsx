@@ -52,6 +52,19 @@ export function UsersPanel({
     }
   }
 
+  /** Só o administrador Speed (que passa o partnerId) redefine o segundo fator de alguém. */
+  const canReset = partnerId !== undefined;
+  async function reset2fa(u: PartnerUser) {
+    if (!window.confirm(`Redefinir o segundo fator de ${u.name}? Na próxima entrada ele terá de configurar de novo.`)) return;
+    try {
+      await api.reset2fa(u.id);
+      say(`Segundo fator de ${u.name} redefinido`);
+      load();
+    } catch (err) {
+      say(errMsg(err, "Falha ao redefinir."), "bad");
+    }
+  }
+
   async function toggle(u: PartnerUser) {
     try {
       await api.setUserActive(u.id, !u.active);
@@ -84,8 +97,10 @@ export function UsersPanel({
                 <td>{u.role === "supervisor" ? "Supervisor" : "Atendente"}</td>
                 <td>
                   <span className={`badge ${u.active ? "b-ok" : "b-mute"}`}>{u.active ? "Ativo" : "Inativo"}</span>
+                  {canReset && u.role === "supervisor" && <span className={`badge ${u.totpEnabled ? "b-ok" : "b-warn"}`} style={{ marginLeft: 6 }}>{u.totpEnabled ? "2FA" : "sem 2FA"}</span>}
                 </td>
-                <td style={{ textAlign: "right" }}>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  {canReset && u.totpEnabled && <button className="btn sec sm" style={{ marginRight: 6 }} onClick={() => void reset2fa(u)}>Redefinir 2FA</button>}
                   {u.id !== meId && <button className="btn sec sm" onClick={() => toggle(u)}>{u.active ? "Desativar" : "Reativar"}</button>}
                 </td>
               </tr>
