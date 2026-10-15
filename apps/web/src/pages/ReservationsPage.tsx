@@ -105,6 +105,7 @@ export function ReservationsPage({
   const active = items.filter((r) => r.status === "ativa");
   const past = items.filter((r) => r.status !== "ativa");
   const max = partner?.maxActiveReservations ?? null;
+  const expiring = active.filter((r) => r.expiresAt && new Date(r.expiresAt).getTime() - now < 3 * HOUR && !openActivation(r.id));
 
   return (
     <main className="page fade-page">
@@ -114,6 +115,15 @@ export function ReservationsPage({
           <p>Cada vaga fica guardada por 48 horas. O anel mostra quanto tempo falta.</p>
         </div>
       </div>
+
+      {expiring.length > 0 && (
+        <div className="rv-soon" role="alert">
+          <div>
+            <b>{expiring.length === 1 ? "Uma reserva vence em menos de 3 horas." : `${expiring.length} reservas vencem em menos de 3 horas.`}</b>{" "}
+            {expiring.map((r) => `${r.ctoName} (${fmtLeft(new Date(r.expiresAt!).getTime() - now)})`).join(", ")}. Se não houver ativação em andamento, a vaga volta para a rede quando vencer.
+          </div>
+        </div>
+      )}
 
       {max !== null && (
         <div className="card" style={{ padding: "16px 18px" }}>

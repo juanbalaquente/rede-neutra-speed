@@ -10,7 +10,7 @@ import { ReservationsPage } from "./pages/ReservationsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
 import { CommandPalette, type Command } from "./ui/CommandPalette";
 import { ChartIcon, ClockIcon, ListIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon, SunIcon } from "./ui/Icons";
-import { ToastProvider } from "./ui/Toast";
+import { ToastProvider, useToast } from "./ui/Toast";
 import { useTheme } from "./ui/theme";
 
 type Tab = "viabilidade" | "reservas" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
@@ -20,6 +20,9 @@ const ROLE_LABEL: Record<User["role"], string> = {
   supervisor: "Supervisor",
   admin_speed: "Administrador Speed",
 };
+
+/** A partir de quanto tempo antes do vencimento o portal avisa o parceiro. */
+const EXPIRY_WARN_MS = 3 * 3600_000;
 
 const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
 
@@ -80,6 +83,28 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const activeCount = reservations?.filter((r) => r.status === "ativa").length ?? 0;
 
+  // Reservas que vencem em menos de 3 h: aviso no menu e, uma vez por reserva, no toast.
+  const say = useToast();
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const soon = useMemo(
+    () => (user.role === "admin_speed" ? [] : (reservations ?? []).filter((r) => r.status === "ativa" && r.expiresAt && new Date(r.expiresAt).getTime() - clock < EXPIRY_WARN_MS && new Date(r.expiresAt).getTime() > clock)),
+    [reservations, clock, user.role],
+  );
+  const warned = useRef(new Set<string>());
+  useEffect(() => {
+    const fresh = soon.filter((r) => !warned.current.has(r.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((r) => warned.current.add(r.id));
+    const first = fresh[0]!;
+    const mins = Math.max(1, Math.round((new Date(first.expiresAt!).getTime() - Date.now()) / 60_000));
+    const when = mins >= 60 ? `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")}` : `${mins} min`;
+    say(fresh.length === 1 ? `A reserva da ${first.ctoName} vence em ${when}.` : `${fresh.length} reservas vencem em menos de 3 horas.`, "bad");
+  }, [soon, say]);
+
   const logout = useCallback(async () => {
     await api.logout().catch(() => {});
     onLogout();
@@ -136,7 +161,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <PinIcon />Nova venda
           </button>
           <button className={`nv ${tab === "reservas" ? "on" : ""}`} onClick={() => setTab("reservas")}>
-            <ClockIcon />Reservas {reservations && <em>{activeCount}</em>}
+            <ClockIcon />Reservas {reservations && <em className={soon.length ? "warn" : ""} title={soon.length ? `${soon.length} vence(m) em menos de 3 horas` : undefined}>{activeCount}</em>}
           </button>
           {user.role === "supervisor" && (
             <>
