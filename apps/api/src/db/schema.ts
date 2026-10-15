@@ -54,6 +54,12 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     role: userRole("role").notNull(),
     active: boolean("active").notNull().default(true),
+    /** Segredo TOTP cifrado (AES-GCM). Nulo = nunca configurou o segundo fator. */
+    totpSecretEnc: text("totp_secret_enc"),
+    /** Só vale depois de o usuário confirmar um código; antes disso o segredo é "pendente". */
+    totpEnabled: boolean("totp_enabled").notNull().default(false),
+    /** Último intervalo de 30 s aceito: o mesmo código não entra duas vezes (replay). */
+    totpLastStep: integer("totp_last_step"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -62,6 +68,19 @@ export const users = pgTable(
       sql`(${t.role} = 'admin_speed' AND ${t.partnerId} IS NULL) OR (${t.role} <> 'admin_speed' AND ${t.partnerId} IS NOT NULL)`,
     ),
   ],
+);
+
+/** Códigos de recuperação do segundo fator: uso único, guardados só como hash. */
+export const recoveryCodes = pgTable(
+  "recovery_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("recovery_codes_user_idx").on(t.userId)],
 );
 
 /** Planos vendáveis. A velocidade é controlada pelo RADIUS da Speed. */

@@ -29,6 +29,13 @@ const envSchema = z.object({
   PHOTO_MAX_MB: z.coerce.number().default(8),
   /** Base pública do portal (https://...), para montar o link assinado completo das fotos. Sem ela, o link sai só com o caminho. */
   PUBLIC_BASE_URL: z.string().url().optional(),
+  /**
+   * Segundo fator (TOTP) obrigatório para supervisor e administrador Speed. Padrão: ligado em
+   * produção, desligado em desenvolvimento e testes. "true"/"false" força o valor.
+   */
+  MFA_REQUIRED: z.enum(["true", "false"]).optional(),
+  /** Chave que cifra os segredos TOTP no banco. Sem ela, deriva do SESSION_SECRET (trocá-lo invalidaria todos os segundos fatores). */
+  TOTP_KEY: z.string().min(16).optional(),
   RESERVATION_HOURS: z.coerce.number().default(48),
   CODEMAPS_TOKEN: z.string().optional(),
   CODEMAPS_SECRET: z.string().optional(),

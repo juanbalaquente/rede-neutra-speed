@@ -36,6 +36,13 @@
       "when": 1792080803755,
       "tag": "0004_fotos_de_campo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792095888678,
+      "tag": "0005_segundo_fator",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { hashPassword, isStrongPassword, verifyPassword } from "./auth/password.js";
-import { SESSION_COOKIE, signSession, verifySession, type Role, type SessionUser } from "./auth/session.js";
+import { SESSION_COOKIE, signMfaChallenge, signSession, verifyMfaChallenge, verifySession, type Role, type SessionUser } from "./auth/session.js";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { auditLog, partners, photos, plans, portReservations, users } from "./db/schema.js";
@@ -12,6 +12,7 @@ import type { Integrations } from "./integrations/types.js";
 import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
+import * as mfa from "./services/mfa.js";
 import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { networkPanel } from "./services/network-panel.js";
@@ -28,7 +29,7 @@ export interface AppDeps {
   photoStorage: PhotoStorage;
 }
 
-type Env = { Variables: { user: SessionUser } };
+type Env = { Variables: { user: SessionUser; userRow: typeof users.$inferSelect } };
 
 function clientIp(c: Context): string | null {
   return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
@@ -85,6 +86,11 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
       throw new AppError(403, "parceiro_bloqueado", "Acesso do parceiro bloqueado. Fale com a Speed.");
     }
     c.set("user", { id: row.user.id, partnerId: row.user.partnerId, role: row.user.role, name: row.user.name });
+    c.set("userRow", row.user);
+    // Supervisor e administrador sem segundo fator só alcançam a configuração dele.
+    if (mfa.mfaState(config, row.user).setupRequired && !c.req.path.startsWith("/api/auth/")) {
+      throw new AppError(403, "mfa_obrigatorio", "Configure o segundo fator para continuar.");
+    }
     await next();
   };
 
@@ -109,7 +115,16 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
       registerLoginFailure(attemptKey);
       throw new AppError(401, "credenciais_invalidas", "E-mail ou senha incorretos.");
     }
+    // Senha certa mas segundo fator ligado: ainda não há sessão. O contador de falhas só zera depois do código.
+    if (user.totpEnabled) {
+      return c.json({ mfa: "required", challenge: await signMfaChallenge(user.id, config.SESSION_SECRET) });
+    }
     failedLogins.delete(attemptKey);
+    return c.json(await startSession(c, user, false));
+  });
+
+  /** Emite o cookie de sessão e registra a entrada. */
+  async function startSession(c: Context, user: typeof users.$inferSelect, viaMfa: boolean) {
     const session: SessionUser = { id: user.id, partnerId: user.partnerId, role: user.role, name: user.name };
     const token = await signSession(session, config.SESSION_SECRET, config.SESSION_HOURS);
     setCookie(c, SESSION_COOKIE, token, {
@@ -119,8 +134,47 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
       path: "/",
       maxAge: config.SESSION_HOURS * 3600,
     });
-    await recordAudit(db, { partnerId: user.partnerId, userId: user.id, action: "auth.login", ip: clientIp(c) });
-    return c.json({ user: session });
+    await recordAudit(db, { partnerId: user.partnerId, userId: user.id, action: "auth.login", ip: clientIp(c), data: viaMfa ? { segundoFator: true } : undefined });
+    return { user: session, mfa: mfa.mfaState(config, user) };
+  }
+
+  /** Segundo passo do login: o código do app (ou um código de recuperação) troca o desafio por uma sessão. */
+  app.post("/auth/login/2fa", async (c) => {
+    const body = await parseBody(
+      c,
+      z.object({ challenge: z.string().min(10), code: z.string().trim().max(10).optional(), recoveryCode: z.string().trim().max(20).optional() }),
+    );
+    const userId = await verifyMfaChallenge(body.challenge, config.SESSION_SECRET);
+    if (!userId) throw new AppError(401, "desafio_expirado", "A verificação expirou. Entre de novo com e-mail e senha.");
+    const attemptKey = `2fa:${clientIp(c)}:${userId}`;
+    if (isLoginLocked(attemptKey)) throw new AppError(429, "muitas_tentativas", "Muitas tentativas. Aguarde 15 minutos.");
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    const ok = !!user?.active && (await mfa.verifyLogin(db, config, user, body, new Date(), clientIp(c)));
+    if (!user || !ok) {
+      registerLoginFailure(attemptKey);
+      if (user) await recordAudit(db, { partnerId: user.partnerId, userId: user.id, action: "auth.2fa_falhou", ip: clientIp(c) });
+      throw new AppError(401, "codigo_invalido", "Código incorreto.");
+    }
+    failedLogins.delete(attemptKey);
+    return c.json(await startSession(c, user, true));
+  });
+
+  // ── Segundo fator (TOTP) ──────────────────────────────────────────────────
+  app.post("/auth/2fa/setup", requireUser, async (c) => c.json(await mfa.startSetup(db, config, c.get("userRow"))));
+
+  app.post("/auth/2fa/enable", requireUser, async (c) => {
+    const body = await parseBody(c, z.object({ code: z.string().trim().regex(/^\d{6}$/, "6 dígitos") }));
+    const user = c.get("userRow");
+    const key = `2fa-enable:${user.id}`;
+    if (isLoginLocked(key)) throw new AppError(429, "muitas_tentativas", "Muitas tentativas. Aguarde 15 minutos.");
+    try {
+      const recoveryCodes = await mfa.enable(db, config, user, body.code, new Date(), clientIp(c));
+      failedLogins.delete(key);
+      return c.json({ recoveryCodes });
+    } catch (e) {
+      if (e instanceof AppError && e.code === "codigo_invalido") registerLoginFailure(key);
+      throw e;
+    }
   });
 
   app.post("/auth/logout", (c) => {
@@ -128,7 +182,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     return c.json({ ok: true });
   });
 
-  app.get("/auth/me", requireUser, (c) => c.json({ user: c.get("user") }));
+  app.get("/auth/me", requireUser, (c) => c.json({ user: c.get("user"), mfa: mfa.mfaState(config, c.get("userRow")) }));
 
   /** Nome e limites do parceiro da sessão. Administrador Speed não tem parceiro. */
   app.get("/partner", requireUser, async (c) => {
@@ -360,7 +414,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const me = c.get("user");
     const partnerId = me.role === "admin_speed" ? c.req.query("partnerId") : me.partnerId!;
     const rows = await db
-      .select({ id: users.id, name: users.name, email: users.email, role: users.role, active: users.active, partnerId: users.partnerId })
+      .select({ id: users.id, name: users.name, email: users.email, role: users.role, active: users.active, partnerId: users.partnerId, totpEnabled: users.totpEnabled })
       .from(users)
       .where(partnerId ? eq(users.partnerId, partnerId) : undefined)
       .orderBy(users.name);
@@ -513,6 +567,14 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     if (!updated) throw new AppError(404, "parceiro_nao_encontrado", "Parceiro não encontrado.");
     await recordAudit(db, { partnerId: id, userId: c.get("user").id, action: "parceiro.alterado", entity: "partner", entityId: id, ip: clientIp(c), data: { changes, reason } });
     return c.json({ partner: updated });
+  });
+
+  /** Celular perdido: apaga o segundo fator do usuário. Na próxima entrada ele configura de novo. */
+  admin.post("/users/:id/2fa/reset", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    if (id === c.get("user").id) throw new AppError(422, "proprio_usuario", "Para o seu próprio acesso, use o comando de recuperação no servidor.");
+    const target = await mfa.resetFor(db, id, c.get("user").id, clientIp(c));
+    return c.json({ ok: true, user: { id: target.id, name: target.name } });
   });
 
   /** Perda máxima de sinal entre a CTO e a ONU (dB). Parâmetro da Speed; cada ativação guarda o limite que valeu. */

@@ -34,3 +34,25 @@ export async function verifySession(token: string, secret: string): Promise<Sess
     return null;
   }
 }
+
+// ── Desafio do segundo fator: entre a senha certa e o código ────────────────
+const challengeKey = (secret: string) => new TextEncoder().encode(`mfa-challenge:${secret}`);
+
+export async function signMfaChallenge(userId: string, secret: string): Promise<string> {
+  return new SignJWT({ purpose: "mfa" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(challengeKey(secret));
+}
+
+/** Id do usuário se o desafio é válido e não expirou; null em qualquer outro caso. */
+export async function verifyMfaChallenge(token: string, secret: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, challengeKey(secret), { algorithms: ["HS256"] });
+    return payload.purpose === "mfa" && payload.sub ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
