@@ -71,6 +71,9 @@ O script confere login e leitura nos três sistemas, cruza a CTO do Codemaps com
 
 ## Deploy em servidor
 
+O passo a passo completo do servidor de produção (instalação, deploy key, `.env`, backup e atualização por `deploy/update.sh`) está em [`docs/DEPLOY.md`](docs/DEPLOY.md). O resumo abaixo é o caminho curto.
+
+
 Servidor sugerido: Ubuntu Server LTS, 4 vCPU, 4 GB de RAM, 50 GB, IP fixo, `open-vm-tools` se for VM. Firewall liberando só 22, 80 e 443 (`ufw`), SSH por chave.
 
 1. Crie o subdomínio (registro A) apontando para o IP público do servidor e libere 80/443 até ele. Peça à SpeedWiki para liberar o IP de saída do servidor.
