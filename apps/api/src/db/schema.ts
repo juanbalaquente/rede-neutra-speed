@@ -136,6 +136,37 @@ export const portReservations = pgTable(
   ],
 );
 
+/** Tipos de foto do fluxo de instalação. A da medição na CTO é exigida antes de pedir a ativação. */
+export const PHOTO_KINDS = ["cto_aberta", "etiqueta_porta", "medicao", "sobra_fibra", "onu_instalada"] as const;
+export type PhotoKind = (typeof PHOTO_KINDS)[number];
+
+/**
+ * Metadados das fotos de campo; o arquivo fica no armazenamento (volume), só pela chave.
+ * created_at é a hora do servidor (confiável); captured_at é a do aparelho (informativa).
+ */
+export const photos = pgTable(
+  "photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").notNull().references(() => partners.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    reservationId: uuid("reservation_id").notNull().references(() => portReservations.id),
+    /** Contrato da reserva na hora do envio, para a foto carregar a identificação mesmo se a reserva mudar. */
+    contract: text("contract"),
+    kind: text("kind").notNull(),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    accuracyM: doublePrecision("accuracy_m"),
+    capturedAt: timestamp("captured_at", { withTimezone: true }),
+    storageKey: text("storage_key").notNull().unique(),
+    mime: text("mime").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("photos_reservation_idx").on(t.reservationId, t.kind), index("photos_partner_idx").on(t.partnerId, t.createdAt)],
+);
+
 /** Parâmetros da Speed editáveis em tela (ex.: limite da trava de sinal). Cada mudança vai para a auditoria. */
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),

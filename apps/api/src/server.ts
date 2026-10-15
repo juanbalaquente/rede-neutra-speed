@@ -4,6 +4,7 @@ import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
 import { apiCallLog } from "./db/schema.js";
 import { createIntegrations } from "./integrations/index.js";
+import { LocalPhotoStorage } from "./storage/photos.js";
 import { expireOverdueReservations } from "./services/reservations.js";
 
 const config = loadConfig();
@@ -14,7 +15,8 @@ const integrations = createIntegrations(config, (record) => {
   db.insert(apiCallLog).values(record).catch((e) => console.error("api_call_log", e));
 });
 
-const app = createApp({ db, config, integrations });
+const photoStorage = new LocalPhotoStorage(config.PHOTO_DIR);
+const app = createApp({ db, config, integrations, photoStorage });
 
 // Expira reservas vencidas a cada minuto (também expira sob demanda nas rotas).
 setInterval(() => {

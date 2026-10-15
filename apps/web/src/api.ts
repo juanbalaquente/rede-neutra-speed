@@ -90,6 +90,26 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** Envio de arquivo (multipart): sem Content-Type manual, o navegador monta o boundary. */
+async function upload<T>(path: string, input: { kind: string; file: Blob; lat?: number; lng?: number; accuracyM?: number; capturedAt: string }): Promise<T> {
+  const form = new FormData();
+  form.set("kind", input.kind);
+  form.set("capturedAt", input.capturedAt);
+  if (input.lat !== undefined && input.lng !== undefined) {
+    form.set("lat", String(input.lat));
+    form.set("lng", String(input.lng));
+  }
+  if (input.accuracyM !== undefined) form.set("accuracyM", String(input.accuracyM));
+  form.set("file", input.file, "foto.jpg");
+  const res = await fetch(`/api${path}`, { method: "POST", credentials: "include", body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const fallback = res.status === 413 ? "A foto é grande demais." : res.status >= 502 ? "Servidor fora do ar. Tente de novo em instantes." : "Erro inesperado.";
+    throw new ApiError(res.status, data.error ?? "erro", data.message ?? fallback);
+  }
+  return data as T;
+}
+
 export const api = {
   login: (email: string, password: string) => request<{ user: User }>("POST", "/auth/login", { email, password }),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
@@ -114,6 +134,11 @@ export const api = {
   setUserActive: (id: string, active: boolean) => request<{ ok: true }>("POST", `/users/${id}/active`, { active }),
   audit: (filters: { partnerId?: string; action?: string; days: number }) =>
     request<{ entries: AuditEntry[] }>("GET", `/admin/audit?${new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`),
+  // ── Fotos de campo ──
+  photos: (reservationId: string) => request<{ photos: Photo[] }>("GET", `/reservations/${reservationId}/photos`),
+  uploadPhoto: (reservationId: string, input: { kind: PhotoKind; file: Blob; lat?: number; lng?: number; accuracyM?: number; capturedAt: string }) =>
+    upload<{ photo: Photo }>(`/reservations/${reservationId}/photos`, input),
+
   // ── Liberação de ONU (503 ativacao_desligada = recurso desligado) ──
   activations: () => request<{ activations: Activation[] }>("GET", "/activations"),
   pendingOnus: (reservationId: string) => request<{ onus: PendingOnu[] }>("GET", `/reservations/${reservationId}/onus-pendentes`),
@@ -244,3 +269,18 @@ export interface PartnerUser {
   role: Role;
   active: boolean;
 }
+
+export type PhotoKind = "cto_aberta" | "etiqueta_porta" | "medicao" | "sobra_fibra" | "onu_instalada";
+
+export interface Photo {
+  id: string;
+  reservationId: string;
+  contract: string | null;
+  kind: PhotoKind;
+  lat: number | null;
+  lng: number | null;
+  createdAt: string;
+}
+
+/** Endereço do arquivo da foto (exige login: o cookie da sessão vai junto). */
+export const photoUrl = (id: string) => `/api/photos/${id}/file`;

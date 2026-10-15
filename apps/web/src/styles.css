@@ -338,3 +338,15 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .atv-trava p { margin: 0; font-size: 13.5px; }
 .atv .acts2 { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .atv-steps li.now i { animation: none; } }
+
+/* Fotos de campo */
+.ph-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+.ph-slot { display: grid; gap: 4px; align-content: start; }
+.ph-slot b { font-size: 13px; font-weight: 500; }
+.ph-slot b em { font-style: normal; font-weight: 400; color: var(--warn); font-size: 12px; }
+.ph-slot small { color: var(--mute); font-size: 12px; line-height: 1.35; }
+.ph-pic { aspect-ratio: 4 / 3; border: 1px dashed var(--line2); border-radius: 10px; background: var(--surf2); color: var(--mute); display: grid; place-items: center; overflow: hidden; padding: 0; font-size: 24px; transition: border-color 0.2s; }
+.ph-pic:hover { border-color: var(--mute); }
+.ph-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph-slot.done .ph-pic { border-style: solid; border-color: var(--ok); }
+.ph-slot.req .ph-pic { border-color: var(--warn); }

@@ -9,6 +9,7 @@ import * as schema from "../src/db/schema.js";
 import { partners, users } from "../src/db/schema.js";
 import { hashPassword } from "../src/auth/password.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
+import { MemoryPhotoStorage } from "../src/storage/photos.js";
 import type { ActivationService, NetworkMap } from "../src/integrations/types.js";
 import { seed } from "../src/scripts/seed.js";
 
@@ -21,7 +22,8 @@ export async function setup(network: NetworkMap = new MockNetworkMap(), activati
   await seed(db, { adminEmail: "admin@speed.test", adminPassword: PASSWORD, demo: false });
 
   const config = loadConfig({ NODE_ENV: "test" });
-  const app = createApp({ db, config, integrations: { network, activation } });
+  const photoStorage = new MemoryPhotoStorage();
+  const app = createApp({ db, config, integrations: { network, activation }, photoStorage });
 
   async function login(email: string): Promise<string> {
     const res = await app.request("/api/auth/login", {
@@ -42,6 +44,17 @@ export async function setup(network: NetworkMap = new MockNetworkMap(), activati
     });
   }
 
+  /** Menor JPEG válido para o servidor (só os bytes de abertura importam para a checagem de formato). */
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xff, 0xd9]);
+
+  function upload(cookie: string | null, reservationId: string, fields: Record<string, string> = {}, bytes: Uint8Array = JPEG, name = "foto.jpg") {
+    const form = new FormData();
+    form.set("kind", "medicao");
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    form.set("file", new File([new Uint8Array(bytes)], name, { type: "image/jpeg" }));
+    return app.request(`/api/reservations/${reservationId}/photos`, { method: "POST", headers: cookie ? { Cookie: cookie } : {}, body: form });
+  }
+
   async function createPartner(name: string, cnpj: string, extra: Partial<typeof partners.$inferInsert> = {}) {
     const [p] = await db.insert(partners).values({ name, cnpj, allowedRegions: ["ITA"], ...extra }).returning();
     const hash = await hashPassword(PASSWORD);
@@ -53,5 +66,5 @@ export async function setup(network: NetworkMap = new MockNetworkMap(), activati
     return { partner: p!, supervisor: `sup${slug}@parceiro.test`, atendente: `ate${slug}@parceiro.test` };
   }
 
-  return { db, app, login, call, createPartner, close: () => client.close() };
+  return { db, app, login, call, upload, JPEG, photoStorage, createPartner, close: () => client.close() };
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type Activation, type ActivationState, type PendingOnu, type Reservation } from "../api";
 import { newUuid } from "../uuid";
+import { PhotoSlots } from "./PhotoSlots";
 import { useToast } from "./Toast";
 
 const FINAL: ActivationState[] = ["online", "falha_provisionamento", "cancelada", "falhou"];
@@ -148,6 +149,7 @@ export function ActivationPanel({
   const [contrato, setContrato] = useState("");
   const [sinal, setSinal] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hasMedicao, setHasMedicao] = useState(false);
   // A chave nasce com o formulário: reenviar o mesmo pedido (rede caiu) não duplica.
   const key = useRef(newUuid());
   const reportedDone = useRef(false);
@@ -188,7 +190,7 @@ export function ActivationPanel({
   const sinalOk = sinal.trim() !== "" && Number.isFinite(dbm) && dbm <= 0 && dbm >= -40;
   const tail = serial.slice(-4);
   const confirmed = serial !== "" && confirm.trim().toUpperCase() === tail.toUpperCase();
-  const ready = sinalOk && /^\d{1,12}$/.test(contrato) && confirmed && !!pppSuffix;
+  const ready = sinalOk && /^\d{1,12}$/.test(contrato) && confirmed && !!pppSuffix && hasMedicao;
 
   async function submit() {
     setBusy(true);
@@ -217,7 +219,10 @@ export function ActivationPanel({
       </div>
       <div className="summary">
         {activation ? (
-          <Progress activation={activation} onChange={setActivation} />
+          <>
+            <Progress activation={activation} onChange={setActivation} />
+            <PhotoSlots reservationId={reservation.id} onMedicao={setHasMedicao} />
+          </>
         ) : !pppSuffix ? (
           <p className="note">Seu provedor ainda não tem código cadastrado. Peça à Speed para cadastrar antes de liberar ONUs.</p>
         ) : (
@@ -258,8 +263,10 @@ export function ActivationPanel({
                 <small>{sinal && !sinalOk ? "Informe um valor entre -40 e 0." : "Meça na porta da CTO antes de instalar. É a referência da trava de sinal."}</small>
               </label>
             </div>
+            <PhotoSlots reservationId={reservation.id} onMedicao={setHasMedicao} />
             <div className="acts2">
               <button className="btn" disabled={!ready || busy} onClick={submit}>{busy ? "Enviando…" : "Liberar ONU"}</button>
+              {!hasMedicao && <small className="muted">Falta a foto da medição na CTO.</small>}
             </div>
           </>
         )}

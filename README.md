@@ -78,7 +78,8 @@ Servidor sugerido: Ubuntu Server LTS, 4 vCPU, 4 GB de RAM, 50 GB, IP fixo, `open
 3. `cp .env.example .env` e preencha: `NODE_ENV=production`, `PORTAL_DOMAIN`, `SESSION_SECRET` (`openssl rand -hex 32`), `POSTGRES_PASSWORD`, `SEED_ADMIN_PASSWORD`, `INTEGRATIONS_MODE=wiki`, `WIKI_BASE_URL`, `WIKI_API_KEY`. `chmod 600 .env`.
 4. `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`. O Caddy emite o certificado sozinho; o portal responde em `https://PORTAL_DOMAIN`.
 5. Backup: agende `deploy/backup-db.sh` no cron (`0 3 * * *`) e copie `/opt/rede-neutra-backups` para outra máquina.
-6. Atualizar: tire um snapshot da VM, `git pull` e repita o comando do passo 4.
+6. Fotos de campo ficam no volume `photos-data` (pasta `/data/photos` do container da API). O mesmo script de backup espelha esse volume em `$BACKUP_DIR/fotos`; copie o diretório de backup inteiro para outra máquina.
+7. Atualizar: tire um snapshot da VM, `git pull` e repita o comando do passo 4.
 
 ## Ainda não feito
 

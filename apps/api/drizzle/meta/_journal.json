@@ -29,6 +29,13 @@
       "when": 1792007002029,
       "tag": "0003_ativacao_onu",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792080803755,
+      "tag": "0004_fotos_de_campo",
+      "breakpoints": true
     }
   ]
 }

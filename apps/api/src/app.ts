@@ -1,12 +1,13 @@
 import { and, count, desc, eq, gte, like } from "drizzle-orm";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { hashPassword, isStrongPassword, verifyPassword } from "./auth/password.js";
 import { SESSION_COOKIE, signSession, verifySession, type Role, type SessionUser } from "./auth/session.js";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
-import { auditLog, partners, plans, portReservations, users } from "./db/schema.js";
+import { auditLog, partners, photos, plans, portReservations, users } from "./db/schema.js";
 import type { Integrations } from "./integrations/types.js";
 import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
@@ -16,11 +17,15 @@ import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { networkPanel } from "./services/network-panel.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
 import { runViability } from "./services/viability.js";
+import { createPhotoLink, listPhotos, ownPhoto, photoView, readPhoto, uploadPhoto, verifyPhotoLink } from "./services/photos.js";
+import type { PhotoStorage } from "./storage/photos.js";
+import { PHOTO_KINDS } from "./db/schema.js";
 
 export interface AppDeps {
   db: Db;
   config: Config;
   integrations: Integrations;
+  photoStorage: PhotoStorage;
 }
 
 type Env = { Variables: { user: SessionUser } };
@@ -38,7 +43,7 @@ async function parseBody<T extends z.ZodTypeAny>(c: Context, schema: T): Promise
   return parsed.data;
 }
 
-export function createApp({ db, config, integrations }: AppDeps) {
+export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
   const app = new Hono<Env>().basePath("/api");
 
   // Conta só tentativas que falharam; login certo zera o contador.
@@ -240,6 +245,94 @@ export function createApp({ db, config, integrations }: AppDeps) {
       ]),
     );
     return c.json({ activation: activationView(await decideActivation(db, activationSvc(), c.get("user"), id, body, { ip: clientIp(c) })) });
+  });
+
+  // ── Fotos de campo ────────────────────────────────────────────────────────
+  const photoMaxBytes = config.PHOTO_MAX_MB * 1024 * 1024;
+  const optionalNumber = (min: number, max: number) =>
+    z.preprocess((v) => (v === "" || v == null ? undefined : Number(v)), z.number().min(min).max(max).optional());
+
+  app.post(
+    "/reservations/:id/photos",
+    requireUser,
+    requireRole("atendente", "supervisor"),
+    // Folga para os campos do formulário além do arquivo.
+    bodyLimit({
+      maxSize: photoMaxBytes + 64 * 1024,
+      onError: () => {
+        throw new AppError(422, "foto_grande_demais", `A foto passa de ${config.PHOTO_MAX_MB} MB.`);
+      },
+    }),
+    async (c) => {
+      const reservationId = z.string().uuid().parse(c.req.param("id"));
+      const form = await c.req.parseBody().catch(() => ({}) as Record<string, string | File>);
+      const file = form.file;
+      if (!(file instanceof File)) throw new AppError(400, "dados_invalidos", "file: envie a foto no campo \"file\".");
+      const meta = z
+        .object({
+          kind: z.enum(PHOTO_KINDS),
+          lat: optionalNumber(-90, 90),
+          lng: optionalNumber(-180, 180),
+          accuracyM: optionalNumber(0, 100000),
+          capturedAt: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.string().datetime({ offset: true }).optional()),
+        })
+        .safeParse(form);
+      if (!meta.success) {
+        throw new AppError(400, "dados_invalidos", meta.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+      }
+      const created = await uploadPhoto(
+        db,
+        photoStorage,
+        c.get("user"),
+        {
+          reservationId,
+          kind: meta.data.kind,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          lat: meta.data.lat,
+          lng: meta.data.lng,
+          accuracyM: meta.data.accuracyM,
+          capturedAt: meta.data.capturedAt ? new Date(meta.data.capturedAt) : null,
+        },
+        { maxBytes: photoMaxBytes, ip: clientIp(c) },
+      );
+      return c.json({ photo: photoView(created) }, 201);
+    },
+  );
+
+  app.get("/reservations/:id/photos", requireUser, async (c) => {
+    const reservationId = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ photos: (await listPhotos(db, c.get("user"), reservationId)).map(photoView) });
+  });
+
+  /** O arquivo, só para quem pode ver a foto. Nunca público e nunca em cache compartilhado. */
+  app.get("/photos/:id/file", requireUser, async (c) => {
+    const photo = await ownPhoto(db, c.get("user"), z.string().uuid().parse(c.req.param("id")));
+    const bytes = await readPhoto(photoStorage, photo);
+    return new Response(new Uint8Array(bytes), { headers: { "Content-Type": photo.mime, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+  });
+
+  /** Link assinado para mostrar a foto a quem não tem conta (a Infra). Vale no máximo 48 h. */
+  app.post("/photos/:id/link", requireUser, async (c) => {
+    const body = await parseBody(c, z.object({ hours: z.number().int().min(1).max(48).default(48) }));
+    const link = await createPhotoLink(db, c.get("user"), z.string().uuid().parse(c.req.param("id")), {
+      hours: body.hours,
+      secret: config.SESSION_SECRET,
+      baseUrl: config.PUBLIC_BASE_URL,
+      ip: clientIp(c),
+    });
+    return c.json(link, 201);
+  });
+
+  /** Sem login: o token assinado é a credencial. Qualquer falha responde 404, sem dizer se expirou ou é inválido. */
+  app.get("/photos/shared/:token", async (c) => {
+    const photoId = verifyPhotoLink(c.req.param("token"), config.SESSION_SECRET);
+    const notFound = new AppError(404, "foto_nao_encontrada", "Foto não encontrada.");
+    if (!photoId) throw notFound;
+    const [photo] = await db.select().from(photos).where(eq(photos.id, photoId));
+    if (!photo) throw notFound;
+    const bytes = await readPhoto(photoStorage, photo);
+    await recordAudit(db, { partnerId: photo.partnerId, userId: null, action: "foto.vista_por_link", entity: "photo", entityId: photo.id, ip: clientIp(c) });
+    return new Response(new Uint8Array(bytes), { headers: { "Content-Type": photo.mime, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   });
 
   // ── Planos ────────────────────────────────────────────────────────────────

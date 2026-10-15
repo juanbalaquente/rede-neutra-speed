@@ -24,6 +24,11 @@ const envSchema = z.object({
   ACTIVATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
   /** Chave de escrita da Wiki (X-RedeNeutra-Write-Key), separada da de leitura. */
   WIKI_WRITE_KEY: z.string().optional(),
+  /** Pasta das fotos de campo. Em produção é um volume do Docker (entra no backup). */
+  PHOTO_DIR: z.string().default("./data/photos"),
+  PHOTO_MAX_MB: z.coerce.number().default(8),
+  /** Base pública do portal (https://...), para montar o link assinado completo das fotos. Sem ela, o link sai só com o caminho. */
+  PUBLIC_BASE_URL: z.string().url().optional(),
   RESERVATION_HOURS: z.coerce.number().default(48),
   CODEMAPS_TOKEN: z.string().optional(),
   CODEMAPS_SECRET: z.string().optional(),

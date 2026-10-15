@@ -13,6 +13,7 @@ import {
 } from "../integrations/types.js";
 import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
+import { hasKind } from "./photos.js";
 
 export const SIGNAL_LIMIT_KEY = "sinal.limite_db";
 export const DEFAULT_SIGNAL_LIMIT_DB = 1.5;
@@ -81,6 +82,11 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
   const reservation = await ownReservation(db, partnerId, input.reservationId);
   if (reservation.status !== "ativa") {
     throw new AppError(409, "reserva_indisponivel", "Só uma reserva ativa pode ser ativada.");
+  }
+
+  // A medição na CTO é a referência da trava de sinal: sem a foto dela, não há ativação.
+  if (!(await hasKind(db, reservation.id, ["medicao"]))) {
+    throw new AppError(422, "foto_medicao_obrigatoria", "Envie a foto da medição de sinal na CTO antes de liberar a ONU.");
   }
 
   const serial = input.serial.trim().toUpperCase();
