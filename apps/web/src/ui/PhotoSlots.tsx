@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, photoUrl, type Photo, type PhotoKind } from "../api";
+import { PHOTO_KINDS } from "../photoKinds";
 import { useToast } from "./Toast";
 
-const KINDS: { kind: PhotoKind; label: string; hint: string }[] = [
-  { kind: "medicao", label: "Medição na CTO", hint: "Foto do medidor na porta, antes de instalar. Obrigatória." },
-  { kind: "cto_aberta", label: "CTO aberta", hint: "A caixa aberta, mostrando a porta usada." },
-  { kind: "etiqueta_porta", label: "Etiqueta da porta", hint: "A etiqueta do cliente na porta." },
-  { kind: "sobra_fibra", label: "Sobra de fibra", hint: "A reserva técnica de fibra." },
-  { kind: "onu_instalada", label: "ONU instalada", hint: "A ONU no cliente, ligada." },
-];
+const KINDS = PHOTO_KINDS;
 
 const MAX_SIDE = 1600;
 
@@ -39,7 +34,7 @@ function locate(): Promise<GeolocationPosition | null> {
 const fmtTime = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 /** Fotos de uma reserva. `onMedicao` avisa quando a foto obrigatória (medição na CTO) existe. */
-export function PhotoSlots({ reservationId, onMedicao }: { reservationId: string; onMedicao: (has: boolean) => void }) {
+export function PhotoSlots({ reservationId, onMedicao, onChanged }: { reservationId: string; onMedicao: (has: boolean) => void; onChanged?: () => void }) {
   const say = useToast();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [busy, setBusy] = useState<PhotoKind | null>(null);
@@ -66,6 +61,7 @@ export function PhotoSlots({ reservationId, onMedicao }: { reservationId: string
       });
       say(pos ? "Foto enviada" : "Foto enviada, sem localização");
       load();
+      onChanged?.();
     } catch (e) {
       say(e instanceof Error ? e.message : "Falha ao enviar a foto.", "bad");
     } finally {

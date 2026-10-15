@@ -43,6 +43,13 @@
       "when": 1792095888678,
       "tag": "0005_segundo_fator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792098757386,
+      "tag": "0006_instalacao_cliente_os",
+      "breakpoints": true
     }
   ]
 }

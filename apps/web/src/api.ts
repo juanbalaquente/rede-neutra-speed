@@ -162,6 +162,13 @@ export const api = {
   activation: (id: string) => request<{ activation: Activation }>("GET", `/activations/${id}`),
   decideActivation: (id: string, decision: { acao: "remedir" | "cancelar" } | { acao: "prosseguir"; justificativa: string }) =>
     request<{ activation: Activation }>("POST", `/activations/${id}/decision`, decision),
+  // ── Instalações e O.S. ──
+  installations: () => request<{ installations: Installation[] }>("GET", "/installations"),
+  installation: (id: string) => request<{ installation: InstallationDetail }>("GET", `/installations/${id}`),
+  closeOs: (id: string, body: OsInput) => request<{ installation: InstallationDetail }>("POST", `/reservations/${id}/os/close`, body),
+  photoLink: (photoId: string, hours = 48) => request<{ path: string; url: string | null; expiresAt: string }>("POST", `/photos/${photoId}/link`, { hours }),
+  osPhotosRequired: () => request<{ obrigatorias: boolean }>("GET", "/admin/settings/fotos-os"),
+  setOsPhotosRequired: (obrigatorias: boolean) => request<{ obrigatorias: boolean }>("PUT", "/admin/settings/fotos-os", { obrigatorias }),
   signalLimit: () => request<{ limiteDb: number; padraoDb: number }>("GET", "/admin/settings/limite-sinal"),
   setSignalLimit: (limiteDb: number) => request<{ limiteDb: number }>("PUT", "/admin/settings/limite-sinal", { limiteDb }),
   painel: (days: number) => request<NetworkPanel>("GET", `/admin/painel?days=${days}`),
@@ -272,7 +279,7 @@ export interface Activation {
   sinalCtoDbm: number;
   limiteDb: number;
   state: ActivationState;
-  snapshot: { sinal?: ActivationSignal | null; prazoDecisaoAte?: string | null; motivo?: string | null } | null;
+  snapshot: { sinal?: ActivationSignal | null; vlan?: number | null; prazoDecisaoAte?: string | null; motivo?: string | null } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -287,7 +294,7 @@ export interface PartnerUser {
   totpEnabled?: boolean;
 }
 
-export type PhotoKind = "cto_aberta" | "etiqueta_porta" | "medicao" | "sobra_fibra" | "onu_instalada";
+export type PhotoKind = "medicao" | "cto_aberta" | "etiqueta_porta" | "medicao_onu" | "sobra_fibra" | "onu_instalada";
 
 export interface Photo {
   id: string;
@@ -301,3 +308,39 @@ export interface Photo {
 
 /** Endereço do arquivo da foto (exige login: o cookie da sessão vai junto). */
 export const photoUrl = (id: string) => `/api/photos/${id}/file`;
+
+export interface Installation {
+  id: string;
+  partnerId: string;
+  /** Só a Speed recebe o nome do parceiro. */
+  partnerName: string | null;
+  ctoName: string;
+  address: string;
+  status: "ativa" | "convertida";
+  contract: string | null;
+  nickname: string | null;
+  planName: string | null;
+  planMbps: number | null;
+  visitAt: string | null;
+  technician: string | null;
+  visitStatus: "agendada" | "em_execucao" | "concluida" | "reagendada";
+  activationState: ActivationState | null;
+  onuSerial: string | null;
+  photoKinds: PhotoKind[];
+  osClosedAt: string | null;
+  createdAt: string;
+}
+
+export interface OsInput {
+  porta?: string | null;
+  sinalFinalDbm: number;
+  modeloOnu: string;
+  serialOnu: string;
+  observacao?: string | null;
+}
+
+export interface InstallationDetail extends Installation {
+  os: (OsInput & { fechadaPor: string }) | null;
+  fotosFaltando: PhotoKind[];
+  fotosObrigatorias: boolean;
+}

@@ -361,3 +361,17 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .mfa-qr { display: grid; justify-items: center; gap: 10px; text-align: center; }
 .mfa-qr img { border: 1px solid var(--line2); border-radius: 12px; background: #fff; padding: 8px; }
 .mfa-codes { list-style: none; margin: 0; padding: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; border: 1px solid var(--line2); border-radius: 10px; background: var(--surf2); font-size: 14px; }
+
+.atv-vlan { margin: 0; padding: 10px 12px; border: 1px solid var(--line2); border-left: 3px solid var(--data); border-radius: 8px; background: var(--surf2); font-size: 13.5px; }
+
+/* Instalações */
+.seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--surf); width: fit-content; max-width: 100%; overflow-x: auto; }
+.seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; color: var(--mute); font-size: 13px; white-space: nowrap; }
+.seg button.on { background: var(--hover); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.ph-gallery { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); }
+.ph-gallery figure { margin: 0; display: grid; gap: 6px; align-content: start; }
+.ph-gallery img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; border: 1px solid var(--line2); background: var(--surf2); display: block; }
+.ph-gallery figcaption { display: grid; gap: 1px; font-size: 13px; }
+.ph-gallery figcaption small { color: var(--mute); font-size: 12px; }
+.os-sum { gap: 12px; }
+.os-sum small { display: block; color: var(--mute); font-size: 12px; }

@@ -293,6 +293,36 @@ function SignalLimitCard() {
   );
 }
 
+/** Se as fotos do checklist são obrigatórias para o técnico fechar a O.S. (o planejamento recomenda que sim). */
+function OsPhotosCard() {
+  const say = useToast();
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    api.osPhotosRequired().then((r) => setOn(r.obrigatorias)).catch(() => setOn(null));
+  }, []);
+  if (on === null) return null;
+  async function toggle(next: boolean) {
+    try {
+      setOn((await api.setOsPhotosRequired(next)).obrigatorias);
+      say(next ? "Fotos obrigatórias para fechar a O.S." : "Fotos opcionais para fechar a O.S.");
+    } catch (e) {
+      say(errMsg(e, "Falha ao salvar."), "bad");
+    }
+  }
+  return (
+    <div className="card">
+      <div className="ch"><h3>Fotos da O.S.</h3><small>vale para todos os parceiros</small></div>
+      <div className="summary">
+        <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input type="checkbox" checked={on} onChange={(e) => void toggle(e.target.checked)} style={{ width: "auto" }} />
+          <span>Exigir as fotos do checklist para fechar a O.S.</span>
+        </label>
+        <small className="muted">Sem as fotos, o controle de padrão da rede fica só no papel. Desligue só se a diretoria decidir por amostragem.</small>
+      </div>
+    </div>
+  );
+}
+
 /** Administrador Speed: parceiros, área liberada (siglas), limites, bloqueio e usuários. */
 export function PartnersPage() {
   const say = useToast();
@@ -327,6 +357,7 @@ export function PartnersPage() {
       </div>
 
       <SignalLimitCard />
+      <OsPhotosCard />
 
       <div className="g11">
         <div className="card">

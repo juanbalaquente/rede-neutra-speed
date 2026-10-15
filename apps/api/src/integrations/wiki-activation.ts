@@ -42,6 +42,7 @@ const snapshotSchema = z.object({
       amostras: z.number().int().nullable().default(null),
     })
     .nullable(),
+  vlan: z.number().int().positive().nullable().default(null),
   prazoDecisaoAte: z.string().datetime({ offset: true }).nullable().default(null),
   motivo: z.string().nullable().default(null),
   atualizadoEm: z.string().datetime({ offset: true }),

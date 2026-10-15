@@ -116,6 +116,11 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
         })}
       </ol>
       {note && <p className={ended ? "error" : "muted"}>{note}{activation.snapshot?.motivo && state !== "cancelada" ? ` (${activation.snapshot.motivo})` : ""}</p>}
+      {activation.snapshot?.vlan && !["cancelada", "falhou"].includes(state) && (
+        <p className="atv-vlan">
+          Configure a ONU do cliente com o login <span className="mono">{activation.pppLogin}</span> e a <b>VLAN <span className="mono">{activation.snapshot.vlan}</span></b>.
+        </p>
+      )}
       {state === "aguardando_decisao" && <Decision activation={activation} onChange={onChange} />}
       {done && (
         <p>

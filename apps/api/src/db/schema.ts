@@ -137,6 +137,18 @@ export const portReservations = pgTable(
     status: reservationStatus("status").notNull().default("ativa"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     contractNumber: text("contract_number"),
+    /** Dados do cliente, preenchidos pelo parceiro depois de reservar (planejamento, etapa 3). */
+    planId: uuid("plan_id").references(() => plans.id),
+    /** Nome do assinante final: só para busca e exibição no portal, nunca vai para o Voalle. */
+    nickname: text("nickname"),
+    visitAt: timestamp("visit_at", { withTimezone: true }),
+    technician: text("technician"),
+    /** agendada | em_execucao | concluida | reagendada (etapa 4). */
+    visitStatus: text("visit_status").notNull().default("agendada"),
+    /** Fechamento da O.S.: quando, por quem e o que o técnico confirmou (porta, sinal final, ONU, observação). */
+    osClosedAt: timestamp("os_closed_at", { withTimezone: true }),
+    osClosedBy: uuid("os_closed_by").references(() => users.id),
+    osData: jsonb("os_data"),
     cancelReason: text("cancel_reason"),
     cancelledBy: uuid("cancelled_by").references(() => users.id),
     createdAt: createdAt(),
@@ -156,7 +168,7 @@ export const portReservations = pgTable(
 );
 
 /** Tipos de foto do fluxo de instalação. A da medição na CTO é exigida antes de pedir a ativação. */
-export const PHOTO_KINDS = ["cto_aberta", "etiqueta_porta", "medicao", "sobra_fibra", "onu_instalada"] as const;
+export const PHOTO_KINDS = ["medicao", "cto_aberta", "etiqueta_porta", "medicao_onu", "sobra_fibra", "onu_instalada"] as const;
 export type PhotoKind = (typeof PHOTO_KINDS)[number];
 
 /**

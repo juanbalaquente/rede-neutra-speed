@@ -129,6 +129,8 @@ export interface ActivationSnapshot {
     mediaOltcloudDbm: number | null;
     amostras: number | null;
   } | null;
+  /** VLAN que o técnico configura na ONU. Null enquanto a Wiki não informa. */
+  vlan: number | null;
   /** Em aguardando_decisao: até quando o técnico decide; depois a Wiki cancela e desautoriza. */
   prazoDecisaoAte: string | null;
   motivo: string | null;

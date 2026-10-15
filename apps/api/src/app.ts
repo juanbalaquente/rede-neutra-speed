@@ -13,6 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
+import { closeServiceOrder, getInstallation, getOsPhotosRequired, listInstallations, setOsPhotosRequired } from "./services/installations.js";
 import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { networkPanel } from "./services/network-panel.js";
@@ -389,6 +390,30 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     return new Response(new Uint8Array(bytes), { headers: { "Content-Type": photo.mime, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   });
 
+  // ── Instalações e fechamento da O.S. ────────────────────────────────────────
+  app.get("/installations", requireUser, async (c) => c.json({ installations: await listInstallations(db, c.get("user")) }));
+
+  app.get("/installations/:id", requireUser, async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ installation: await getInstallation(db, c.get("user"), id) });
+  });
+
+  app.post("/reservations/:id/os/close", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(
+      c,
+      z.object({
+        porta: z.string().trim().max(20).nullable().optional(),
+        sinalFinalDbm: z.number().min(-40).max(0),
+        modeloOnu: z.string().trim().min(2).max(60),
+        serialOnu: z.string().trim().min(6).max(40).regex(/^[A-Za-z0-9]+$/, "serial só com letras e números"),
+        observacao: z.string().trim().max(1000).nullable().optional(),
+      }),
+    );
+    await closeServiceOrder(db, c.get("user"), id, { ...body, serialOnu: body.serialOnu.toUpperCase() }, { ip: clientIp(c) });
+    return c.json({ installation: await getInstallation(db, c.get("user"), id) });
+  });
+
   // ── Planos ────────────────────────────────────────────────────────────────
   app.get("/plans", requireUser, async (c) => {
     const rows = await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.speedMbps);
@@ -567,6 +592,14 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     if (!updated) throw new AppError(404, "parceiro_nao_encontrado", "Parceiro não encontrado.");
     await recordAudit(db, { partnerId: id, userId: c.get("user").id, action: "parceiro.alterado", entity: "partner", entityId: id, ip: clientIp(c), data: { changes, reason } });
     return c.json({ partner: updated });
+  });
+
+  /** Se as fotos do checklist são obrigatórias para fechar a O.S. (planejamento recomenda que sim). */
+  admin.get("/settings/fotos-os", async (c) => c.json({ obrigatorias: await getOsPhotosRequired(db) }));
+
+  admin.put("/settings/fotos-os", async (c) => {
+    const body = await parseBody(c, z.object({ obrigatorias: z.boolean() }));
+    return c.json({ obrigatorias: await setOsPhotosRequired(db, c.get("user"), body.obrigatorias, clientIp(c)) });
   });
 
   /** Celular perdido: apaga o segundo fator do usuário. Na próxima entrada ele configura de novo. */

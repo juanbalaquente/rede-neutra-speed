@@ -65,6 +65,8 @@ export class MockActivationService implements ActivationService {
             amostras: 7,
           }
         : null,
+      // A VLAN vem depois de autorizar a ONU, como na Wiki real.
+      vlan: e.estado === "recebida" || e.estado === "autorizando" ? null : 2500,
       prazoDecisaoAte: e.prazoDecisaoAte,
       motivo: e.motivo,
       atualizadoEm: new Date().toISOString(),
