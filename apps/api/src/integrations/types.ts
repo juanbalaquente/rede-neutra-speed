@@ -108,11 +108,6 @@ export interface ActivationRequest {
   idempotencyKey: string;
   ctoId: string;
   serial: string;
-  /**
-   * O contrato v2 ainda pede a porta, mas a reserva é por vaga (7 out). Em aberto com a Wiki:
-   * ela escolher a porta livre ou o técnico informar a porta física. Até lá, omitida.
-   */
-  porta?: number;
   contrato: string;
   pppLogin: string;
   alias: string;

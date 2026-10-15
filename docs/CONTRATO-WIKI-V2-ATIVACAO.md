@@ -1,6 +1,6 @@
 # Contrato portal Rede Neutra ↔ SpeedWiki (v2): liberação de ONU
 
-**Estado: PROPOSTA do portal**, escrita em 9 out 2026 a partir do teste da Wiki em produção e das respostas dela. Nada disto existe ainda, nem na Wiki nem no portal. É a primeira rota de **escrita** entre os dois: só liga com validação explícita do Juan. Itens marcados **[DECIDIR]** dependem do Juan.
+**Estado: PROPOSTA do portal, com decisões confirmadas pela Wiki em 14 out 2026** (ver "Decisões fechadas"), escrita em 9 out 2026 a partir do teste da Wiki em produção e das respostas dela. Nada disto existe ainda, nem na Wiki nem no portal. É a primeira rota de **escrita** entre os dois: só liga com validação explícita do Juan. Itens marcados **[DECIDIR]** dependem do Juan.
 
 Complementa o [contrato v1](CONTRATO-WIKI-V1.md) (leitura). Mesmo modelo: rotas no proxy da Wiki, resposta validada pelo portal, o que não bate com o contrato vira erro.
 
@@ -12,6 +12,15 @@ Complementa o [contrato v1](CONTRATO-WIKI-V1.md) (leitura). Mesmo modelo: rotas 
 - O id da ONU muda a cada reautorização: a chave é a **serial**.
 - O script AUTENTICADOR é repetível (começa desfazendo o serviço anterior).
 - A saída do script traz a senha PPPoE em texto puro. Nem a Wiki nem o portal a guardam ou exibem; o próprio OLTCloud a mantém no histórico dele (fora do nosso controle).
+
+## Decisões fechadas (resposta da Wiki, 14 out 2026)
+
+- **Porta:** o técnico **não informa porta** e a Wiki **não vincula porta** na ativação. O campo `porta` sai do corpo de `POST /ativacoes` (o portal já não o envia) e a Wiki não precisa mais traduzir `ctoId` + porta nem responder `409 porta_ocupada`.
+- **Trava de sinal reprovada:** a Wiki espera a decisão por **30 min** e, sem decisão, cancela e desautoriza. É o que o portal propõe.
+- **Foto de prova no `prosseguir`:** **link assinado com expiração de 24 a 48 h**, sem conta da Infra no portal. O portal precisa gerar esse link (token assinado, só leitura de uma foto) quando existir o módulo de fotos.
+- **Ainda sem medição (primeiro teste real):** se o sinal já aparece na janela "Inativo" e quanto tempo o Voalle leva para sincronizar com o OLTCloud.
+- **Rota oficial `POST /api/v2/ftth/equipment/auth` do OLTCloud:** o suporte não respondeu; a Wiki segue com a rota da tela, que funciona.
+- **Calendário:** as rotas v2 só entram depois que a v1 estiver validada com o Codemaps liberado, e com autorização do Juan.
 
 ## Autenticação
 

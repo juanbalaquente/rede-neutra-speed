@@ -100,6 +100,8 @@ Substitui o antigo `/portas`. **Sem lista de portas.**
 { "ok": true }
 ```
 
+**`ok:false` é uma resposta válida** (200 com `{"ok":false}`): a Wiki está no ar, mas o snapshot da rede está parado ou uma fonte (ex.: Codemaps bloqueado por IP) caiu. O portal mostra isso ao administrador e **não constrói nada em cima de `ok:true` até a Wiki avisar**. Nesse estado `/viabilidade` e `?fresh=true` falham (o portal devolve 502 amigável ao parceiro e não registra a consulta) e `/ctos/{id}/vagas` devolve dado velho, que o portal trata como `conferir` pela idade.
+
 Para o portal alertar quando a chave falhar. `401`/`403` aparece para o administrador Speed como "chave recusada pela Wiki"; o servidor do portal também registra no log a cada 5 min enquanto estiver fora.
 
 ## Como o portal aplica o contrato

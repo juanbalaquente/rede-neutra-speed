@@ -58,7 +58,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
     if (err instanceof AppError) return c.json({ error: err.code, message: err.message }, err.status);
     if (err instanceof IntegrationError) {
       console.error(err);
-      return c.json({ error: "sistema_indisponivel", message: `Sistema de origem indisponível (${err.system}).` }, 502);
+      return c.json({ error: "sistema_indisponivel", message: "A consulta à rede da Speed está indisponível agora. Tente de novo em alguns minutos." }, 502);
     }
     console.error(err);
     return c.json({ error: "erro_interno", message: "Erro interno." }, 500);

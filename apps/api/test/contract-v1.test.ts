@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MockNetworkMap } from "../src/integrations/mock.js";
-import type { CtoVagas, NetworkMap } from "../src/integrations/types.js";
+import { IntegrationError, type CtoVagas, type NetworkMap } from "../src/integrations/types.js";
+import { viabilityQueries } from "../src/db/schema.js";
 import { setup } from "./helpers.js";
 
 const ADDRESS = "Rua dos Testes, 100, Belo Horizonte";
@@ -159,6 +160,45 @@ describe("GET /admin/integrations/health", () => {
       expect((await ctx.call(await ctx.login(a.supervisor), "GET", "/admin/integrations/health")).status).toBe(403);
       const res = await ctx.call(await ctx.login("admin@speed.test"), "GET", "/admin/integrations/health");
       expect(await res.json()).toMatchObject({ mode: "mock", ok: true });
+    } finally {
+      await ctx.close();
+    }
+  });
+});
+
+describe("fonte de rede fora do ar (Codemaps bloqueado na Wiki)", () => {
+  const down = (): NetworkMap => ({
+    findNearbyCtos: async () => {
+      throw new IntegrationError("wiki", "GET /viabilidade 502", 502);
+    },
+    getCtoVagas: async () => {
+      throw new IntegrationError("wiki", "GET /ctos/x/vagas 502", 502);
+    },
+    health: async () => ({ ok: false, detail: "Wiki no ar, mas com dado da rede parado" }),
+  });
+
+  it("viabilidade responde 502 com mensagem para o parceiro, sem expor o sistema, e não registra consulta", async () => {
+    const ctx = await setup(down());
+    try {
+      const a = await ctx.createPartner("A", "11111111000111");
+      const res = await ctx.call(await ctx.login(a.atendente), "POST", "/viability", { address: ADDRESS });
+      expect(res.status).toBe(502);
+      const body = await res.json();
+      expect(body.error).toBe("sistema_indisponivel");
+      expect(body.message).toMatch(/indisponível agora/);
+      expect(body.message).not.toMatch(/wiki|codemaps/i);
+      expect(await ctx.db.select().from(viabilityQueries)).toHaveLength(0);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  it("o administrador vê ok:false no health, sem erro", async () => {
+    const ctx = await setup(down());
+    try {
+      const res = await ctx.call(await ctx.login("admin@speed.test"), "GET", "/admin/integrations/health");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ ok: false });
     } finally {
       await ctx.close();
     }

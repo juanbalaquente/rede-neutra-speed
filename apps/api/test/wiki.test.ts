@@ -102,6 +102,11 @@ describe("WikiNetworkMap", () => {
     expect(denied.ok).toBe(false);
     expect(denied.detail).toMatch(/chave recusada/);
     expect((await wikiWith(() => json({}, 503)).wiki.health()).ok).toBe(false);
+    // ok:false é válido (snapshot parado): não é "fora do contrato".
+    const stale = await wikiWith(() => json({ ok: false })).wiki.health();
+    expect(stale.ok).toBe(false);
+    expect(stale.detail).toMatch(/ok:false/);
+    expect(stale.detail).not.toMatch(/fora do contrato/);
     const down = new WikiNetworkMap(
       async () => {
         throw new Error("ECONNREFUSED");

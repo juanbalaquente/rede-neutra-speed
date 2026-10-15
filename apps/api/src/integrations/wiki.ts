@@ -92,7 +92,11 @@ export class WikiNetworkMap implements NetworkMap {
       if (res.status === 401 || res.status === 403) return { ok: false, detail: `chave recusada pela Wiki (${res.status})` };
       if (!res.ok) return { ok: false, detail: `Wiki respondeu ${res.status}` };
       const body = healthSchema.safeParse(await res.json().catch(() => null));
-      return body.success && body.data.ok ? { ok: true, detail: "Wiki respondeu ok" } : { ok: false, detail: "resposta de saúde fora do contrato" };
+      if (!body.success) return { ok: false, detail: "resposta de saúde fora do contrato" };
+      // ok:false é um estado válido: a Wiki está de pé, mas o dado da rede está parado ou uma fonte (ex.: Codemaps) caiu.
+      return body.data.ok
+        ? { ok: true, detail: "Wiki respondeu ok" }
+        : { ok: false, detail: "Wiki no ar, mas com dado da rede parado ou fonte fora (ok:false). Viabilidade e reserva podem falhar ou vir como 'conferir'." };
     } catch (e) {
       return { ok: false, detail: e instanceof Error ? e.message : "Wiki inalcançável" };
     }
