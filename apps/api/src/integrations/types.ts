@@ -82,6 +82,83 @@ export class IntegrationError extends Error {
   }
 }
 
+export type ActivationState =
+  | "recebida"
+  | "aguardando_cliente"
+  | "autorizando"
+  | "medindo_sinal"
+  | "aguardando_decisao"
+  | "provisionando"
+  | "online"
+  | "falha_provisionamento"
+  | "cancelada"
+  | "falhou";
+
+/** Estados finais: a Wiki não muda mais, o portal para de consultar. */
+export const ACTIVATION_FINAL: readonly ActivationState[] = ["online", "falha_provisionamento", "cancelada", "falhou"];
+
+export interface PendingOnu {
+  serial: string;
+  modelo: string;
+  /** Quando a ONU apareceu na lista de pendentes (ISO 8601). */
+  vistaEm: string;
+}
+
+export interface ActivationRequest {
+  idempotencyKey: string;
+  ctoId: string;
+  serial: string;
+  /**
+   * O contrato v2 ainda pede a porta, mas a reserva é por vaga (7 out). Em aberto com a Wiki:
+   * ela escolher a porta livre ou o técnico informar a porta física. Até lá, omitida.
+   */
+  porta?: number;
+  contrato: string;
+  pppLogin: string;
+  alias: string;
+  /** Sinal que o técnico mediu na CTO (dBm), com foto. Referência da trava. */
+  sinalCtoDbm: number;
+  /** Perda máxima aceita entre a CTO e a ONU (dB), vigente na hora do pedido. */
+  limiteDb: number;
+}
+
+export interface ActivationSnapshot {
+  ativacaoId: string;
+  estado: ActivationState;
+  serial: string;
+  sinal: {
+    ctoDbm: number;
+    onuDbm: number;
+    perdaDb: number;
+    limiteDb: number;
+    mediaOltcloudDbm: number | null;
+    amostras: number | null;
+  } | null;
+  /** Em aguardando_decisao: até quando o técnico decide; depois a Wiki cancela e desautoriza. */
+  prazoDecisaoAte: string | null;
+  motivo: string | null;
+  atualizadoEm: string;
+}
+
+export type ActivationDecision =
+  | { acao: "remedir" }
+  | { acao: "cancelar" }
+  | { acao: "prosseguir"; justificativa: string };
+
+/**
+ * Liberação de ONU no OLTCloud, feita pela Wiki (contrato v2). É ESCRITA em produção:
+ * só liga com ACTIVATION_MODE e validação do Juan. Desligada por padrão.
+ */
+export interface ActivationService {
+  listPendingOnus(ctoId: string): Promise<PendingOnu[]>;
+  start(req: ActivationRequest): Promise<{ ativacaoId: string; estado: ActivationState }>;
+  /** null = a Wiki não conhece essa ativação. */
+  get(ativacaoId: string): Promise<ActivationSnapshot | null>;
+  decide(ativacaoId: string, decision: ActivationDecision): Promise<ActivationSnapshot>;
+}
+
 export interface Integrations {
   network: NetworkMap;
+  /** Ausente = ACTIVATION_MODE=off: as rotas de ativação respondem 503. */
+  activation?: ActivationService;
 }

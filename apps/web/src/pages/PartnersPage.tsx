@@ -6,6 +6,7 @@ import { UsersPanel } from "../ui/UsersPanel";
 /** Siglas do piloto (OLTs Backbone Central, Itacolomi e Fátima). */
 const PILOT_REGIONS = ["R1", "ITA", "FAT"];
 const REGION_RE = /^[A-Z0-9]{1,8}$/;
+const CODE_RE = /^[A-Z0-9]{2,8}$/;
 const DEFAULT_LIMITS: PartnerLimits = { maxActiveReservations: 10, maxCtoOccupancyPct: 50, maxUsers: 10 };
 
 const fmtCnpj = (d: string) => (d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d);
@@ -60,6 +61,22 @@ function RegionsInput({ value, onChange }: { value: string[]; onChange: (v: stri
   );
 }
 
+/** Código curto do provedor. O login PPPoE de cada cliente é `<contrato>-<código>`. */
+function CodeField({ value, onChange, valid }: { value: string; onChange: (v: string) => void; valid: boolean }) {
+  const shown = value.trim().toUpperCase();
+  return (
+    <label className="fld">
+      <span>Código do provedor</span>
+      <input value={value} onChange={(e) => onChange(e.target.value)} maxLength={8} placeholder="ex.: JHV" style={{ textTransform: "uppercase", maxWidth: 160 }} />
+      {!valid ? (
+        <small className="error">De 2 a 8 letras ou números, sem hífen.</small>
+      ) : (
+        <small>{shown ? <>Login PPPoE dos clientes: <span className="mono">12345-{shown}</span></> : "Sem código, o parceiro não consegue liberar ONU."}</small>
+      )}
+    </label>
+  );
+}
+
 function LimitsFields({ value, onChange }: { value: PartnerLimits; onChange: (v: PartnerLimits) => void }) {
   const num = (k: keyof PartnerLimits, label: string, min: number, max: number, hint: string) => (
     <label className="fld">
@@ -80,6 +97,7 @@ function LimitsFields({ value, onChange }: { value: PartnerLimits; onChange: (v:
 function PartnerEditor({ partner, onChanged }: { partner: AdminPartner; onChanged: () => void }) {
   const say = useToast();
   const [regions, setRegions] = useState(partner.allowedRegions);
+  const [code, setCode] = useState(partner.code ?? "");
   const [limits, setLimits] = useState<PartnerLimits>({
     maxActiveReservations: partner.maxActiveReservations,
     maxCtoOccupancyPct: partner.maxCtoOccupancyPct,
@@ -90,14 +108,18 @@ function PartnerEditor({ partner, onChanged }: { partner: AdminPartner; onChange
   const [reason, setReason] = useState("");
 
   const regionsChanged = regions.join(",") !== partner.allowedRegions.join(",");
+  const codeNorm = code.trim().toUpperCase();
+  const codeChanged = codeNorm !== (partner.code ?? "");
+  const codeValid = CODE_RE.test(codeNorm);
   const changedLimits = (Object.keys(limits) as (keyof PartnerLimits)[]).filter((k) => limits[k] !== partner[k]);
-  const dirty = regionsChanged || changedLimits.length > 0;
+  const dirty = regionsChanged || codeChanged || changedLimits.length > 0;
 
   async function save() {
     setBusy(true);
     try {
       const changes: Parameters<typeof api.updatePartner>[1] = {};
       if (regionsChanged) changes.allowedRegions = regions;
+      if (codeChanged) changes.code = codeNorm;
       for (const k of changedLimits) changes[k] = limits[k];
       await api.updatePartner(partner.id, changes);
       say("Alterações salvas");
@@ -135,14 +157,16 @@ function PartnerEditor({ partner, onChanged }: { partner: AdminPartner; onChange
           <span className={`badge ${partner.status === "ativo" ? "b-ok" : "b-bad"}`}>{partner.status === "ativo" ? "Ativo" : "Bloqueado"}</span>
         </div>
         <div className="summary">
+          <CodeField value={code} onChange={setCode} valid={codeValid || code === ""} />
           <RegionsInput value={regions} onChange={setRegions} />
           <LimitsFields value={limits} onChange={setLimits} />
           <div className="acts2" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn sm" disabled={!dirty || busy} onClick={save}>{busy ? "Salvando…" : "Salvar alterações"}</button>
+            <button className="btn sm" disabled={!dirty || busy || (codeChanged && !codeValid)} onClick={save}>{busy ? "Salvando…" : "Salvar alterações"}</button>
             {dirty && (
               <button
                 className="btn sec sm"
                 onClick={() => {
+                  setCode(partner.code ?? "");
                   setRegions(partner.allowedRegions);
                   setLimits({ maxActiveReservations: partner.maxActiveReservations, maxCtoOccupancyPct: partner.maxCtoOccupancyPct, maxUsers: partner.maxUsers });
                 }}
@@ -184,16 +208,19 @@ function NewPartnerForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   const say = useToast();
   const [name, setName] = useState("");
   const [cnpj, setCnpj] = useState("");
+  const [code, setCode] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
   const [limits, setLimits] = useState(DEFAULT_LIMITS);
   const [busy, setBusy] = useState(false);
   const digits = cnpj.replace(/\D/g, "");
+  const codeNorm = code.trim().toUpperCase();
+  const codeOk = codeNorm === "" || CODE_RE.test(codeNorm);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      const { partner } = await api.createPartner({ name: name.trim(), cnpj: digits, allowedRegions: regions, ...limits });
+      const { partner } = await api.createPartner({ name: name.trim(), cnpj: digits, ...(codeNorm ? { code: codeNorm } : {}), allowedRegions: regions, ...limits });
       say(`${partner.name} cadastrado. Agora cadastre o supervisor dele.`);
       onCreated(partner.id);
     } catch (err) {
@@ -215,14 +242,54 @@ function NewPartnerForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
             {cnpj && digits.length !== 14 && <small className="error">O CNPJ tem 14 dígitos ({digits.length} agora).</small>}
           </label>
         </div>
+        <CodeField value={code} onChange={setCode} valid={codeOk} />
         <RegionsInput value={regions} onChange={setRegions} />
         <LimitsFields value={limits} onChange={setLimits} />
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn sm" disabled={busy || digits.length !== 14 || name.trim().length < 2}>{busy ? "Cadastrando…" : "Cadastrar parceiro"}</button>
+          <button className="btn sm" disabled={busy || digits.length !== 14 || name.trim().length < 2 || !codeOk}>{busy ? "Cadastrando…" : "Cadastrar parceiro"}</button>
           <button type="button" className="btn sec sm" onClick={onCancel}>Cancelar</button>
         </div>
       </div>
     </form>
+  );
+}
+
+/** Perda máxima entre o sinal medido na CTO e o da ONU. Vale para todos os parceiros; cada ativação guarda o limite que valeu. */
+function SignalLimitCard() {
+  const say = useToast();
+  const [saved, setSaved] = useState<number | null>(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.signalLimit().then((r) => { setSaved(r.limiteDb); setText(String(r.limiteDb).replace(".", ",")); }).catch(() => setSaved(null));
+  }, []);
+  const value = Number(text.replace(",", "."));
+  const valid = Number.isFinite(value) && value >= 0.5 && value <= 6;
+  async function save() {
+    setBusy(true);
+    try {
+      const r = await api.setSignalLimit(value);
+      setSaved(r.limiteDb);
+      say("Limite de sinal atualizado");
+    } catch (e) {
+      say(errMsg(e, "Falha ao salvar."), "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (saved === null) return null;
+  return (
+    <div className="card">
+      <div className="ch"><h3>Trava de sinal</h3><small>vale para todos os parceiros</small></div>
+      <div className="summary" style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <label className="fld" style={{ width: 240 }}>
+          <span>Perda máxima (dB)</span>
+          <input value={text} onChange={(e) => setText(e.target.value)} inputMode="decimal" />
+          <small>{valid ? "Sinal na ONU pode ser no máximo isso pior que o medido na CTO." : "Entre 0,5 e 6 dB."}</small>
+        </label>
+        <button className="btn sm" style={{ marginTop: 26 }} disabled={busy || !valid || value === saved} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>
+      </div>
+    </div>
   );
 }
 
@@ -259,6 +326,8 @@ export function PartnersPage() {
         {!creating && <button className="btn" onClick={() => setCreating(true)}>Novo parceiro</button>}
       </div>
 
+      <SignalLimitCard />
+
       <div className="g11">
         <div className="card">
           <div className="ch"><h3>{list ? `${list.length} ${list.length === 1 ? "parceiro" : "parceiros"}` : "Carregando…"}</h3><small>clique para editar</small></div>
@@ -276,7 +345,7 @@ export function PartnersPage() {
                         {p.name}
                         {p.status === "bloqueado" && <span className="badge b-bad" style={{ marginLeft: 8 }}>Bloqueado</span>}
                       </button>
-                      <div className="muted mono" style={{ fontSize: 12 }}>{fmtCnpj(p.cnpj)}</div>
+                      <div className="muted mono" style={{ fontSize: 12 }}>{p.code ? `${p.code} · ` : ""}{fmtCnpj(p.cnpj)}</div>
                     </td>
                     <td>{p.allowedRegions.length ? p.allowedRegions.join(" · ") : <span className="muted">nenhuma</span>}</td>
                     <td className="tab">{p.activeReservations} / {p.maxActiveReservations}</td>
@@ -299,7 +368,7 @@ export function PartnersPage() {
           />
         ) : selected ? (
           // key: ao trocar de parceiro, o formulário recomeça com os dados dele.
-          <PartnerEditor key={`${selected.id}-${selected.status}-${selected.allowedRegions.join()}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} />
+          <PartnerEditor key={`${selected.id}-${selected.code}-${selected.status}-${selected.allowedRegions.join()}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} />
         ) : (
           list && <p className="note">Selecione um parceiro ou cadastre o primeiro.</p>
         )}

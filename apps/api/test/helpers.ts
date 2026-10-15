@@ -9,19 +9,19 @@ import * as schema from "../src/db/schema.js";
 import { partners, users } from "../src/db/schema.js";
 import { hashPassword } from "../src/auth/password.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
-import type { NetworkMap } from "../src/integrations/types.js";
+import type { ActivationService, NetworkMap } from "../src/integrations/types.js";
 import { seed } from "../src/scripts/seed.js";
 
 export const PASSWORD = "senha12345a";
 
-export async function setup(network: NetworkMap = new MockNetworkMap()) {
+export async function setup(network: NetworkMap = new MockNetworkMap(), activation?: ActivationService) {
   const client = new PGlite();
   const db = drizzle(client, { schema }) as unknown as Db;
   await migrate(drizzle(client), { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
   await seed(db, { adminEmail: "admin@speed.test", adminPassword: PASSWORD, demo: false });
 
   const config = loadConfig({ NODE_ENV: "test" });
-  const app = createApp({ db, config, integrations: { network } });
+  const app = createApp({ db, config, integrations: { network, activation } });
 
   async function login(email: string): Promise<string> {
     const res = await app.request("/api/auth/login", {

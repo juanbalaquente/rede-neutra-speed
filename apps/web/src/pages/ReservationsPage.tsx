@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { api, type Partner, type Reservation, type User } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { api, type Activation, type Partner, type Reservation, type User } from "../api";
+import { ActivationPanel } from "../ui/ActivationPanel";
 import { useToast } from "../ui/Toast";
 
 const STATUS: Record<Reservation["status"], { label: string; tone: string }> = {
@@ -64,11 +65,24 @@ export function ReservationsPage({
   const [asking, setAsking] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  // null = recurso desligado (ou ainda carregando); a tela de reservas funciona igual.
+  const [acts, setActs] = useState<Activation[] | null>(null);
+  const [releasing, setReleasing] = useState<string | null>(null);
+
+  const loadActs = useCallback(() => {
+    if (isAdmin) return;
+    api.activations().then((r) => setActs(r.activations)).catch(() => setActs(null));
+  }, [isAdmin]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
+  useEffect(loadActs, [loadActs]);
+
+  /** Ativação ainda aberta da reserva (as canceladas e falhas liberam um novo pedido). */
+  const openActivation = (reservationId: string) =>
+    acts?.find((a) => a.reservationId === reservationId && a.state !== "cancelada" && a.state !== "falhou") ?? null;
 
   async function cancel(r: Reservation) {
     if (isAdmin && !reason.trim()) return;
@@ -120,6 +134,18 @@ export function ReservationsPage({
         </div>
       )}
 
+      {/* Procura em todas as reservas: ao ficar online ela deixa de ser ativa, e o painel segue aberto com a confirmação. */}
+      {releasing && items.some((r) => r.id === releasing) && (
+        <ActivationPanel
+          key={releasing}
+          reservation={items.find((r) => r.id === releasing)!}
+          existing={openActivation(releasing)}
+          pppSuffix={partner?.code ?? null}
+          onClose={() => { setReleasing(null); loadActs(); }}
+          onDone={() => { loadActs(); void reload(); }}
+        />
+      )}
+
       {active.length === 0 ? (
         <p className="note">Nenhuma reserva aberta. Comece por uma nova venda.</p>
       ) : (
@@ -135,6 +161,11 @@ export function ReservationsPage({
                   <p>{r.address}</p>
                   {asking !== r.id && (
                     <div className="acts2">
+                      {acts !== null && (
+                        <button className="btn sm" onClick={() => setReleasing(r.id)}>
+                          {openActivation(r.id) ? "Acompanhar ONU" : "Liberar ONU"}
+                        </button>
+                      )}
                       <button className="btn sec sm" onClick={() => { setAsking(r.id); setReason(""); }}>Cancelar reserva</button>
                     </div>
                   )}

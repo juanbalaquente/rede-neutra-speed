@@ -37,6 +37,8 @@ export interface ConferirRow {
 export interface Partner {
   id: string;
   name: string;
+  /** Código curto do provedor (ex.: JHV); monta o login PPPoE. null = a Speed ainda não cadastrou. */
+  code: string | null;
   maxActiveReservations: number;
   maxCtoOccupancyPct: number;
   maxUsers: number;
@@ -102,9 +104,9 @@ export const api = {
 
   // ── Administração Speed ──
   adminPartners: () => request<{ partners: AdminPartner[] }>("GET", "/admin/partners"),
-  createPartner: (input: PartnerLimits & { name: string; cnpj: string; allowedRegions: string[] }) =>
+  createPartner: (input: PartnerLimits & { name: string; cnpj: string; code?: string; allowedRegions: string[] }) =>
     request<{ partner: AdminPartner }>("POST", "/admin/partners", input),
-  updatePartner: (id: string, changes: Partial<PartnerLimits> & { allowedRegions?: string[]; status?: AdminPartner["status"]; reason?: string }) =>
+  updatePartner: (id: string, changes: Partial<PartnerLimits> & { code?: string; allowedRegions?: string[]; status?: AdminPartner["status"]; reason?: string }) =>
     request<{ partner: AdminPartner }>("PATCH", `/admin/partners/${id}`, changes),
   users: (partnerId?: string) => request<{ users: PartnerUser[] }>("GET", partnerId ? `/users?partnerId=${encodeURIComponent(partnerId)}` : "/users"),
   createUser: (input: { partnerId?: string; name: string; email: string; password: string; role: "atendente" | "supervisor" }) =>
@@ -112,6 +114,16 @@ export const api = {
   setUserActive: (id: string, active: boolean) => request<{ ok: true }>("POST", `/users/${id}/active`, { active }),
   audit: (filters: { partnerId?: string; action?: string; days: number }) =>
     request<{ entries: AuditEntry[] }>("GET", `/admin/audit?${new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]))}`),
+  // ── Liberação de ONU (503 ativacao_desligada = recurso desligado) ──
+  activations: () => request<{ activations: Activation[] }>("GET", "/activations"),
+  pendingOnus: (reservationId: string) => request<{ onus: PendingOnu[] }>("GET", `/reservations/${reservationId}/onus-pendentes`),
+  startActivation: (input: { reservationId: string; serial: string; contrato: string; sinalCtoDbm: number; idempotencyKey: string }) =>
+    request<{ activation: Activation }>("POST", "/activations", input),
+  activation: (id: string) => request<{ activation: Activation }>("GET", `/activations/${id}`),
+  decideActivation: (id: string, decision: { acao: "remedir" | "cancelar" } | { acao: "prosseguir"; justificativa: string }) =>
+    request<{ activation: Activation }>("POST", `/activations/${id}/decision`, decision),
+  signalLimit: () => request<{ limiteDb: number; padraoDb: number }>("GET", "/admin/settings/limite-sinal"),
+  setSignalLimit: (limiteDb: number) => request<{ limiteDb: number }>("PUT", "/admin/settings/limite-sinal", { limiteDb }),
   painel: (days: number) => request<NetworkPanel>("GET", `/admin/painel?days=${days}`),
 };
 
@@ -176,6 +188,7 @@ export interface PartnerLimits {
 export interface AdminPartner extends PartnerLimits {
   id: string;
   name: string;
+  code: string | null;
   cnpj: string;
   status: "ativo" | "bloqueado";
   allowedRegions: string[];
@@ -183,6 +196,45 @@ export interface AdminPartner extends PartnerLimits {
   /** Uso atual, calculado na listagem. */
   activeReservations: number;
   activeUsers: number;
+}
+
+export type ActivationState =
+  | "recebida"
+  | "aguardando_cliente"
+  | "autorizando"
+  | "medindo_sinal"
+  | "aguardando_decisao"
+  | "provisionando"
+  | "online"
+  | "falha_provisionamento"
+  | "cancelada"
+  | "falhou";
+
+export interface PendingOnu {
+  serial: string;
+  modelo: string;
+  vistaEm: string;
+}
+
+export interface ActivationSignal {
+  ctoDbm: number;
+  onuDbm: number;
+  perdaDb: number;
+  limiteDb: number;
+}
+
+export interface Activation {
+  id: string;
+  reservationId: string;
+  serial: string;
+  contract: string;
+  pppLogin: string;
+  sinalCtoDbm: number;
+  limiteDb: number;
+  state: ActivationState;
+  snapshot: { sinal?: ActivationSignal | null; prazoDecisaoAte?: string | null; motivo?: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PartnerUser {

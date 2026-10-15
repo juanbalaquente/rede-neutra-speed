@@ -11,6 +11,7 @@ import type { Integrations } from "./integrations/types.js";
 import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
+import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { networkPanel } from "./services/network-panel.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
@@ -132,6 +133,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
       .select({
         id: partners.id,
         name: partners.name,
+        code: partners.code,
         maxActiveReservations: partners.maxActiveReservations,
         maxCtoOccupancyPct: partners.maxCtoOccupancyPct,
         maxUsers: partners.maxUsers,
@@ -178,6 +180,68 @@ export function createApp({ db, config, integrations }: AppDeps) {
     return c.json({ reservation: updated });
   });
 
+  // ── Liberação de ONU (desligada por padrão: ACTIVATION_MODE) ───────────────
+  const activationSvc = () => {
+    if (!integrations.activation) throw new AppError(503, "ativacao_desligada", "A liberação de ONU não está habilitada.");
+    return integrations.activation;
+  };
+  const activationView = (a: Awaited<ReturnType<typeof getActivation>>) => ({
+    id: a.id,
+    reservationId: a.reservationId,
+    serial: a.serial,
+    contract: a.contract,
+    pppLogin: a.pppLogin,
+    sinalCtoDbm: a.sinalCtoDbm,
+    limiteDb: a.limiteDb,
+    state: a.state,
+    snapshot: a.snapshot,
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+  });
+
+  app.get("/activations", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    activationSvc();
+    return c.json({ activations: (await listActivations(db, c.get("user"))).map(activationView) });
+  });
+
+  app.get("/reservations/:id/onus-pendentes", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ onus: await listPendingOnus(db, activationSvc(), c.get("user"), id) });
+  });
+
+  app.post("/activations", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const body = await parseBody(
+      c,
+      z.object({
+        reservationId: z.string().uuid(),
+        serial: z.string().trim().min(6).max(40).regex(/^[A-Za-z0-9]+$/, "serial só com letras e números"),
+        contrato: z.string().regex(/^\d{1,12}$/, "número do contrato, só dígitos"),
+        sinalCtoDbm: z.number().min(-40).max(0),
+        idempotencyKey: z.string().uuid().optional(),
+      }),
+    );
+    const created = await startActivation(db, activationSvc(), c.get("user"), body, { ip: clientIp(c) });
+    return c.json({ activation: activationView(created) }, 202);
+  });
+
+  app.get("/activations/:id", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ activation: activationView(await getActivation(db, activationSvc(), c.get("user"), id)) });
+  });
+
+  app.post("/activations/:id/decision", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(
+      c,
+      z.discriminatedUnion("acao", [
+        z.object({ acao: z.literal("remedir") }),
+        z.object({ acao: z.literal("cancelar") }),
+        z.object({ acao: z.literal("prosseguir"), justificativa: z.string().max(1000) }),
+      ]),
+    );
+    return c.json({ activation: activationView(await decideActivation(db, activationSvc(), c.get("user"), id, body, { ip: clientIp(c) })) });
+  });
+
   // ── Planos ────────────────────────────────────────────────────────────────
   app.get("/plans", requireUser, async (c) => {
     const rows = await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.speedMbps);
@@ -187,6 +251,9 @@ export function createApp({ db, config, integrations }: AppDeps) {
   // ── Usuários do parceiro (supervisor gerencia os dele) ────────────────────
   /** Siglas de região liberadas ao parceiro (R1, ITA, FAT...). Vazio = nenhuma CTO é oferecida. */
   const regionsSchema = z.array(z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,8}$/, "sigla de 1 a 8 letras ou números")).max(50);
+
+  /** Código curto do provedor no login PPPoE (`<contrato>-JHV`): maiúsculas e números, sem hífen. */
+  const partnerCodeSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,8}$/, "código de 2 a 8 letras ou números");
 
   const newUserSchema = z.object({
     name: z.string().min(2).max(120),
@@ -304,6 +371,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
       z.object({
         name: z.string().min(2).max(200),
         cnpj: z.string().regex(/^\d{14}$/, "CNPJ com 14 dígitos, sem pontuação"),
+        code: partnerCodeSchema.optional(),
         maxActiveReservations: z.number().int().min(1).max(1000).optional(),
         maxCtoOccupancyPct: z.number().int().min(1).max(100).optional(),
         maxUsers: z.number().int().min(1).max(500).optional(),
@@ -315,7 +383,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
       await recordAudit(db, { partnerId: created!.id, userId: c.get("user").id, action: "parceiro.criado", entity: "partner", entityId: created!.id, ip: clientIp(c) });
       return c.json({ partner: created }, 201);
     } catch (e) {
-      if (isUniqueViolation(e)) throw new AppError(409, "cnpj_em_uso", "Já existe parceiro com esse CNPJ.");
+      if (isUniqueViolation(e)) throw new AppError(409, "cnpj_em_uso", "Já existe parceiro com esse CNPJ ou código.");
       throw e;
     }
   });
@@ -327,6 +395,7 @@ export function createApp({ db, config, integrations }: AppDeps) {
       z
         .object({
           status: z.enum(["ativo", "bloqueado"]),
+          code: partnerCodeSchema,
           maxActiveReservations: z.number().int().min(1).max(1000),
           maxCtoOccupancyPct: z.number().int().min(1).max(100),
           maxUsers: z.number().int().min(1).max(500),
@@ -341,10 +410,24 @@ export function createApp({ db, config, integrations }: AppDeps) {
     }
     const { reason, ...changes } = body;
     if (Object.keys(changes).length === 0) throw new AppError(400, "nada_a_alterar", "Nada para alterar.");
-    const [updated] = await db.update(partners).set(changes).where(eq(partners.id, id)).returning();
+    let updated;
+    try {
+      [updated] = await db.update(partners).set(changes).where(eq(partners.id, id)).returning();
+    } catch (e) {
+      if (isUniqueViolation(e)) throw new AppError(409, "codigo_em_uso", "Já existe parceiro com esse código.");
+      throw e;
+    }
     if (!updated) throw new AppError(404, "parceiro_nao_encontrado", "Parceiro não encontrado.");
     await recordAudit(db, { partnerId: id, userId: c.get("user").id, action: "parceiro.alterado", entity: "partner", entityId: id, ip: clientIp(c), data: { changes, reason } });
     return c.json({ partner: updated });
+  });
+
+  /** Perda máxima de sinal entre a CTO e a ONU (dB). Parâmetro da Speed; cada ativação guarda o limite que valeu. */
+  admin.get("/settings/limite-sinal", async (c) => c.json({ limiteDb: await getSignalLimit(db), padraoDb: DEFAULT_SIGNAL_LIMIT_DB }));
+
+  admin.put("/settings/limite-sinal", async (c) => {
+    const body = await parseBody(c, z.object({ limiteDb: z.number().min(0.5).max(6) }));
+    return c.json({ limiteDb: await setSignalLimit(db, c.get("user"), body.limiteDb, clientIp(c)) });
   });
 
   /** Estado da integração com a rede (Wiki, direto ou mock). 401/403 da Wiki aparece aqui como chave recusada. */

@@ -17,6 +17,13 @@ const envSchema = z.object({
   WIKI_BASE_URL: z.string().url().optional(),
   /** Chave da integração, enviada em X-RedeNeutra-Key. Só no ambiente do servidor. */
   WIKI_API_KEY: z.string().optional(),
+  /**
+   * Liberação de ONU (ESCRITA em produção). off = desligada (padrão); mock = Wiki de mentira;
+   * wiki = rotas /proxy/redeneutra/v2 da SpeedWiki, só com validação do Juan.
+   */
+  ACTIVATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /** Chave de escrita da Wiki (X-RedeNeutra-Write-Key), separada da de leitura. */
+  WIKI_WRITE_KEY: z.string().optional(),
   RESERVATION_HOURS: z.coerce.number().default(48),
   CODEMAPS_TOKEN: z.string().optional(),
   CODEMAPS_SECRET: z.string().optional(),
