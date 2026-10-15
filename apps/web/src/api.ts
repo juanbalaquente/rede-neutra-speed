@@ -192,6 +192,7 @@ export const api = {
   photoLink: (photoId: string, hours = 48) => request<{ path: string; url: string | null; expiresAt: string }>("POST", `/photos/${photoId}/link`, { hours }),
   osPhotosRequired: () => request<{ obrigatorias: boolean }>("GET", "/admin/settings/fotos-os"),
   setOsPhotosRequired: (obrigatorias: boolean) => request<{ obrigatorias: boolean }>("PUT", "/admin/settings/fotos-os", { obrigatorias }),
+  integrationsHealth: () => request<{ mode: string; ok: boolean; detail: string }>("GET", "/admin/integrations/health"),
   signalLimit: () => request<{ limiteDb: number; padraoDb: number }>("GET", "/admin/settings/limite-sinal"),
   setSignalLimit: (limiteDb: number) => request<{ limiteDb: number }>("PUT", "/admin/settings/limite-sinal", { limiteDb }),
   painel: (days: number) => request<NetworkPanel>("GET", `/admin/painel?days=${days}`),

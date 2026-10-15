@@ -1,6 +1,6 @@
 # Conformidade com o planejamento original
 
-Comparação do que o portal faz hoje com o [`planejamento.pdf`](planejamento.pdf) (@Guilherme, 5 out 2026), conferida em 15 out 2026 contra o código, os testes e o portal rodando.
+Comparação do que o portal faz hoje com o [`planejamento.pdf`](planejamento.pdf) (@Guilherme, 5 out 2026). Conferida em 15 out 2026 contra o código, os testes e o portal rodando, e **atualizada na noite de 15 out** depois das instalações, agenda, financeiro e dos itens de interface.
 
 Legenda: **Feito** = funciona e está testado · **Parcial** = existe, mas falta parte do que o planejamento pede · **Falta** = não existe · **Desvio decidido** = o código faz diferente do PDF por decisão registrada · **Externo** = depende de Voalle, Codemaps ou SpeedWiki.
 
@@ -21,21 +21,21 @@ Legenda: **Feito** = funciona e está testado · **Parcial** = existe, mas falta
 |---|---|---|
 | **1. Viabilidade** | Feito (em `mock`; **Externo** para dado real) | CTOs próximas, distância, vagas livres, planos. Reserva de outro parceiro some para todos. Toda consulta é registrada, mesmo sem viabilidade. **Falta:** a localização da CTO só aparece no mapa de pontos, sem link para rota. |
 | **2. Reserva de 48 h** | Feito | Trava real sob lock, expira sozinha, cancela com motivo (Speed), limite simultâneo, aviso antes de vencer (menu, toast e faixa). A Speed vê tudo no painel. **Desvio:** não expira durante uma ativação em andamento. |
-| **3. Contrato no Voalle** | **Falta** (Externo) | Sem criação, aceite, PPPoE/senha nem ponto de acesso. Hoje o número do contrato é digitado. Faltam também **plano escolhido** e **apelido do cliente final** (o campo não existe). |
-| **4. Calendário e WhatsApp** | **Falta** | Sem data da visita, técnico, cards, arrastar, nem disparo. WhatsApp é módulo opcional. |
-| **5. Liberação da ONU** | Parcial | Lista pendentes, confere a serial pela etiqueta, trava de sinal, justificativa, decisão em 30 min, estados até `online`. **Falta:** mostrar **VLAN** e **PPPoE/senha** para o técnico configurar a ONU (passos 6 e 7 do PDF), e o **chamado automático à Infra** na justificativa (Externo). Roda contra mock; a escrita real depende da Wiki e do Juan. |
-| **6. Fotos e O.S.** | Parcial | Cinco tipos, data/hora/GPS/contrato, redução no celular, link assinado para a Infra, foto de medição obrigatória antes de ativar. **Falta:** tela da Speed para ver as fotos; **foto de medição na ONU** (o PDF tem esta e a "medição na CTO" separadas; hoje só existe a da CTO); **fechamento da O.S.** (porta/sinal final/modelo/SN/observação) e a regra "fotos obrigatórias para fechar" (decisão da diretoria em aberto). |
+| **3. Contrato no Voalle** | Parcial (**Externo** para o Voalle) | **Feito no portal:** plano, apelido do cliente final (nunca vai para o Voalle), data da visita e técnico, exigidos antes de liberar a ONU; o formulário abre ao reservar. **Falta (Externo):** criação do contrato, aceite, PPPoE/senha e ponto de acesso no Voalle. O número do contrato ainda é digitado. |
+| **4. Calendário e WhatsApp** | Parcial | **Feito:** agenda em dia, semana e mês, cards com contrato, apelido, CTO, plano e técnico, filtro por técnico, arrastar para reagendar (vira "reagendada", auditado), visita "em execução" ao liberar a ONU, "concluída" ao fechar a O.S. e aviso de visita atrasada. **Falta:** disparo diário por WhatsApp (módulo opcional) e o reenvio manual. |
+| **5. Liberação da ONU** | Parcial | Lista pendentes, confere a serial pela etiqueta, trava de sinal, justificativa, decisão em 30 min, estados até `online` e **mostra a VLAN e o login a configurar** (a VLAN vem da Wiki quando ela informar). **Falta:** a **senha PPPoE** (nasce no contrato do Voalle) e o chamado automático à Infra na justificativa (**Externo**). Roda contra mock; a escrita real depende da Wiki e do Juan. |
+| **6. Fotos e O.S.** | Feito | Seis tipos (o checklist do PDF mais a medição na CTO), data/hora/GPS/contrato, redução no celular, **tela Instalações** para o parceiro e a Speed (galeria, mapa, link assinado de 48 h para a Infra) e **fechamento da O.S.** (sinal final, modelo e serial da ONU, porta opcional, observação) exigindo as fotos; a Speed pode tornar as fotos opcionais (decisão da diretoria em aberto). |
 | **Tela do cliente** | **Falta** | Semáforo de 3 estados, dados do cliente, sinal, histórico, alarmes, ações. Precisa de rotas de leitura novas da Wiki. |
 | **Chamados de infra** | **Falta** (Externo) | Depende do endpoint da Wiki e do SLA da diretoria (SLA configurável sem código). |
 | **Automações do cliente** | **Falta** (Externo) | Bloqueio, desbloqueio, reinício, troca de senha PPPoE, cancelamento com devolução da vaga. Hoje a reserva `convertida` nunca devolve a vaga. |
 | **Bloqueio do parceiro inteiro** | Parcial | Bloqueia o acesso ao portal com motivo obrigatório e confirmação dupla na tela. **Falta:** o bloqueio em massa dos **clientes** dele no Voalle. |
-| **Planos e financeiro** | **Falta** | Existe a tabela de planos com o valor da Speed. Faltam o **preço de venda do parceiro**, a aba financeira (pago/não pago) e o cálculo de custo, faturamento e lucro. Tudo isso pode ser derivado dos dados do portal. |
-| **Dashboards do supervisor** | **Falta** | Fibra online vs PPPoE conectado, bloqueados, offline, portas ativas, financeiro, relatórios em planilha e PDF. |
+| **Planos e financeiro** | Feito (primeira entrega do PDF) | Preço de venda por plano (supervisor), valor fixo da Speed por porta ativada (admin), custo, faturamento previsto, lucro e margem por plano, **marcação manual de pago/não pago** por cliente e mês, recebido e em aberto, exportação em planilha (fechamento e base de clientes). **Falta:** PDF (só CSV hoje) e as formas 2 e 3 de alimentar o pagamento (arquivo de retorno, integração). |
+| **Dashboards do supervisor** | Parcial | Painel do parceiro: portas ativas, instalações no mês, O.S. pendentes, reservas, visitas hoje e atrasadas, gráficos dos últimos 6 meses, portas por plano. **Falta:** fibra online vs PPPoE conectado, bloqueados e offline (precisam da integração com a rede), chamados e SLA, qualidade de sinal da base, relatório em PDF. |
 | **Painel da Speed** | Parcial | Consultas por dia (com, sem e fora da área), CTOs vistas por sigla, relatório de CTOs "conferir", auditoria com filtros. **Falta:** portas ocupadas e receita por parceiro, chamados abertos, instalações fora do padrão de sinal. Indicadores exatos ainda são decisão da diretoria. |
 | **Proteção e auditoria** | Parcial | Limite de ocupação por CTO (50%, por parceiro), limite de reservas, bloqueio de liberação sem justificativa, auditoria de viabilidade, reserva, ONU, usuários, 2FA e fotos. **Falta:** limite **por CTO**, liberação caso a caso, alerta de muitos chamados na mesma CTO e auditoria de contrato, bloqueio e reinício (que ainda não existem). |
-| **Uso em campo** | Parcial | Responsivo e testado no celular, foto com compressão. **Falta:** tolerância a perda de conexão preservando o formulário (hoje se recarregar a página, perde). |
+| **Uso em campo** | Feito | Responsivo e testado no celular, foto com compressão, e o que foi digitado nos formulários (dados do cliente, liberação da ONU, fechamento da O.S.) **sobrevive ao recarregar a página**; um erro de tela mostra uma mensagem com botão de recarregar em vez de tela branca. |
 | **Segurança** | Feito | Senha forte, 2FA (TOTP), permissões no servidor, credenciais só no servidor, sessão de 8 h, isolamento por parceiro com 404. **Falta:** a senha PPPoE com registro de quem consultou (a senha ainda nem é exibida). |
-| **Disponibilidade** | Parcial | Fonte fora do ar vira aviso claro (sem expor o sistema), log de todas as chamadas de API, idempotência na ativação. **Falta:** monitoramento no Zabbix/Grafana e o `/api/health` refletir o estado das integrações. |
+| **Disponibilidade** | Parcial | Fonte fora do ar vira aviso claro (sem expor o sistema), faixa vermelha para a Speed, log de todas as chamadas, idempotência na ativação e `/api/health` com o estado da rede (`rede`), cacheado, para o Zabbix. **Falta:** ligar de fato o monitoramento no Zabbix/Grafana. |
 
 ## Telas do protótipo aprovado (`modelo-4.html`) ainda sem versão real
 
@@ -43,22 +43,22 @@ Legenda: **Feito** = funciona e está testado · **Parcial** = existe, mas falta
 |---|---|
 | Nova venda | Feito |
 | Reservas | Feito |
-| Painel do parceiro ("Bom dia…") | **Falta** (existe só o painel da Speed) |
-| Campo (técnico no celular) | Parcial (o painel Liberar ONU é a base) |
+| Painel do parceiro ("Bom dia…") | Feito (sem fibra/PPPoE, que dependem da rede) |
+| Campo (técnico no celular) | Feito (painel Liberar ONU, fotos, O.S.) |
 | Clientes | **Falta** |
 | Chamados | **Falta** |
-| Financeiro | **Falta** |
+| Financeiro | Feito |
 | Mapa da rede | **Falta** |
 | Resumo do mês | **Falta** |
-| Avisos (sino e toasts) | Parcial (toasts e aviso de vencimento; sem sino) |
+| Avisos (sino e toasts) | Feito |
 
 ## Fases do PDF
 
 | Fase | Itens | Pronto |
 |---|---|---|
-| **1. MVP** | login e perfis, viabilidade, reserva, contrato no Voalle, liberação da ONU, tela do cliente, painel admin | 5 de 7 (faltam **contrato no Voalle** e **tela do cliente**) |
-| **2. Operação** | calendário, fotos e O.S., histórico de sinal, bloqueio/desbloqueio/reinício, chamados, preços e dashboard | fotos parcialmente |
-| **3. Gestão** | financeiro, relatórios, WhatsApp, limites por CTO, auditoria consultável | auditoria consultável e limite de ocupação por parceiro |
+| **1. MVP** | login e perfis, viabilidade, reserva, contrato no Voalle, liberação da ONU, tela do cliente, painel admin | 5 de 7 (faltam **contrato no Voalle** e **tela do cliente**, ambos **Externos**) |
+| **2. Operação** | calendário, fotos e O.S., histórico de sinal, bloqueio/desbloqueio/reinício, chamados, preços e dashboard | **calendário, fotos e O.S., preços e dashboard feitos**; faltam histórico de sinal, bloqueio/desbloqueio/reinício e chamados (**Externos**) |
+| **3. Gestão** | financeiro, relatórios, WhatsApp, limites por CTO, auditoria consultável | financeiro e planilhas, auditoria consultável e limite de ocupação por parceiro; faltam WhatsApp, limite por CTO e PDF |
 
 ## Decisões da diretoria que continuam em aberto
 SLA dos chamados · divergência de porta (hoje superada pela decisão da Wiki de não vincular porta) · fotos obrigatórias para fechar a O.S. · tabela fixa ou degressiva · limite de ocupação por CTO (50% sugerido, aplicado por parceiro) · módulo de WhatsApp no piloto · indicadores do painel da Speed.

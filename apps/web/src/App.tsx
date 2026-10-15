@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { api, type MfaState, type Partner, type Reservation, type User } from "./api";
+import { api, type Dashboard, type MfaState, type Partner, type Reservation, type User } from "./api";
 import { LoginPage } from "./pages/LoginPage";
 import { MfaSetupPage } from "./pages/MfaSetupPage";
 import { ConferirPage } from "./pages/ConferirPage";
@@ -15,6 +15,7 @@ import { ReservationsPage } from "./pages/ReservationsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
 import { CommandPalette, type Command } from "./ui/CommandPalette";
 import { ChartIcon, ClockIcon, ListIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon, SunIcon } from "./ui/Icons";
+import { Bell, type Notice } from "./ui/Bell";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useTheme } from "./ui/theme";
 
@@ -120,6 +121,20 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Avisos do sino: o parceiro vê visitas atrasadas e O.S. pendentes; a Speed vê a rede fora do ar.
+  const [dash, setDash] = useState<Dashboard | null>(null);
+  const [rede, setRede] = useState<{ ok: boolean; detail: string } | null>(null);
+  useEffect(() => {
+    const isAdmin = user.role === "admin_speed";
+    const poll = () => {
+      if (isAdmin) api.integrationsHealth().then((h) => setRede({ ok: h.ok, detail: h.detail })).catch(() => {});
+      else api.dashboard().then(setDash).catch(() => {});
+    };
+    poll();
+    const t = setInterval(poll, isAdmin ? 60_000 : 120_000);
+    return () => clearInterval(t);
+  }, [user.role]);
+
   // A instalação escolhida na agenda só vale para a abertura da tela.
   useEffect(() => {
     if (tab !== "instalacoes") setInstId(null);
@@ -181,6 +196,15 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     ],
     [activeCount, theme, toggle, logout, user.role],
   );
+
+  const notices = useMemo<Notice[]>(() => {
+    const list: Notice[] = [];
+    if (soon.length) list.push({ id: "expira", tone: "warn", text: soon.length === 1 ? "Uma reserva vence em menos de 3 horas" : `${soon.length} reservas vencem em menos de 3 horas`, onOpen: () => setTab("reservas") });
+    if (dash?.visitasAtrasadas) list.push({ id: "atrasadas", tone: "bad", text: dash.visitasAtrasadas === 1 ? "Uma visita passou do dia sem ser concluída" : `${dash.visitasAtrasadas} visitas passaram do dia sem ser concluídas`, onOpen: () => setTab("agenda") });
+    if (dash?.osPendentes) list.push({ id: "os", tone: "warn", text: dash.osPendentes === 1 ? "Uma O.S. pendente: ONU liberada, falta fechar" : `${dash.osPendentes} O.S. pendentes: ONU liberada, falta fechar`, onOpen: () => setTab("instalacoes") });
+    if (rede && !rede.ok) list.push({ id: "rede", tone: "bad", text: "A integração com a rede está com problema", onOpen: () => setTab("painel") });
+    return list;
+  }, [soon, dash, rede]);
 
   const consult = useCallback((address: string) => {
     setTab("viabilidade");
@@ -275,6 +299,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <span>Buscar endereço ou ir para…</span>
             <kbd>Ctrl K</kbd>
           </button>
+          <Bell notices={notices} />
           <button className="ibtn" onClick={toggle} aria-label="Trocar tema claro ou escuro">
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </button>
@@ -282,6 +307,11 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <OutIcon />
           </button>
         </header>
+        {user.role === "admin_speed" && rede && !rede.ok && (
+          <div className="banner bad" role="alert">
+            <b>Integração com a rede fora do ar.</b> {rede.detail} Viabilidade e reserva podem falhar ou vir como "conferir".
+          </div>
+        )}
 
         {tab === "painel" && user.role === "admin_speed" ? (
           <PanelPage />

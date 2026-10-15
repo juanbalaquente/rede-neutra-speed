@@ -193,6 +193,26 @@ describe("fonte de rede fora do ar (Codemaps bloqueado na Wiki)", () => {
     }
   });
 
+  it("/api/health continua ok:true (portal de pé) e mostra rede:false", async () => {
+    const ctx = await setup(down());
+    try {
+      const res = await ctx.app.request("/api/health");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, integrations: "mock", rede: false });
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  it("/api/health com a rede de pé mostra rede:true", async () => {
+    const ctx = await setup();
+    try {
+      expect(await (await ctx.app.request("/api/health")).json()).toMatchObject({ ok: true, rede: true });
+    } finally {
+      await ctx.close();
+    }
+  });
+
   it("o administrador vê ok:false no health, sem erro", async () => {
     const ctx = await setup(down());
     try {

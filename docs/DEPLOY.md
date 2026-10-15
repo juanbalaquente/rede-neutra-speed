@@ -80,6 +80,10 @@ crontab -e   # 0 3 * * * /opt/rede-neutra/deploy/backup-db.sh
 
 O script guarda o dump do Postgres (14 dias) e espelha as fotos de campo em `fotos/`. Copie a pasta de backup inteira para outra máquina: disco perdido sem cópia apaga o banco e as provas de instalação.
 
+## Monitoramento (Zabbix)
+
+`GET https://<domínio>/api/health` responde `{"ok":true,"integrations":"mock","rede":true}` e não exige login. `ok` é o portal de pé; `rede` é o estado da integração com a rede da Speed (checada no máximo a cada 30 s e com limite de 3 s). Alerte quando `ok` não vier ou quando `rede` for `false`.
+
 ## 6. Atualizar
 
 ```

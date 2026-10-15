@@ -423,3 +423,17 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 @media (max-width: 640px) { .kpis.kpis-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .hist th.num, .hist td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Sino de avisos e faixa da rede */
+.bell { position: relative; }
+.bell .ibtn { position: relative; }
+.bell-n { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--bad); color: #fff; font: 600 10.5px/16px var(--font); text-align: center; }
+.bell-pop { position: absolute; right: 0; top: calc(100% + 8px); width: min(340px, 86vw); z-index: 30; }
+.bell-pop ul { list-style: none; margin: 0; padding: 4px; display: grid; }
+.bell-pop li button { width: 100%; text-align: left; display: flex; gap: 10px; align-items: flex-start; padding: 9px 10px; border: 0; background: none; border-radius: 8px; color: var(--ink); font-size: 13.5px; }
+.bell-pop li button:hover { background: var(--hover); }
+.bell-pop .dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--data); }
+.bell-pop .dot.warn { background: var(--warn); }
+.bell-pop .dot.bad { background: var(--bad); }
+.banner { margin: 12px 24px 0; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; border: 1px solid var(--line2); }
+.banner.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, var(--line2)); }

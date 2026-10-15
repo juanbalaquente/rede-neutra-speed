@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type Activation, type ActivationState, type PendingOnu, type Reservation } from "../api";
 import { newUuid } from "../uuid";
 import { PhotoSlots } from "./PhotoSlots";
+import { useDraft } from "./useDraft";
 import { useToast } from "./Toast";
 
 const FINAL: ActivationState[] = ["online", "falha_provisionamento", "cancelada", "falhou"];
@@ -151,8 +152,10 @@ export function ActivationPanel({
   const [onus, setOnus] = useState<PendingOnu[] | null>(null);
   const [serial, setSerial] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [contrato, setContrato] = useState("");
-  const [sinal, setSinal] = useState("");
+  const [draft, setDraft, clearDraft] = useDraft(`ativacao:${reservation.id}`, { contrato: "", sinal: "" });
+  const { contrato, sinal } = draft;
+  const setContrato = (v: string) => setDraft({ contrato: v });
+  const setSinal = (v: string) => setDraft({ sinal: v });
   const [busy, setBusy] = useState(false);
   const [hasMedicao, setHasMedicao] = useState(false);
   // A chave nasce com o formulário: reenviar o mesmo pedido (rede caiu) não duplica.
@@ -201,6 +204,7 @@ export function ActivationPanel({
     setBusy(true);
     try {
       const r = await api.startActivation({ reservationId: reservation.id, serial, contrato, sinalCtoDbm: dbm, idempotencyKey: key.current });
+      clearDraft();
       setActivation(r.activation);
     } catch (e) {
       const text = e instanceof ApiError ? e.message : "Falha ao pedir a ativação.";

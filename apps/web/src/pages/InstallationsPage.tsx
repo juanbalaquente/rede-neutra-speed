@@ -3,6 +3,7 @@ import { api, photoUrl, type Installation, type InstallationDetail, type Photo, 
 import { PHOTO_KINDS, PHOTO_LABEL } from "../photoKinds";
 import { PhotoSlots } from "../ui/PhotoSlots";
 import { useToast } from "../ui/Toast";
+import { useDraft } from "../ui/useDraft";
 
 const ACT_LABEL: Record<string, { label: string; tone: string }> = {
   recebida: { label: "Na fila", tone: "b-data" },
@@ -79,11 +80,13 @@ function Gallery({ reservationId, reloadKey }: { reservationId: string; reloadKe
 
 function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: InstallationDetail) => void }) {
   const say = useToast();
-  const [porta, setPorta] = useState("");
-  const [sinal, setSinal] = useState("");
-  const [modelo, setModelo] = useState("");
-  const [serial, setSerial] = useState(inst.onuSerial ?? "");
-  const [obs, setObs] = useState("");
+  const [draft, setDraft, clearDraft] = useDraft(`os:${inst.id}`, { porta: "", sinal: "", modelo: "", serial: inst.onuSerial ?? "", obs: "" });
+  const { porta, sinal, modelo, serial, obs } = draft;
+  const setPorta = (v: string) => setDraft({ porta: v });
+  const setSinal = (v: string) => setDraft({ sinal: v });
+  const setModelo = (v: string) => setDraft({ modelo: v });
+  const setSerial = (v: string) => setDraft({ serial: v });
+  const setObs = (v: string) => setDraft({ obs: v });
   const [busy, setBusy] = useState(false);
   const dbm = Number(sinal.replace(",", "."));
   const sinalOk = sinal.trim() !== "" && Number.isFinite(dbm) && dbm <= 0 && dbm >= -40;
@@ -95,6 +98,7 @@ function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: In
     setBusy(true);
     try {
       const r = await api.closeOs(inst.id, { porta: porta.trim() || null, sinalFinalDbm: dbm, modeloOnu: modelo.trim(), serialOnu: serial.trim(), observacao: obs.trim() || null });
+      clearDraft();
       say("O.S. fechada. O contrato entra na contagem de portas ativas.");
       onClosed(r.installation);
     } catch (err) {

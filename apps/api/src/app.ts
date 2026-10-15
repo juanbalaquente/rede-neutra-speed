@@ -103,7 +103,17 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
       await next();
     };
 
-  app.get("/health", (c) => c.json({ ok: true, integrations: config.INTEGRATIONS_MODE }));
+  // Saúde do portal (ok) e da rede de origem (rede), para o Zabbix. A checagem da rede é cacheada por 30 s e
+  // limitada a 3 s: uma rota pública não pode disparar uma chamada lenta à Wiki a cada requisição.
+  let redeCache: { at: number; ok: boolean } | null = null;
+  app.get("/health", async (c) => {
+    if (!redeCache || Date.now() - redeCache.at > 30_000) {
+      const check = integrations.network.health().then((h) => h.ok).catch(() => false);
+      const timeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000));
+      redeCache = { at: Date.now(), ok: await Promise.race([check, timeout]) };
+    }
+    return c.json({ ok: true, integrations: config.INTEGRATIONS_MODE, rede: redeCache.ok });
+  });
 
   // ── Autenticação ──────────────────────────────────────────────────────────
   app.post("/auth/login", async (c) => {

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, type Reservation } from "../api";
+import { useDraft } from "./useDraft";
 import { useToast } from "./Toast";
 
 /** Valor para `<input type="datetime-local">` (hora local, sem fuso). */
@@ -18,10 +19,18 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
   const say = useToast();
   const [plans, setPlans] = useState<{ id: string; name: string; speedMbps: number }[] | null>(null);
   const [techs, setTechs] = useState<string[]>([]);
-  const [planId, setPlanId] = useState(reservation.planId ?? "");
-  const [nickname, setNickname] = useState(reservation.nickname ?? "");
-  const [visit, setVisit] = useState(toLocalInput(reservation.visitAt));
-  const [tech, setTech] = useState(reservation.technician ?? "");
+  // Rascunho: o que foi digitado sobrevive a recarregar a página (uso em campo, conexão ruim).
+  const [draft, setDraft, clearDraft] = useDraft(`cliente:${reservation.id}`, {
+    planId: reservation.planId ?? "",
+    nickname: reservation.nickname ?? "",
+    visit: toLocalInput(reservation.visitAt),
+    tech: reservation.technician ?? "",
+  });
+  const { planId, nickname, visit, tech } = draft;
+  const setPlanId = (v: string) => setDraft({ planId: v });
+  const setNickname = (v: string) => setDraft({ nickname: v });
+  const setVisit = (v: string) => setDraft({ visit: v });
+  const setTech = (v: string) => setDraft({ tech: v });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -42,6 +51,7 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
         visitAt: new Date(visit).toISOString(),
         technician: tech.trim(),
       });
+      clearDraft();
       say("Dados do cliente salvos");
       onSaved();
     } catch (err) {
