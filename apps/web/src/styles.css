@@ -410,3 +410,16 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .ag-card.st-reagendada { border-left-color: var(--mute); }
 .ag-card.late { border-color: color-mix(in srgb, var(--bad) 45%, var(--line2)); border-left-color: var(--bad); }
 .late-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); }
+
+/* Painel e financeiro do parceiro */
+.kpis.kpis-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.kpi-btn { text-align: left; color: inherit; cursor: pointer; transition: border-color 0.15s; }
+.kpi-btn:hover { border-color: var(--mute); }
+.kpi.alert b { color: var(--bad); }
+.kpi b.neg { color: var(--bad); }
+.pbar { display: block; height: 8px; border-radius: 4px; background: var(--hover); overflow: hidden; }
+.pbar i { display: block; height: 100%; background: var(--data); border-radius: 4px; }
+@media (max-width: 1100px) { .kpis.kpis-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .kpis.kpis-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.hist th.num, .hist td.num { text-align: right; font-variant-numeric: tabular-nums; }

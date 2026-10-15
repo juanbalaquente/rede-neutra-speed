@@ -50,6 +50,13 @@
       "when": 1792098757386,
       "tag": "0006_instalacao_cliente_os",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792099794080,
+      "tag": "0007_precos_e_pagamentos",
+      "breakpoints": true
     }
   ]
 }

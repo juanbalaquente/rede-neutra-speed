@@ -198,6 +198,36 @@ export const photos = pgTable(
   (t) => [index("photos_reservation_idx").on(t.reservationId, t.kind), index("photos_partner_idx").on(t.partnerId, t.createdAt)],
 );
 
+/** Preço de venda que o parceiro cobra do cliente final, por plano (centavos). Só o parceiro o define e vê. */
+export const partnerPrices = pgTable(
+  "partner_prices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").notNull().references(() => partners.id),
+    planId: uuid("plan_id").notNull().references(() => plans.id),
+    priceCents: integer("price_cents").notNull(),
+    updatedBy: uuid("updated_by").references(() => users.id),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("partner_prices_unique_idx").on(t.partnerId, t.planId), check("partner_prices_positive", sql`${t.priceCents} > 0`)],
+);
+
+/** Confirmação manual de pagamento do cliente final, mês a mês (aba financeira, primeira entrega). */
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").notNull().references(() => partners.id),
+    reservationId: uuid("reservation_id").notNull().references(() => portReservations.id),
+    /** AAAA-MM. */
+    month: text("month").notNull(),
+    paid: boolean("paid").notNull(),
+    markedBy: uuid("marked_by").references(() => users.id),
+    markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("payments_unique_idx").on(t.reservationId, t.month), index("payments_partner_month_idx").on(t.partnerId, t.month)],
+);
+
 /** Parâmetros da Speed editáveis em tela (ex.: limite da trava de sinal). Cada mudança vai para a auditoria. */
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),

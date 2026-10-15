@@ -13,6 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
+import { MONTH_RE, clientesCsv, fechamentoCsv, getDashboard, getFinance, getPrices, markPayment, monthOf, setPrice, setSpeedPrice } from "./services/finance.js";
 import { closeServiceOrder, getInstallation, getOsPhotosRequired, listAgenda, listInstallations, listTechnicians, reschedule, saveCliente, setOsPhotosRequired } from "./services/installations.js";
 import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
@@ -454,6 +455,43 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     return c.json({ installation: await getInstallation(db, c.get("user"), id) });
   });
 
+  // ── Financeiro do parceiro (supervisor) ─────────────────────────────────────
+  const monthQuery = (c: Context) => {
+    const month = c.req.query("month") || monthOf(new Date());
+    if (!MONTH_RE.test(month)) throw new AppError(400, "dados_invalidos", "month: use AAAA-MM.");
+    return month;
+  };
+
+  app.get("/prices", requireUser, requireRole("supervisor"), async (c) => c.json({ prices: await getPrices(db, c.get("user")) }));
+
+  app.put("/prices", requireUser, requireRole("supervisor"), async (c) => {
+    const body = await parseBody(c, z.object({ planId: z.string().uuid(), priceCents: z.number().int().min(100).max(1_000_000) }));
+    await setPrice(db, c.get("user"), body.planId, body.priceCents, clientIp(c));
+    return c.json({ prices: await getPrices(db, c.get("user")) });
+  });
+
+  app.get("/finance", requireUser, requireRole("supervisor"), async (c) => c.json(await getFinance(db, c.get("user"), monthQuery(c))));
+
+  app.put("/finance/payments", requireUser, requireRole("supervisor"), async (c) => {
+    const body = await parseBody(c, z.object({ reservationId: z.string().uuid(), month: z.string().regex(MONTH_RE), paid: z.boolean() }));
+    await markPayment(db, c.get("user"), body.reservationId, body.month, body.paid, clientIp(c));
+    return c.json({ ok: true });
+  });
+
+  /** Planilha (CSV): base de clientes ou fechamento do mês, para conferir contra a fatura da Speed. */
+  app.get("/finance/export", requireUser, requireRole("supervisor"), async (c) => {
+    const month = monthQuery(c);
+    const type = z.enum(["clientes", "fechamento"]).safeParse(c.req.query("type") || "fechamento");
+    if (!type.success) throw new AppError(400, "dados_invalidos", "type: clientes ou fechamento.");
+    const f = await getFinance(db, c.get("user"), month);
+    c.header("Content-Type", "text/csv; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="${type.data}-${month}.csv"`);
+    return c.body(type.data === "clientes" ? clientesCsv(f) : fechamentoCsv(f));
+  });
+
+  /** Painel operacional do parceiro: portas ativas, O.S. pendentes, visitas e evolução dos últimos 6 meses. */
+  app.get("/dashboard", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json(await getDashboard(db, c.get("user"))));
+
   // ── Planos ────────────────────────────────────────────────────────────────
   app.get("/plans", requireUser, async (c) => {
     const rows = await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.speedMbps);
@@ -640,6 +678,16 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
   admin.put("/settings/fotos-os", async (c) => {
     const body = await parseBody(c, z.object({ obrigatorias: z.boolean() }));
     return c.json({ obrigatorias: await setOsPhotosRequired(db, c.get("user"), body.obrigatorias, clientIp(c)) });
+  });
+
+  /** Valor fixo que a Speed cobra do parceiro por plano (o parceiro não edita). */
+  admin.get("/plans", async (c) => c.json({ plans: await db.select().from(plans).orderBy(plans.speedMbps) }));
+
+  admin.patch("/plans/:id", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(c, z.object({ speedPriceCents: z.number().int().min(100).max(1_000_000) }));
+    await setSpeedPrice(db, c.get("user"), id, body.speedPriceCents, clientIp(c));
+    return c.json({ plans: await db.select().from(plans).orderBy(plans.speedMbps) });
   });
 
   /** Celular perdido: apaga o segundo fator do usuário. Na próxima entrada ele configura de novo. */

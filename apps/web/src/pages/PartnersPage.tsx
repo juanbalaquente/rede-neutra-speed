@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api, type AdminPartner, type PartnerLimits } from "../api";
 import { useToast } from "../ui/Toast";
+import { parseBrl } from "../money";
 import { UsersPanel } from "../ui/UsersPanel";
 
 /** Siglas do piloto (OLTs Backbone Central, Itacolomi e Fátima). */
@@ -323,6 +324,53 @@ function OsPhotosCard() {
   );
 }
 
+/** O que a Speed cobra do parceiro por porta ativada, por plano. O parceiro não edita. */
+function SpeedPricesCard() {
+  const say = useToast();
+  const [plans, setPlans] = useState<{ id: string; name: string; speedMbps: number; speedPriceCents: number }[] | null>(null);
+  const [text, setText] = useState<Record<string, string>>({});
+  useEffect(() => {
+    api.adminPlans().then((r) => {
+      setPlans(r.plans);
+      setText(Object.fromEntries(r.plans.map((p) => [p.id, (p.speedPriceCents / 100).toFixed(2).replace(".", ",")])));
+    }).catch(() => setPlans(null));
+  }, []);
+  if (!plans) return null;
+  async function save(id: string, cents: number) {
+    try {
+      const r = await api.setSpeedPrice(id, cents);
+      setPlans(r.plans);
+      say("Valor da Speed atualizado");
+    } catch (e) {
+      say(errMsg(e, "Falha ao salvar."), "bad");
+    }
+  }
+  return (
+    <div className="card">
+      <div className="ch"><h3>Valor por porta ativada</h3><small>o que a Speed cobra, por plano</small></div>
+      <table className="hist">
+        <tbody>
+          {plans.map((p) => {
+            const cents = parseBrl(text[p.id] ?? "");
+            const changed = Number.isFinite(cents) && cents >= 100 && cents !== p.speedPriceCents;
+            return (
+              <tr key={p.id}>
+                <td style={{ fontFamily: "var(--font)" }}>{p.name}</td>
+                <td>
+                  <span className="inrow">
+                    <input value={text[p.id] ?? ""} onChange={(e) => setText({ ...text, [p.id]: e.target.value })} inputMode="decimal" aria-label={`Valor da Speed no ${p.name}`} style={{ maxWidth: 120 }} />
+                    <button className="btn sm" disabled={!changed} onClick={() => void save(p.id, cents)}>Salvar</button>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** Administrador Speed: parceiros, área liberada (siglas), limites, bloqueio e usuários. */
 export function PartnersPage() {
   const say = useToast();
@@ -358,6 +406,7 @@ export function PartnersPage() {
 
       <SignalLimitCard />
       <OsPhotosCard />
+      <SpeedPricesCard />
 
       <div className="g11">
         <div className="card">

@@ -176,6 +176,15 @@ export const api = {
   agenda: (from: string, to: string) => request<{ visits: AgendaVisit[] }>("GET", `/agenda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   reschedule: (id: string, body: { visitAt: string; technician?: string }) => request<{ installation: InstallationDetail }>("PATCH", `/reservations/${id}/visita`, body),
 
+  // ── Financeiro e painel do parceiro ──
+  dashboard: () => request<Dashboard>("GET", "/dashboard"),
+  prices: () => request<{ prices: PlanPrice[] }>("GET", "/prices"),
+  setPrice: (planId: string, priceCents: number) => request<{ prices: PlanPrice[] }>("PUT", "/prices", { planId, priceCents }),
+  finance: (month: string) => request<Finance>("GET", `/finance?month=${month}`),
+  markPayment: (reservationId: string, month: string, paid: boolean) => request<{ ok: true }>("PUT", "/finance/payments", { reservationId, month, paid }),
+  adminPlans: () => request<{ plans: { id: string; name: string; speedMbps: number; speedPriceCents: number; active: boolean }[] }>("GET", "/admin/plans"),
+  setSpeedPrice: (id: string, speedPriceCents: number) => request<{ plans: { id: string; name: string; speedMbps: number; speedPriceCents: number; active: boolean }[] }>("PATCH", `/admin/plans/${id}`, { speedPriceCents }),
+
   // ── Instalações e O.S. ──
   installations: () => request<{ installations: Installation[] }>("GET", "/installations"),
   installation: (id: string) => request<{ installation: InstallationDetail }>("GET", `/installations/${id}`),
@@ -371,4 +380,44 @@ export interface AgendaVisit {
   visitAt: string;
   visitStatus: "agendada" | "em_execucao" | "concluida" | "reagendada";
   osClosedAt: string | null;
+}
+
+export interface PlanPrice {
+  planId: string;
+  name: string;
+  speedMbps: number;
+  /** O que a Speed cobra por porta ativada (definido pela Speed). */
+  speedPriceCents: number;
+  /** Preço de venda do parceiro; null = ainda não cadastrou. */
+  salePriceCents: number | null;
+}
+
+export interface Dashboard {
+  portasAtivas: number;
+  reservasAbertas: number;
+  osPendentes: number;
+  instalacoesNoMes: number;
+  visitasHoje: number;
+  visitasAtrasadas: number;
+  serie: { month: string; instalacoes: number; ativasNoFim: number }[];
+  planos: { plano: string; qtd: number }[];
+}
+
+export interface FinanceClient {
+  id: string;
+  contract: string | null;
+  nickname: string | null;
+  plan: string;
+  planId: string;
+  priceCents: number | null;
+  costCents: number;
+  activatedAt: string;
+  paid: boolean | null;
+}
+
+export interface Finance {
+  month: string;
+  resumo: { portasAtivas: number; custoCents: number; faturamentoCents: number; lucroCents: number; recebidoCents: number; emAbertoCents: number; pagos: number; semPreco: number };
+  porPlano: { planId: string; plan: string; speedMbps: number; qtd: number; custoCents: number; faturamentoCents: number; lucroCents: number; margemPct: number | null }[];
+  clientes: FinanceClient[];
 }

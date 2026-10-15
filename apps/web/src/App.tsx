@@ -8,6 +8,8 @@ import { PanelPage } from "./pages/PanelPage";
 import { PartnersPage } from "./pages/PartnersPage";
 import { TeamPage } from "./pages/TeamPage";
 import { AgendaPage } from "./pages/AgendaPage";
+import { FinancePage } from "./pages/FinancePage";
+import { PartnerDashboardPage } from "./pages/PartnerDashboardPage";
 import { InstallationsPage } from "./pages/InstallationsPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
@@ -16,7 +18,7 @@ import { ChartIcon, ClockIcon, ListIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon,
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useTheme } from "./ui/theme";
 
-type Tab = "viabilidade" | "reservas" | "instalacoes" | "agenda" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
+type Tab = "inicio" | "financeiro" | "viabilidade" | "reservas" | "instalacoes" | "agenda" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
 
 const ROLE_LABEL: Record<User["role"], string> = {
   atendente: "Atendente",
@@ -27,7 +29,7 @@ const ROLE_LABEL: Record<User["role"], string> = {
 /** A partir de quanto tempo antes do vencimento o portal avisa o parceiro. */
 const EXPIRY_WARN_MS = 3 * 3600_000;
 
-const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
+const TAB_LABEL: Record<Tab, string> = { inicio: "Painel", financeiro: "Financeiro", viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
 
 export function App() {
   return (
@@ -83,7 +85,7 @@ function Portal() {
 function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { theme, toggle } = useTheme();
   // O administrador Speed começa pela gestão; o parceiro, pela venda.
-  const [tab, setTab] = useState<Tab>(user.role === "admin_speed" ? "painel" : "viabilidade");
+  const [tab, setTab] = useState<Tab>(user.role === "admin_speed" ? "painel" : "inicio");
   const [partner, setPartner] = useState<Partner | null>(null);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -159,6 +161,8 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const commands = useMemo<Command[]>(
     () => [
+      ...(user.role !== "admin_speed" ? [{ id: "go-inicio", group: "Ir para", title: "Painel", icon: <ChartIcon />, run: () => setTab("inicio") }] : []),
+      ...(user.role === "supervisor" ? [{ id: "go-fin", group: "Ir para", title: "Financeiro", icon: <ChartIcon />, run: () => setTab("financeiro") }] : []),
       { id: "go-viab", group: "Ir para", title: "Nova venda", icon: <PinIcon />, run: () => setTab("viabilidade") },
       ...(user.role === "admin_speed"
         ? [
@@ -205,6 +209,11 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
         <nav className="nav" ref={navRef}>
           {hl && <span className="nav-hl" style={{ transform: `translateY(${hl.top}px)`, height: hl.height }} />}
+          {user.role !== "admin_speed" && (
+            <button className={`nv ${tab === "inicio" ? "on" : ""}`} onClick={() => setTab("inicio")}>
+              <ChartIcon />Painel
+            </button>
+          )}
           <div className="grp">Vendas</div>
           <button className={`nv ${tab === "viabilidade" ? "on" : ""}`} onClick={() => setTab("viabilidade")}>
             <PinIcon />Nova venda
@@ -221,6 +230,9 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           {user.role === "supervisor" && (
             <>
               <div className="grp">Gestão</div>
+              <button className={`nv ${tab === "financeiro" ? "on" : ""}`} onClick={() => setTab("financeiro")}>
+                <ChartIcon />Financeiro
+              </button>
               <button className={`nv ${tab === "equipe" ? "on" : ""}`} onClick={() => setTab("equipe")}>
                 <PeopleIcon />Equipe
               </button>
@@ -281,6 +293,10 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <PartnersPage />
         ) : tab === "conferir" && user.role === "admin_speed" ? (
           <ConferirPage />
+        ) : tab === "inicio" && user.role !== "admin_speed" ? (
+          <PartnerDashboardPage user={user} onGo={(t) => setTab(t)} />
+        ) : tab === "financeiro" && user.role === "supervisor" ? (
+          <FinancePage />
         ) : tab === "agenda" ? (
           <AgendaPage user={user} onOpenInstallation={(id) => { setInstId(id); setTab("instalacoes"); }} />
         ) : tab === "instalacoes" ? (
