@@ -1,7 +1,7 @@
-import { and, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt, notExists, notInArray, sql } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { partners, portReservations, viabilityQueries } from "../db/schema.js";
+import { activations, partners, portReservations, viabilityQueries } from "../db/schema.js";
 import { IntegrationError, type NetworkMap } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
@@ -14,10 +14,15 @@ const VIABILITY_VALID_MS = 24 * 3600_000;
 
 /** Expira reservas vencidas e devolve a vaga ao pool. Idempotente. */
 export async function expireOverdueReservations(db: Db, now = new Date()): Promise<number> {
+  // Reserva com ativação de ONU em andamento não expira: o técnico está em campo e a vaga é dele até a ativação terminar.
+  const inProgress = db
+    .select({ one: sql`1` })
+    .from(activations)
+    .where(and(eq(activations.reservationId, portReservations.id), notInArray(activations.state, ["cancelada", "falhou"])));
   const expired = await db
     .update(portReservations)
     .set({ status: "expirada", updatedAt: now })
-    .where(and(eq(portReservations.status, "ativa"), lt(portReservations.expiresAt, now)))
+    .where(and(eq(portReservations.status, "ativa"), lt(portReservations.expiresAt, now), notExists(inProgress)))
     .returning({ id: portReservations.id, partnerId: portReservations.partnerId });
   for (const r of expired) {
     await recordAudit(db, {

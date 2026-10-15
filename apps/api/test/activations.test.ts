@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activations, auditLog, partners, portReservations } from "../src/db/schema.js";
 import { MockActivationService } from "../src/integrations/mock-activation.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
+import { expireOverdueReservations } from "../src/services/reservations.js";
 import { setup } from "./helpers.js";
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
@@ -143,6 +144,18 @@ describe("liberação de ONU", () => {
     const { cookie, reservation } = await partnerWithReservation();
     await start(cookie, reservation.id);
     expect((await start(cookie, reservation.id)).status).toBe(409);
+  });
+
+  it("reserva com ativação em andamento não expira; depois de cancelada, expira", async () => {
+    const { cookie, reservation } = await partnerWithReservation();
+    const { activation } = await (await start(cookie, reservation.id, BAD)).json();
+    await poll(cookie, activation.id, 4);
+    const later = new Date(Date.now() + 49 * 3600_000);
+    expect(await expireOverdueReservations(ctx.db, later)).toBe(0);
+    const [still] = await ctx.db.select().from(portReservations).where(eq(portReservations.id, reservation.id));
+    expect(still?.status).toBe("ativa");
+    await ctx.call(cookie, "POST", `/activations/${activation.id}/decision`, { acao: "cancelar" });
+    expect(await expireOverdueReservations(ctx.db, later)).toBe(1);
   });
 
   it("parceiro sem código não ativa", async () => {
