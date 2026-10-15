@@ -6,7 +6,8 @@ import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { Db } from "../src/db/client.js";
 import * as schema from "../src/db/schema.js";
-import { partners, users } from "../src/db/schema.js";
+import { partners, plans, users } from "../src/db/schema.js";
+import { eq } from "drizzle-orm";
 import { hashPassword } from "../src/auth/password.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
 import { MemoryPhotoStorage } from "../src/storage/photos.js";
@@ -55,6 +56,18 @@ export async function setup(network: NetworkMap = new MockNetworkMap(), activati
     return app.request(`/api/reservations/${reservationId}/photos`, { method: "POST", headers: cookie ? { Cookie: cookie } : {}, body: form });
   }
 
+  /** Plano, visita e técnico da reserva: exigidos antes de liberar a ONU. */
+  async function setCliente(cookie: string, reservationId: string, overrides: Record<string, unknown> = {}) {
+    const [plan] = await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.speedMbps);
+    return call(cookie, "PATCH", `/reservations/${reservationId}/cliente`, {
+      planId: plan!.id,
+      visitAt: "2026-10-20T10:00:00-03:00",
+      technician: "Carlos Técnico",
+      nickname: "Casa do Zé",
+      ...overrides,
+    });
+  }
+
   async function createPartner(name: string, cnpj: string, extra: Partial<typeof partners.$inferInsert> = {}) {
     const [p] = await db.insert(partners).values({ name, cnpj, allowedRegions: ["ITA"], ...extra }).returning();
     const hash = await hashPassword(PASSWORD);
@@ -66,5 +79,5 @@ export async function setup(network: NetworkMap = new MockNetworkMap(), activati
     return { partner: p!, supervisor: `sup${slug}@parceiro.test`, atendente: `ate${slug}@parceiro.test` };
   }
 
-  return { db, app, login, call, upload, JPEG, photoStorage, createPartner, close: () => client.close() };
+  return { db, app, login, call, upload, setCliente, JPEG, photoStorage, createPartner, close: () => client.close() };
 }

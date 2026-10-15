@@ -13,6 +13,7 @@ import {
 } from "../integrations/types.js";
 import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
+import { clienteIncomplete } from "./installations.js";
 import { hasKind } from "./photos.js";
 
 export const SIGNAL_LIMIT_KEY = "sinal.limite_db";
@@ -84,6 +85,12 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
     throw new AppError(409, "reserva_indisponivel", "Só uma reserva ativa pode ser ativada.");
   }
 
+  // O contrato do planejamento: plano, visita e técnico antes de liberar a ONU.
+  const faltando = clienteIncomplete(reservation);
+  if (faltando.length) {
+    throw new AppError(422, "dados_cliente_obrigatorios", `Preencha os dados do cliente antes de liberar a ONU: ${faltando.join(", ")}.`);
+  }
+
   // A medição na CTO é a referência da trava de sinal: sem a foto dela, não há ativação.
   if (!(await hasKind(db, reservation.id, ["medicao"]))) {
     throw new AppError(422, "foto_medicao_obrigatoria", "Envie a foto da medição de sinal na CTO antes de liberar a ONU.");
@@ -112,7 +119,7 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
       })
       .returning();
     row = created!;
-    await db.update(portReservations).set({ contractNumber: input.contrato, updatedAt: new Date() }).where(eq(portReservations.id, reservation.id));
+    await db.update(portReservations).set({ contractNumber: input.contrato, visitStatus: "em_execucao", updatedAt: new Date() }).where(eq(portReservations.id, reservation.id));
     await recordAudit(db, {
       partnerId,
       userId: user.id,

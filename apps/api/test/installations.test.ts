@@ -24,6 +24,7 @@ async function partnerReservation(cnpj = "11111111000111", code = "JHV") {
   const cookie = await ctx.login(a.atendente);
   await ctx.call(cookie, "POST", "/viability", { address: ADDRESS });
   const { reservation } = await (await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: ADDRESS })).json();
+  expect((await ctx.setCliente(cookie, reservation.id)).status).toBe(200);
   return { a, cookie, reservation };
 }
 

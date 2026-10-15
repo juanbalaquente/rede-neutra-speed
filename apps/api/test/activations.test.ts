@@ -20,12 +20,13 @@ const ADDRESS = "Rua dos Testes, 100, Belo Horizonte";
 const GOOD = "ZTEGC0000001";
 const BAD = "ZTEGC0000BAD";
 
-async function partnerWithReservation(cnpj = "11111111000111", code: string | null = "JHV", withPhoto = true) {
+async function partnerWithReservation(cnpj = "11111111000111", code: string | null = "JHV", withPhoto = true, withCliente = true) {
   const a = await ctx.createPartner("JHV Telecom", cnpj, code ? { code } : {});
   const cookie = await ctx.login(a.atendente);
   await ctx.call(cookie, "POST", "/viability", { address: ADDRESS });
   const res = await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: ADDRESS });
   const { reservation } = await res.json();
+  if (withCliente) expect((await ctx.setCliente(cookie, reservation.id)).status).toBe(200);
   // A foto da medição na CTO é exigida antes de pedir a ativação.
   if (withPhoto) await ctx.upload(cookie, reservation.id, { kind: "medicao" });
   return { a, cookie, reservation };

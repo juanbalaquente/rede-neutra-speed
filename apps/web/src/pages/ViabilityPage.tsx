@@ -36,7 +36,8 @@ export function ViabilityPage({
   partner: Partner | null;
   /** Endereço vindo da busca Ctrl K; o nonce faz a mesma busca valer de novo. */
   seed: { address: string; nonce: number } | null;
-  onReserved: () => void;
+  /** Recebe o id da reserva para abrir o formulário de dados do cliente. */
+  onReserved: (reservationId: string) => void;
 }) {
   const say = useToast();
   const [address, setAddress] = useState("");
@@ -79,9 +80,9 @@ export function ViabilityPage({
     setReserving(true);
     setError(null);
     try {
-      await api.reserve({ ctoId: sel.ctoId, address: queried, lat: result?.point?.lat, lng: result?.point?.lng });
+      const { reservation } = await api.reserve({ ctoId: sel.ctoId, address: queried, lat: result?.point?.lat, lng: result?.point?.lng });
       say(`Vaga reservada na ${sel.name} por 48 horas`);
-      onReserved();
+      onReserved(reservation.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Falha ao reservar.";
       setError(message);

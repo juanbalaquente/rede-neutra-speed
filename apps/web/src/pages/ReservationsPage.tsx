@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Activation, type Partner, type Reservation, type User } from "../api";
 import { ActivationPanel } from "../ui/ActivationPanel";
+import { ClienteForm } from "../ui/ClienteForm";
 import { useToast } from "../ui/Toast";
 
 const STATUS: Record<Reservation["status"], { label: string; tone: string }> = {
@@ -53,11 +54,13 @@ export function ReservationsPage({
   partner,
   items,
   reload,
+  openClienteFor,
 }: {
   user: User;
   partner: Partner | null;
   items: Reservation[] | null;
   reload: () => Promise<void>;
+  openClienteFor?: string | null;
 }) {
   const say = useToast();
   const isAdmin = user.role === "admin_speed";
@@ -68,6 +71,7 @@ export function ReservationsPage({
   // null = recurso desligado (ou ainda carregando); a tela de reservas funciona igual.
   const [acts, setActs] = useState<Activation[] | null>(null);
   const [releasing, setReleasing] = useState<string | null>(null);
+  const [editingCliente, setEditingCliente] = useState<string | null>(openClienteFor ?? null);
 
   const loadActs = useCallback(() => {
     if (isAdmin) return;
@@ -145,6 +149,15 @@ export function ReservationsPage({
       )}
 
       {/* Procura em todas as reservas: ao ficar online ela deixa de ser ativa, e o painel segue aberto com a confirmação. */}
+      {editingCliente && active.some((r) => r.id === editingCliente) && (
+        <ClienteForm
+          key={editingCliente}
+          reservation={active.find((r) => r.id === editingCliente)!}
+          onSaved={() => { setEditingCliente(null); void reload(); }}
+          onClose={() => setEditingCliente(null)}
+        />
+      )}
+
       {releasing && items.some((r) => r.id === releasing) && (
         <ActivationPanel
           key={releasing}
@@ -169,10 +182,26 @@ export function ReservationsPage({
                 <div>
                   <h4>{r.ctoName}</h4>
                   <p>{r.address}</p>
+                  {r.planId && r.visitAt ? (
+                    <p className="rv-cli">
+                      {r.nickname ? <b>{r.nickname}</b> : null}{r.nickname ? " · " : ""}
+                      visita {new Date(r.visitAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {r.technician}
+                    </p>
+                  ) : (
+                    <p className="rv-cli warn">Falta preencher os dados do cliente.</p>
+                  )}
                   {asking !== r.id && (
                     <div className="acts2">
+                      <button className={`btn sm ${r.planId && r.visitAt && r.technician ? "sec" : ""}`} onClick={() => setEditingCliente(r.id)}>
+                        {r.planId && r.visitAt && r.technician ? "Dados do cliente" : "Preencher dados"}
+                      </button>
                       {acts !== null && (
-                        <button className="btn sm" onClick={() => setReleasing(r.id)}>
+                        <button
+                          className="btn sm"
+                          disabled={!openActivation(r.id) && !(r.planId && r.visitAt && r.technician)}
+                          title={!openActivation(r.id) && !(r.planId && r.visitAt && r.technician) ? "Preencha plano, visita e técnico antes de liberar a ONU" : undefined}
+                          onClick={() => setReleasing(r.id)}
+                        >
                           {openActivation(r.id) ? "Acompanhar ONU" : "Liberar ONU"}
                         </button>
                       )}

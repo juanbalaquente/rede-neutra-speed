@@ -66,6 +66,12 @@ export interface ViabilityResult {
 }
 
 export interface Reservation {
+  /** Dados do cliente (planejamento, etapa 3). Plano, visita e técnico são exigidos para liberar a ONU. */
+  planId: string | null;
+  nickname: string | null;
+  visitAt: string | null;
+  technician: string | null;
+  visitStatus: "agendada" | "em_execucao" | "concluida" | "reagendada";
   ctoId: string;
   id: string;
   ctoName: string;
@@ -162,6 +168,14 @@ export const api = {
   activation: (id: string) => request<{ activation: Activation }>("GET", `/activations/${id}`),
   decideActivation: (id: string, decision: { acao: "remedir" | "cancelar" } | { acao: "prosseguir"; justificativa: string }) =>
     request<{ activation: Activation }>("POST", `/activations/${id}/decision`, decision),
+  plans: () => request<{ plans: { id: string; name: string; speedMbps: number }[] }>("GET", "/plans"),
+  technicians: () => request<{ technicians: string[] }>("GET", "/technicians"),
+  saveCliente: (id: string, body: { planId: string; nickname: string | null; visitAt: string; technician: string }) =>
+    request<{ installation: InstallationDetail }>("PATCH", `/reservations/${id}/cliente`, body),
+
+  agenda: (from: string, to: string) => request<{ visits: AgendaVisit[] }>("GET", `/agenda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  reschedule: (id: string, body: { visitAt: string; technician?: string }) => request<{ installation: InstallationDetail }>("PATCH", `/reservations/${id}/visita`, body),
+
   // ── Instalações e O.S. ──
   installations: () => request<{ installations: Installation[] }>("GET", "/installations"),
   installation: (id: string) => request<{ installation: InstallationDetail }>("GET", `/installations/${id}`),
@@ -343,4 +357,18 @@ export interface InstallationDetail extends Installation {
   os: (OsInput & { fechadaPor: string }) | null;
   fotosFaltando: PhotoKind[];
   fotosObrigatorias: boolean;
+}
+
+export interface AgendaVisit {
+  id: string;
+  partnerName: string | null;
+  contract: string | null;
+  nickname: string | null;
+  address: string;
+  ctoName: string;
+  planName: string | null;
+  technician: string | null;
+  visitAt: string;
+  visitStatus: "agendada" | "em_execucao" | "concluida" | "reagendada";
+  osClosedAt: string | null;
 }

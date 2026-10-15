@@ -7,6 +7,7 @@ import { AuditPage } from "./pages/AuditPage";
 import { PanelPage } from "./pages/PanelPage";
 import { PartnersPage } from "./pages/PartnersPage";
 import { TeamPage } from "./pages/TeamPage";
+import { AgendaPage } from "./pages/AgendaPage";
 import { InstallationsPage } from "./pages/InstallationsPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
@@ -15,7 +16,7 @@ import { ChartIcon, ClockIcon, ListIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon,
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useTheme } from "./ui/theme";
 
-type Tab = "viabilidade" | "reservas" | "instalacoes" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
+type Tab = "viabilidade" | "reservas" | "instalacoes" | "agenda" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
 
 const ROLE_LABEL: Record<User["role"], string> = {
   atendente: "Atendente",
@@ -26,7 +27,7 @@ const ROLE_LABEL: Record<User["role"], string> = {
 /** A partir de quanto tempo antes do vencimento o portal avisa o parceiro. */
 const EXPIRY_WARN_MS = 3 * 3600_000;
 
-const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
+const TAB_LABEL: Record<Tab, string> = { viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
 
 export function App() {
   return (
@@ -87,6 +88,10 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [seed, setSeed] = useState<{ address: string; nonce: number } | null>(null);
+  /** Reserva recém-criada: a tela de Reservas abre o formulário de dados do cliente nela. */
+  const [clienteFor, setClienteFor] = useState<string | null>(null);
+  /** Instalação aberta a partir da agenda. */
+  const [instId, setInstId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -112,6 +117,16 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // A instalação escolhida na agenda só vale para a abertura da tela.
+  useEffect(() => {
+    if (tab !== "instalacoes") setInstId(null);
+  }, [tab]);
+
+  // O formulário de dados do cliente só abre logo depois de reservar.
+  useEffect(() => {
+    if (tab !== "reservas") setClienteFor(null);
+  }, [tab]);
 
   const activeCount = reservations?.filter((r) => r.status === "ativa").length ?? 0;
 
@@ -155,6 +170,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
       ...(user.role === "admin_speed" ? [{ id: "go-parceiros", group: "Ir para", title: "Parceiros", icon: <PeopleIcon />, run: () => setTab("parceiros") }] : []),
       ...(user.role === "admin_speed" ? [{ id: "go-conferir", group: "Ir para", title: "CTOs para conferir", icon: <PinIcon />, run: () => setTab("conferir") }] : []),
       { id: "go-inst", group: "Ir para", title: "Instalações", icon: <ListIcon />, run: () => setTab("instalacoes") },
+      { id: "go-agenda", group: "Ir para", title: "Agenda", icon: <ClockIcon />, run: () => setTab("agenda") },
       { id: "go-resv", group: "Ir para", title: "Reservas", hint: `${activeCount} abertas`, icon: <ClockIcon />, run: () => setTab("reservas") },
       { id: "theme", group: "Preferências", title: theme === "dark" ? "Usar tema claro" : "Usar tema escuro", icon: theme === "dark" ? <SunIcon /> : <MoonIcon />, run: toggle },
       { id: "out", group: "Preferências", title: "Sair", icon: <OutIcon />, run: () => void logout() },
@@ -198,6 +214,9 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           </button>
           <button className={`nv ${tab === "instalacoes" ? "on" : ""}`} onClick={() => setTab("instalacoes")}>
             <ListIcon />Instalações
+          </button>
+          <button className={`nv ${tab === "agenda" ? "on" : ""}`} onClick={() => setTab("agenda")}>
+            <ClockIcon />Agenda
           </button>
           {user.role === "supervisor" && (
             <>
@@ -262,20 +281,23 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <PartnersPage />
         ) : tab === "conferir" && user.role === "admin_speed" ? (
           <ConferirPage />
+        ) : tab === "agenda" ? (
+          <AgendaPage user={user} onOpenInstallation={(id) => { setInstId(id); setTab("instalacoes"); }} />
         ) : tab === "instalacoes" ? (
-          <InstallationsPage user={user} />
+          <InstallationsPage user={user} initialId={instId} />
         ) : tab === "viabilidade" ? (
           <ViabilityPage
             user={user}
             partner={partner}
             seed={seed}
-            onReserved={() => {
+            onReserved={(id) => {
               void reload();
+              setClienteFor(id);
               setTab("reservas");
             }}
           />
         ) : (
-          <ReservationsPage user={user} partner={partner} items={reservations} reload={reload} />
+          <ReservationsPage user={user} partner={partner} items={reservations} reload={reload} openClienteFor={clienteFor} />
         )}
       </div>
 

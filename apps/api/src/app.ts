@@ -13,7 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
-import { closeServiceOrder, getInstallation, getOsPhotosRequired, listInstallations, setOsPhotosRequired } from "./services/installations.js";
+import { closeServiceOrder, getInstallation, getOsPhotosRequired, listAgenda, listInstallations, listTechnicians, reschedule, saveCliente, setOsPhotosRequired } from "./services/installations.js";
 import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { networkPanel } from "./services/network-panel.js";
@@ -397,6 +397,46 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const id = z.string().uuid().parse(c.req.param("id"));
     return c.json({ installation: await getInstallation(db, c.get("user"), id) });
   });
+
+  /** Plano, apelido, data da visita e técnico: o formulário do contrato do cliente. */
+  app.patch("/reservations/:id/cliente", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(
+      c,
+      z.object({
+        planId: z.string().uuid(),
+        nickname: z.string().trim().max(120).nullable().optional(),
+        visitAt: z.string().datetime({ offset: true }),
+        technician: z.string().trim().min(2).max(120),
+      }),
+    );
+    await saveCliente(db, c.get("user"), id, { ...body, visitAt: new Date(body.visitAt) }, { ip: clientIp(c) });
+    return c.json({ installation: await getInstallation(db, c.get("user"), id) });
+  });
+
+  /** Visitas do intervalo [from, to): alimenta o calendário (dia, semana e mês). */
+  app.get("/agenda", requireUser, async (c) => {
+    const q = z
+      .object({ from: z.string().datetime({ offset: true }), to: z.string().datetime({ offset: true }) })
+      .safeParse(Object.fromEntries(Object.entries(c.req.query())));
+    if (!q.success) throw new AppError(400, "dados_invalidos", "Informe from e to (ISO 8601 com fuso).");
+    const from = new Date(q.data.from);
+    const to = new Date(q.data.to);
+    if (to <= from || to.getTime() - from.getTime() > 62 * 24 * 3600_000) {
+      throw new AppError(400, "dados_invalidos", "Intervalo inválido (máximo de 62 dias).");
+    }
+    return c.json({ visits: await listAgenda(db, c.get("user"), { from, to }) });
+  });
+
+  /** Arrastar o card para outro dia ou editar data e técnico. */
+  app.patch("/reservations/:id/visita", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(c, z.object({ visitAt: z.string().datetime({ offset: true }), technician: z.string().trim().min(2).max(120).optional() }));
+    await reschedule(db, c.get("user"), id, { visitAt: new Date(body.visitAt), technician: body.technician }, { ip: clientIp(c) });
+    return c.json({ installation: await getInstallation(db, c.get("user"), id) });
+  });
+
+  app.get("/technicians", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json({ technicians: await listTechnicians(db, c.get("user")) }));
 
   app.post("/reservations/:id/os/close", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));

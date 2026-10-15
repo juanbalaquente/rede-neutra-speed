@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
 import { activations, partners, photos, plans, portReservations, settings, type PhotoKind } from "../db/schema.js";
@@ -154,4 +154,137 @@ export async function getInstallation(db: Db, user: SessionUser, id: string) {
   const [r] = await db.select({ osData: portReservations.osData }).from(portReservations).where(eq(portReservations.id, id));
   const missing = await missingPhotoKinds(db, id);
   return { ...row, os: (r?.osData as OsData | null) ?? null, fotosFaltando: missing, fotosObrigatorias: await getOsPhotosRequired(db) };
+}
+
+// ── Dados do cliente (planejamento, etapa 3): plano, apelido, visita e técnico ──
+
+export interface ClienteInput {
+  planId: string;
+  /** Nome do assinante final: só para exibição e busca no portal. */
+  nickname?: string | null;
+  visitAt: Date;
+  technician: string;
+}
+
+/** Salva os dados do cliente na reserva. Mudar a data de uma visita já marcada vira "reagendada". */
+export async function saveCliente(db: Db, user: SessionUser, reservationId: string, input: ClienteInput, opts: { ip?: string | null; now?: Date } = {}) {
+  const reservation = await ownReservation(db, user, reservationId);
+  if (reservation.status !== "ativa" && reservation.status !== "convertida") {
+    throw new AppError(409, "reserva_indisponivel", "Essa reserva não está mais aberta.");
+  }
+  if (reservation.osClosedAt) throw new AppError(409, "os_ja_fechada", "A O.S. já foi fechada.");
+  const [plan] = await db.select({ id: plans.id }).from(plans).where(and(eq(plans.id, input.planId), eq(plans.active, true)));
+  if (!plan) throw new AppError(422, "plano_invalido", "Escolha um dos planos disponíveis.");
+
+  const moved = reservation.visitAt !== null && reservation.visitAt.getTime() !== input.visitAt.getTime();
+  const now = opts.now ?? new Date();
+  const [updated] = await db
+    .update(portReservations)
+    .set({
+      planId: input.planId,
+      nickname: input.nickname?.trim() || null,
+      visitAt: input.visitAt,
+      technician: input.technician.trim(),
+      visitStatus: moved ? "reagendada" : reservation.visitStatus,
+      updatedAt: now,
+    })
+    .where(eq(portReservations.id, reservation.id))
+    .returning();
+  await recordAudit(db, {
+    partnerId: reservation.partnerId,
+    userId: user.id,
+    action: moved ? "visita.reagendada" : "cliente.dados",
+    entity: "port_reservation",
+    entityId: reservation.id,
+    ip: opts.ip,
+    data: { planId: input.planId, visitAt: input.visitAt, technician: input.technician.trim(), de: moved ? reservation.visitAt : undefined },
+  });
+  return updated!;
+}
+
+/** Plano, visita e técnico são obrigatórios para liberar a ONU (o contrato do planejamento). */
+export function clienteIncomplete(r: { planId: string | null; visitAt: Date | null; technician: string | null }): string[] {
+  const missing: string[] = [];
+  if (!r.planId) missing.push("plano");
+  if (!r.visitAt) missing.push("data da visita");
+  if (!r.technician) missing.push("técnico responsável");
+  return missing;
+}
+
+/** Nomes de técnicos já usados pelo parceiro, para sugerir no formulário. */
+export async function listTechnicians(db: Db, user: SessionUser): Promise<string[]> {
+  if (!user.partnerId) return [];
+  const rows = await db
+    .selectDistinct({ technician: portReservations.technician })
+    .from(portReservations)
+    .where(and(eq(portReservations.partnerId, user.partnerId), sql`${portReservations.technician} IS NOT NULL`))
+    .orderBy(portReservations.technician);
+  return rows.map((r) => r.technician!).filter(Boolean);
+}
+
+// ── Agenda de visitas (planejamento, etapa 4) ──────────────────────────────
+
+/** Visitas marcadas no intervalo [from, to), do parceiro (ou de todos, para a Speed). */
+export async function listAgenda(db: Db, user: SessionUser, range: { from: Date; to: Date }) {
+  const base = and(
+    inArray(portReservations.status, ["ativa", "convertida"]),
+    gte(portReservations.visitAt, range.from),
+    lt(portReservations.visitAt, range.to),
+  );
+  const scope = user.role === "admin_speed" ? base : and(base, eq(portReservations.partnerId, user.partnerId!));
+  const rows = await db
+    .select({ r: portReservations, partnerName: partners.name, planName: plans.name })
+    .from(portReservations)
+    .leftJoin(partners, eq(partners.id, portReservations.partnerId))
+    .leftJoin(plans, eq(plans.id, portReservations.planId))
+    .where(scope)
+    .orderBy(portReservations.visitAt)
+    .limit(500);
+  return rows.map(({ r, partnerName, planName }) => ({
+    id: r.id,
+    partnerName: user.role === "admin_speed" ? partnerName : null,
+    contract: r.contractNumber,
+    nickname: r.nickname,
+    address: r.address,
+    ctoName: r.ctoName,
+    planName: planName ?? null,
+    technician: r.technician,
+    visitAt: r.visitAt!,
+    visitStatus: r.visitStatus,
+    osClosedAt: r.osClosedAt,
+  }));
+}
+
+/** Arrastar o card ou editar: muda a data (e, se vier, o técnico). Visita já marcada que muda de data vira "reagendada". */
+export async function reschedule(db: Db, user: SessionUser, reservationId: string, input: { visitAt: Date; technician?: string }, opts: { ip?: string | null; now?: Date } = {}) {
+  const reservation = await ownReservation(db, user, reservationId);
+  if (reservation.status !== "ativa" && reservation.status !== "convertida") {
+    throw new AppError(409, "reserva_indisponivel", "Essa reserva não está mais aberta.");
+  }
+  if (reservation.osClosedAt) throw new AppError(409, "os_ja_fechada", "A O.S. já foi fechada.");
+  if (!reservation.visitAt) throw new AppError(409, "sem_visita", "Preencha os dados do cliente antes de reagendar.");
+  const changedDate = reservation.visitAt.getTime() !== input.visitAt.getTime();
+  const now = opts.now ?? new Date();
+  const [updated] = await db
+    .update(portReservations)
+    .set({
+      visitAt: input.visitAt,
+      technician: input.technician?.trim() || reservation.technician,
+      visitStatus: changedDate ? "reagendada" : reservation.visitStatus,
+      updatedAt: now,
+    })
+    .where(eq(portReservations.id, reservation.id))
+    .returning();
+  if (changedDate) {
+    await recordAudit(db, {
+      partnerId: reservation.partnerId,
+      userId: user.id,
+      action: "visita.reagendada",
+      entity: "port_reservation",
+      entityId: reservation.id,
+      ip: opts.ip,
+      data: { de: reservation.visitAt, para: input.visitAt, technician: updated!.technician },
+    });
+  }
+  return updated!;
 }
