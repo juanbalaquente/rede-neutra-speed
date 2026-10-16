@@ -89,4 +89,4 @@ Servidor sugerido: Ubuntu Server LTS, 4 vCPU, 4 GB de RAM, 50 GB, IP fixo, `open
 - Criação de contrato no Voalle com ponto de acesso, aceite e liberação de PPPoE (depende da validação no Voalle).
 - Liberação de ONU: o portal já tem o fluxo completo (foto da medição, trava de sinal, decisão do técnico) contra um mock. Ligar no OLTCloud depende das rotas de escrita da SpeedWiki (`ACTIVATION_MODE=wiki`) e da autorização do Juan.
 - Fotos: o painel de ativação envia as cinco fotos; faltam a O.S. (fechamento) e uma tela de consulta das fotos pela Speed.
-- Agenda de visitas, tela do cliente, chamados para a SpeedWiki, financeiro e dashboards.
+- Tela do cliente (semáforo e sinal de 30 dias). Os chamados já existem no portal; ligar na SpeedWiki depende das rotas dela (v3).

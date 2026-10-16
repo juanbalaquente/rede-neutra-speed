@@ -26,7 +26,7 @@ Legenda: **Feito** = funciona e está testado · **Parcial** = existe, mas falta
 | **5. Liberação da ONU** | Parcial | Lista pendentes, confere a serial pela etiqueta, trava de sinal, justificativa, decisão em 30 min, estados até `online` e **mostra a VLAN e o login a configurar** (a VLAN vem da Wiki quando ela informar). **Falta:** a **senha PPPoE** (nasce no contrato do Voalle) e o chamado automático à Infra na justificativa (**Externo**). Roda contra mock; a escrita real depende da Wiki e do Juan. |
 | **6. Fotos e O.S.** | Feito | Seis tipos (o checklist do PDF mais a medição na CTO), data/hora/GPS/contrato, redução no celular, **tela Instalações** para o parceiro e a Speed (galeria, mapa, link assinado de 48 h para a Infra) e **fechamento da O.S.** (sinal final, modelo e serial da ONU, porta opcional, observação) exigindo as fotos; a Speed pode tornar as fotos opcionais (decisão da diretoria em aberto). |
 | **Tela do cliente** | **Falta** | Semáforo de 3 estados, dados do cliente, sinal, histórico, alarmes, ações. Precisa de rotas de leitura novas da Wiki. |
-| **Chamados de infra** | **Falta** (Externo) | Depende do endpoint da Wiki e do SLA da diretoria (SLA configurável sem código). |
+| **Chamados de infra** | Parcial | Abertura, lista, histórico, resposta, reenvio, prazo (SLA por tipo editável pela Speed, sem código), atraso no sino e no painel, e chamado automático da trava de sinal. Roda contra mock. **Falta (Externo):** as rotas da Wiki (v3, seção D) e os valores de SLA da diretoria. Fotos no formulário ainda não têm tela. |
 | **Automações do cliente** | Parcial (**Externo** para a execução real) | **Feito no portal:** bloquear, desbloquear, reiniciar a ONU e cancelar (só supervisor), com confirmação, motivo, etapas visíveis, repetição de operação parcial e **vaga devolvida** ao cancelar; contra mock, com o cliente real da Wiki já escrito conforme o contrato v3. **Falta (Externo):** as rotas v3 da Wiki, a rota do Voalle para bloqueio administrativo e a regra de fatura em aberto. **Falta:** troca de senha PPPoE (depende de onde a senha mora). |
 | **Bloqueio do parceiro inteiro** | Parcial | Bloqueia o acesso ao portal com motivo obrigatório e confirmação dupla na tela. **Falta:** o bloqueio em massa dos **clientes** dele no Voalle. |
 | **Planos e financeiro** | Feito (primeira entrega do PDF) | Preço de venda por plano (supervisor), valor fixo da Speed por porta ativada (admin), custo, faturamento previsto, lucro e margem por plano, **marcação manual de pago/não pago** por cliente e mês, recebido e em aberto, exportação em planilha (fechamento e base de clientes). **Falta:** PDF (só CSV hoje) e as formas 2 e 3 de alimentar o pagamento (arquivo de retorno, integração). |
@@ -46,7 +46,7 @@ Legenda: **Feito** = funciona e está testado · **Parcial** = existe, mas falta
 | Painel do parceiro ("Bom dia…") | Feito (sem fibra/PPPoE, que dependem da rede) |
 | Campo (técnico no celular) | Feito (painel Liberar ONU, fotos, O.S.) |
 | Clientes | **Falta** |
-| Chamados | **Falta** |
+| Chamados | Feito no portal (mock) |
 | Financeiro | Feito |
 | Mapa da rede | **Falta** |
 | Resumo do mês | **Falta** |

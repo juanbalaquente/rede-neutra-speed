@@ -104,7 +104,7 @@ Só em `aguardando_decisao`, com **prazo de 30 min** (`prazoDecisaoAte`). Sem de
 ```
 
 - `remedir`: a Wiki lê o sinal de novo (o técnico ajustou algo).
-- `prosseguir`: exige justificativa (mínimo 10 caracteres); a Wiki provisiona **e abre um card no Kanban da Infra** com as duas medições, a justificativa e o link da foto (a Wiki ainda não tem rota externa de incidente). **Atenção ao link da foto:** as fotos ficam no portal, que exige login, e a Infra não é usuária do portal. Opções: contas `admin_speed` para a Infra, ou link assinado que expira. Decidir antes de ligar.
+- `prosseguir`: exige justificativa (mínimo 10 caracteres); a Wiki provisiona. **Atualização (16 out 2026):** quem abre o chamado da Infra com as duas medições, a justificativa e a foto é o **portal**, pela rota de chamados do [contrato v3](CONTRATO-WIKI-V3-CLIENTES.md); a Wiki **não** abre card nesta decisão (evita duplicar). **Atenção ao link da foto:** as fotos ficam no portal, que exige login, e a Infra não é usuária do portal. Opções: contas `admin_speed` para a Infra, ou link assinado que expira. Decidir antes de ligar.
 - `cancelar`: a Wiki desautoriza antes de provisionar; o cliente nunca teve serviço.
 
 ## Trava de sinal (regra da Speed, confirmada pelo Juan em 9 out 2026)

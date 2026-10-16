@@ -183,6 +183,8 @@ O chamado é do portal para o parceiro; na Wiki cai na fila da Infra, marcado co
 - **Resposta `201`:** `{ "chamadoId": "…", "estado": "aberto" }`.
 - **[PERGUNTA 4] Onde cai na Wiki.** A tabela `incidents` não tem endpoint externo. O `POST /proxy/kanban/cards` (`X-Kanban-Key`, dedupe por `external_ref`) já existe e serve de caminho curto: card na coluna DEMANDAS de um board da Infra, com `source: "redeneutra"` e `external_ref: <chamadoId>`. Esse caminho cobre a v3? E o estado do chamado se deduz da coluna do card (DEMANDAS = `aberto`, colunas intermediárias = `em_atendimento`, concluído = `resolvido`)? Se preferirem a tabela `incidents`, precisamos de um endpoint novo.
 
+**Trava de sinal (importante, muda o v2):** quando o técnico escolhe `prosseguir`, **o portal abre o chamado** `trava_sinal` por esta rota (`origem: "sistema"`, com as duas medições na descrição e o link da foto da medição). Portanto **a Wiki NÃO deve abrir o card no Kanban por conta própria** na decisão `prosseguir` do v2: só provisiona. Sem isso, a Infra recebe dois cards para a mesma trava.
+
 ### `GET /chamados/{id}`
 ```json
 {
