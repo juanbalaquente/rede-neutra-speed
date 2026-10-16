@@ -2,6 +2,8 @@
 
 Portal onde um provedor parceiro vende e opera os próprios clientes na rede de fibra da Speed, sem acessar Voalle, OLTCloud ou Codemaps. O portal é uma camada de orquestração sobre esses sistemas: consome, orquestra e devolve só o recorte que o parceiro precisa.
 
+Contexto completo do projeto (regras de negócio, decisões, visual aprovado e integração com a SpeedWiki) em [docs/CONTEXTO.md](docs/CONTEXTO.md).
+
 ## O que já existe
 
 - Login com sessão em cookie httpOnly e três perfis: atendente, supervisor (do parceiro) e administrador Speed.
@@ -67,10 +69,24 @@ npm run validate:integrations -w apps/api -- "Rua X, 100, Belo Horizonte"
 
 O script confere login e leitura nos três sistemas, cruza a CTO do Codemaps com a ocupação do OLTCloud e procura no schema da API do OLTCloud as rotas de autorização de ONU.
 
+## Deploy em servidor
+
+O passo a passo completo do servidor de produção (instalação, deploy key, `.env`, backup e atualização por `deploy/update.sh`) está em [`docs/DEPLOY.md`](docs/DEPLOY.md). O resumo abaixo é o caminho curto.
+
+
+Servidor sugerido: Ubuntu Server LTS, 4 vCPU, 4 GB de RAM, 50 GB, IP fixo, `open-vm-tools` se for VM. Firewall liberando só 22, 80 e 443 (`ufw`), SSH por chave.
+
+1. Crie o subdomínio (registro A) apontando para o IP público do servidor e libere 80/443 até ele. Peça à SpeedWiki para liberar o IP de saída do servidor.
+2. Instale Docker Engine com o plugin Compose e clone o repositório em `/opt/rede-neutra`.
+3. `cp .env.example .env` e preencha: `NODE_ENV=production`, `PORTAL_DOMAIN`, `SESSION_SECRET` (`openssl rand -hex 32`), `POSTGRES_PASSWORD`, `SEED_ADMIN_PASSWORD`, `INTEGRATIONS_MODE=wiki`, `WIKI_BASE_URL`, `WIKI_API_KEY`. `chmod 600 .env`.
+4. `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`. O Caddy emite o certificado sozinho; o portal responde em `https://PORTAL_DOMAIN`.
+5. Backup: agende `deploy/backup-db.sh` no cron (`0 3 * * *`) e copie `/opt/rede-neutra-backups` para outra máquina.
+6. Fotos de campo ficam no volume `photos-data` (pasta `/data/photos` do container da API). O mesmo script de backup espelha esse volume em `$BACKUP_DIR/fotos`; copie o diretório de backup inteiro para outra máquina.
+7. Atualizar: tire um snapshot da VM, `git pull` e repita o comando do passo 4.
+
 ## Ainda não feito
 
 - Criação de contrato no Voalle com ponto de acesso, aceite e liberação de PPPoE (depende da validação no Voalle).
-- Liberação de ONU pelo OLTCloud com trava de sinal (depende de existir rota de autorização na API).
-- Telas de administração Speed e de gestão de usuários (a API já existe).
-- Aviso de reserva perto de expirar, agenda de visitas, fotos e O.S., tela do cliente, chamados para a SpeedWiki, financeiro e dashboards.
-- Segundo fator para supervisor.
+- Liberação de ONU: o portal já tem o fluxo completo (foto da medição, trava de sinal, decisão do técnico) contra um mock. Ligar no OLTCloud depende das rotas de escrita da SpeedWiki (`ACTIVATION_MODE=wiki`) e da autorização do Juan.
+- Fotos: o painel de ativação envia as cinco fotos; faltam a O.S. (fechamento) e uma tela de consulta das fotos pela Speed.
+- A tela do cliente (semáforo e sinal de 30 dias) e os chamados já existem no portal; ligar na SpeedWiki depende das rotas dela (v3).

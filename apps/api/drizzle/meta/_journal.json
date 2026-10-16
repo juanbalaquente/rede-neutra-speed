@@ -8,6 +8,83 @@
       "when": 1791250041666,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791384278432,
+      "tag": "0001_cto_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791397776301,
+      "tag": "0002_vagas_e_regioes",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792007002029,
+      "tag": "0003_ativacao_onu",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792080803755,
+      "tag": "0004_fotos_de_campo",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792095888678,
+      "tag": "0005_segundo_fator",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792098757386,
+      "tag": "0006_instalacao_cliente_os",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792099794080,
+      "tag": "0007_precos_e_pagamentos",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792153950375,
+      "tag": "0008_operacoes_do_cliente",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792154688755,
+      "tag": "0009_chamados",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792170920420,
+      "tag": "0010_contratos",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792173974133,
+      "tag": "0011_limites_cto_e_aprovacoes",
+      "breakpoints": true
     }
   ]
 }
