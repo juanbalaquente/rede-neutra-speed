@@ -251,7 +251,7 @@ export function ActivationPanel({
                   {onus.map((o) => (
                     <button key={o.serial} type="button" role="radio" aria-checked={serial === o.serial} className={`atv-onu ${serial === o.serial ? "on" : ""}`} onClick={() => { setSerial(o.serial); setConfirm(""); }}>
                       <span className="mono">{o.serial}</span>
-                      <small>{o.modelo} · apareceu às {new Date(o.vistaEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
+                      <small>{o.modelo} · consultada às {new Date(o.vistaEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
                     </button>
                   ))}
                 </div>

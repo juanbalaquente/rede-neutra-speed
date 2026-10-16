@@ -124,6 +124,8 @@ export interface ActivationRequest {
   contrato: string;
   pppLogin: string;
   alias: string;
+  /** Código do parceiro: vai no header X-RedeNeutra-Partner (a Wiki recusa login que não termine com ele), nunca no corpo. */
+  partnerCode: string;
   /** Sinal que o técnico mediu na CTO (dBm), com foto. Referência da trava. */
   sinalCtoDbm: number;
   /** Perda máxima aceita entre a CTO e a ONU (dB), vigente na hora do pedido. */
@@ -160,11 +162,12 @@ export type ActivationDecision =
  * só liga com ACTIVATION_MODE e validação do Juan. Desligada por padrão.
  */
 export interface ActivationService {
-  listPendingOnus(ctoId: string): Promise<PendingOnu[]>;
+  /** O código do parceiro segue em todas as chamadas (header X-RedeNeutra-Partner), como nas rotas v3. */
+  listPendingOnus(ctoId: string, partnerCode: string): Promise<PendingOnu[]>;
   start(req: ActivationRequest): Promise<{ ativacaoId: string; estado: ActivationState }>;
   /** null = a Wiki não conhece essa ativação. */
-  get(ativacaoId: string): Promise<ActivationSnapshot | null>;
-  decide(ativacaoId: string, decision: ActivationDecision): Promise<ActivationSnapshot>;
+  get(ativacaoId: string, partnerCode: string): Promise<ActivationSnapshot | null>;
+  decide(ativacaoId: string, partnerCode: string, decision: ActivationDecision): Promise<ActivationSnapshot>;
 }
 
 export type OperationType = "bloqueio" | "desbloqueio" | "reinicio" | "cancelamento";

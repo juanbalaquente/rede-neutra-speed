@@ -93,7 +93,7 @@ export class MockActivationService implements ActivationService {
     return this.snapshot(id, e);
   }
 
-  async decide(id: string, decision: ActivationDecision) {
+  async decide(id: string, _partnerCode: string, decision: ActivationDecision) {
     const e = this.byId.get(id);
     if (!e) throw new Error("ativacao_nao_encontrada");
     if (e.estado !== "aguardando_decisao") {

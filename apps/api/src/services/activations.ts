@@ -60,10 +60,31 @@ async function ownActivation(db: Db, partnerId: string, id: string) {
   return row;
 }
 
+/** Código do parceiro (ex.: JHV): vai em todas as chamadas à Wiki. */
+async function partnerCodeOf(db: Db, partnerId: string): Promise<string> {
+  const [p] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, partnerId));
+  if (!p?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código (ex.: JHV). A Speed precisa cadastrar.");
+  return p.code;
+}
+
+/** A Wiki entregou a v2 desligada: enquanto a Speed não liga, responde 503 com um destes códigos. Vira aviso claro, não erro de rede. */
+async function guard<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof ActivationRefused && e.status === 503) {
+      throw new AppError(503, "ativacao_indisponivel", "A liberação de ONU ainda não foi liberada pela Speed. Tente mais tarde ou fale com a Speed.");
+    }
+    throw e;
+  }
+}
+
 /** ONUs aguardando autorização na OLT que atende a CTO da reserva. */
 export async function listPendingOnus(db: Db, svc: ActivationService, user: SessionUser, reservationId: string) {
-  const reservation = await ownReservation(db, requirePartner(user), reservationId);
-  return svc.listPendingOnus(reservation.ctoId);
+  const partnerId = requirePartner(user);
+  const reservation = await ownReservation(db, partnerId, reservationId);
+  const code = await partnerCodeOf(db, partnerId);
+  return guard(() => svc.listPendingOnus(reservation.ctoId, code));
 }
 
 export interface StartActivationInput {
@@ -155,6 +176,7 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
   if (row.wikiActivationId) return row;
   try {
     const started = await svc.start({
+      partnerCode: partner.code,
       idempotencyKey: row.idempotencyKey,
       ctoId: row.ctoId,
       serial: row.serial,
@@ -178,6 +200,10 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
       throw new AppError(409, code, ACTIVATION_REFUSAL_TEXT[code] ?? "A Speed recusou a ativação.");
     }
     // Falha de rede: a ativação fica "recebida" e o mesmo pedido (mesma chave) pode ser repetido sem duplicar.
+    if (e instanceof ActivationRefused && e.status === 503) {
+      // Wiki com a v2 ainda desligada: o pedido fica guardado e pode ser repetido quando a Speed ligar.
+      throw new AppError(503, "ativacao_indisponivel", "A liberação de ONU ainda não foi liberada pela Speed. Tente mais tarde ou fale com a Speed.");
+    }
     throw e;
   }
 }
@@ -185,6 +211,8 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
 const ACTIVATION_REFUSAL_TEXT: Record<string, string> = {
   serial_nao_pendente: "Essa ONU não está na lista de pendentes. Confira a serial na etiqueta.",
   porta_ocupada: "A porta da CTO já está ocupada. A Speed precisa conferir.",
+  serial_em_ativacao: "Essa ONU já está em outra ativação aberta. Termine ou cancele a anterior.",
+  login_fora_do_padrao: "O login não segue o padrão contrato-código do provedor. A Speed precisa conferir o cadastro.",
 };
 
 /** Aplica a leitura da Wiki à ativação; online converte a reserva. */
@@ -211,7 +239,7 @@ async function applySnapshot(db: Db, row: typeof activations.$inferSelect, snap:
 export async function getActivation(db: Db, svc: ActivationService, user: SessionUser, id: string) {
   const row = await ownActivation(db, requirePartner(user), id);
   if (ACTIVATION_FINAL.includes(row.state as ActivationState) || !row.wikiActivationId) return row;
-  const snap = await svc.get(row.wikiActivationId);
+  const snap = await guard(async () => svc.get(row.wikiActivationId!, await partnerCodeOf(db, row.partnerId)));
   if (!snap) throw new AppError(502, "ativacao_perdida", "A Wiki não reconhece essa ativação. Fale com a Speed.");
   return applySnapshot(db, row, snap, user.id);
 }
@@ -224,7 +252,7 @@ export async function decideActivation(db: Db, svc: ActivationService, user: Ses
   if (decision.acao === "prosseguir" && decision.justificativa.trim().length < 10) {
     throw new AppError(422, "justificativa_obrigatoria", "Explique a justificativa (mínimo 10 caracteres).");
   }
-  const snap = await svc.decide(row.wikiActivationId, decision);
+  const snap = await guard(async () => svc.decide(row.wikiActivationId!, await partnerCodeOf(db, row.partnerId), decision));
   await recordAudit(db, {
     partnerId: row.partnerId,
     userId: user.id,

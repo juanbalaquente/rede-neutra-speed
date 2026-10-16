@@ -75,11 +75,12 @@ export class WikiActivationService implements ActivationService {
     this.root = `${base.replace(/\/$/, "")}/proxy/redeneutra/v2`;
   }
 
-  private async call(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; json: unknown }> {
+  private async call(method: "GET" | "POST", path: string, partnerCode: string, body?: unknown): Promise<{ status: number; json: unknown }> {
     const res = await this.http(`${this.root}${path}`, {
       method,
       headers: {
         "X-RedeNeutra-Write-Key": this.writeKey,
+        "X-RedeNeutra-Partner": partnerCode,
         Accept: "application/json",
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
@@ -90,6 +91,11 @@ export class WikiActivationService implements ActivationService {
     if (res.status === 409 || res.status === 422) {
       const code = (json as { error?: unknown } | null)?.error;
       throw new ActivationRefused(typeof code === "string" ? code : "recusada", res.status);
+    }
+    // A Wiki construiu a v2 desligada: 503 com estes códigos é "ainda não liberado", não queda da rede.
+    if (res.status === 503) {
+      const code = (json as { error?: unknown } | null)?.error;
+      if (code === "chave_de_escrita_nao_configurada" || code === "ativacao_desligada" || code === "leitura_de_sinal_pendente") throw new ActivationRefused(code, 503);
     }
     if (!res.ok) throw new IntegrationError("wiki", `${method} ${path.split("?")[0]} ${res.status}`, res.status);
     return { status: res.status, json };
@@ -104,24 +110,26 @@ export class WikiActivationService implements ActivationService {
     return parsed.data;
   }
 
-  async listPendingOnus(ctoId: string): Promise<PendingOnu[]> {
-    const { json } = await this.call("GET", `/onus/pendentes?ctoId=${encodeURIComponent(ctoId)}`);
+  async listPendingOnus(ctoId: string, partnerCode: string): Promise<PendingOnu[]> {
+    const { json } = await this.call("GET", `/onus/pendentes?ctoId=${encodeURIComponent(ctoId)}`, partnerCode);
     return this.parse(pendingSchema, json, "onus pendentes").onus;
   }
 
   async start(req: ActivationRequest) {
-    const { json } = await this.call("POST", "/ativacoes", req);
+    // `porta` não existe mais (a Wiki a aceita e ignora); o código do parceiro vai só no header.
+    const { partnerCode, ...body } = req;
+    const { json } = await this.call("POST", "/ativacoes", partnerCode, body);
     return this.parse(startedSchema, json, "ativação");
   }
 
-  async get(ativacaoId: string): Promise<ActivationSnapshot | null> {
-    const { status, json } = await this.call("GET", `/ativacoes/${encodeURIComponent(ativacaoId)}`);
+  async get(ativacaoId: string, partnerCode: string): Promise<ActivationSnapshot | null> {
+    const { status, json } = await this.call("GET", `/ativacoes/${encodeURIComponent(ativacaoId)}`, partnerCode);
     if (status === 404) return null;
     return this.parse(snapshotSchema, json, "ativação");
   }
 
-  async decide(ativacaoId: string, decision: ActivationDecision): Promise<ActivationSnapshot> {
-    const { json } = await this.call("POST", `/ativacoes/${encodeURIComponent(ativacaoId)}/decisao`, decision);
+  async decide(ativacaoId: string, partnerCode: string, decision: ActivationDecision): Promise<ActivationSnapshot> {
+    const { json } = await this.call("POST", `/ativacoes/${encodeURIComponent(ativacaoId)}/decisao`, partnerCode, decision);
     return this.parse(snapshotSchema, json, "decisão");
   }
 }
