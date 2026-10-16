@@ -3,6 +3,7 @@ import { api, ApiError, type Activation, type ActivationState, type PendingOnu, 
 import { newUuid } from "../uuid";
 import { PhotoSlots } from "./PhotoSlots";
 import { useDraft } from "./useDraft";
+import { ContractStep, type ContractStatus } from "./ContractStep";
 import { useToast } from "./Toast";
 
 const FINAL: ActivationState[] = ["online", "falha_provisionamento", "cancelada", "falhou"];
@@ -158,6 +159,8 @@ export function ActivationPanel({
   const setSinal = (v: string) => setDraft({ sinal: v });
   const [busy, setBusy] = useState(false);
   const [hasMedicao, setHasMedicao] = useState(false);
+  // Com a criação automática ligada, o contrato nasce do sistema da Speed e não é digitado.
+  const [contractStatus, setContractStatus] = useState<ContractStatus>({ enabled: false, login: null, contract: null });
   // A chave nasce com o formulário: reenviar o mesmo pedido (rede caiu) não duplica.
   const key = useRef(newUuid());
   const reportedDone = useRef(false);
@@ -198,12 +201,13 @@ export function ActivationPanel({
   const sinalOk = sinal.trim() !== "" && Number.isFinite(dbm) && dbm <= 0 && dbm >= -40;
   const tail = serial.slice(-4);
   const confirmed = serial !== "" && confirm.trim().toUpperCase() === tail.toUpperCase();
-  const ready = sinalOk && /^\d{1,12}$/.test(contrato) && confirmed && !!pppSuffix && hasMedicao;
+  const contractOk = contractStatus.enabled ? !!contractStatus.contract : /^\d{1,12}$/.test(contrato);
+  const ready = sinalOk && contractOk && confirmed && !!pppSuffix && hasMedicao;
 
   async function submit() {
     setBusy(true);
     try {
-      const r = await api.startActivation({ reservationId: reservation.id, serial, contrato, sinalCtoDbm: dbm, idempotencyKey: key.current });
+      const r = await api.startActivation({ reservationId: reservation.id, serial, contrato: contractStatus.enabled ? undefined : contrato, sinalCtoDbm: dbm, idempotencyKey: key.current });
       clearDraft();
       setActivation(r.activation);
     } catch (e) {
@@ -260,12 +264,15 @@ export function ActivationPanel({
                 <small>Evita liberar a ONU pendente de outro técnico.</small>
               </label>
             )}
+            <ContractStep reservationId={reservation.id} onChange={setContractStatus} />
             <div className="g2">
-              <label className="fld">
-                <span>Número do contrato</span>
-                <input value={contrato} onChange={(e) => setContrato(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="ex.: 12345" />
-                <small>{contrato ? <>Login PPPoE: <span className="mono">{contrato}-{pppSuffix}</span></> : "O login PPPoE é o contrato com o código do provedor."}</small>
-              </label>
+              {!contractStatus.enabled && (
+                <label className="fld">
+                  <span>Número do contrato</span>
+                  <input value={contrato} onChange={(e) => setContrato(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="ex.: 12345" />
+                  <small>{contrato ? <>Login PPPoE: <span className="mono">{contrato}-{pppSuffix}</span></> : "O login PPPoE é o contrato com o código do provedor."}</small>
+                </label>
+              )}
               <label className="fld">
                 <span>Sinal medido na CTO (dBm)</span>
                 <input value={sinal} onChange={(e) => setSinal(e.target.value)} inputMode="decimal" placeholder="ex.: -20,0" />

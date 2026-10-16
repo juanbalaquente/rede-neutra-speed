@@ -163,7 +163,7 @@ export const api = {
   // ── Liberação de ONU (503 ativacao_desligada = recurso desligado) ──
   activations: () => request<{ activations: Activation[] }>("GET", "/activations"),
   pendingOnus: (reservationId: string) => request<{ onus: PendingOnu[] }>("GET", `/reservations/${reservationId}/onus-pendentes`),
-  startActivation: (input: { reservationId: string; serial: string; contrato: string; sinalCtoDbm: number; idempotencyKey: string }) =>
+  startActivation: (input: { reservationId: string; serial: string; contrato?: string; sinalCtoDbm: number; idempotencyKey: string }) =>
     request<{ activation: Activation }>("POST", "/activations", input),
   activation: (id: string) => request<{ activation: Activation }>("GET", `/activations/${id}`),
   decideActivation: (id: string, decision: { acao: "remedir" | "cancelar" } | { acao: "prosseguir"; justificativa: string }) =>
