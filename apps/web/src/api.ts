@@ -90,7 +90,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
     credentials: "include",
@@ -409,6 +409,8 @@ export interface Dashboard {
   instalacoesNoMes: number;
   visitasHoje: number;
   visitasAtrasadas: number;
+  chamadosAbertos: number;
+  chamadosAtrasados: number;
   serie: { month: string; instalacoes: number; ativasNoFim: number }[];
   planos: { plano: string; qtd: number }[];
 }

@@ -3,6 +3,8 @@ import { api, type AdminPartner, type PartnerLimits } from "../api";
 import { useToast } from "../ui/Toast";
 import { parseBrl } from "../money";
 import { UsersPanel } from "../ui/UsersPanel";
+import { ticketApi, type TicketType } from "../ticketsApi";
+import { TICKET_LABEL } from "./TicketsPage";
 
 /** Siglas do piloto (OLTs Backbone Central, Itacolomi e Fátima). */
 const PILOT_REGIONS = ["R1", "ITA", "FAT"];
@@ -294,6 +296,47 @@ function SignalLimitCard() {
   );
 }
 
+/** Prazo de resposta da Infra por tipo de chamado. A diretoria ainda define os valores; os padrões são provisórios. */
+function SlaCard() {
+  const say = useToast();
+  const [sla, setSla] = useState<Record<TicketType, number> | null>(null);
+  const [padrao, setPadrao] = useState<Record<TicketType, number> | null>(null);
+  const [draft, setDraft] = useState<Partial<Record<TicketType, string>>>({});
+  useEffect(() => {
+    ticketApi.sla().then((r) => { setSla(r.sla); setPadrao(r.padrao); }).catch(() => setSla(null));
+  }, []);
+  if (!sla || !padrao) return null;
+  async function save(type: TicketType) {
+    const hours = Number(draft[type]);
+    try {
+      setSla((await ticketApi.setSla(type, hours)).sla);
+      setDraft((d) => ({ ...d, [type]: undefined }));
+      say("Prazo atualizado");
+    } catch (e) {
+      say(errMsg(e, "Falha ao salvar."), "bad");
+    }
+  }
+  return (
+    <div className="card">
+      <div className="ch"><h3>Prazo dos chamados</h3><small>em horas, vale para os chamados novos</small></div>
+      <div className="summary" style={{ display: "grid", gap: 10 }}>
+        {(Object.keys(TICKET_LABEL) as TicketType[]).map((type) => {
+          const text = draft[type] ?? String(sla[type]);
+          const hours = Number(text);
+          const valid = Number.isInteger(hours) && hours >= 1 && hours <= 720;
+          return (
+            <div key={type} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ width: 240 }}>{TICKET_LABEL[type]}{sla[type] === padrao[type] ? <small className="muted"> · padrão</small> : null}</span>
+              <input value={text} onChange={(e) => setDraft((d) => ({ ...d, [type]: e.target.value }))} inputMode="numeric" style={{ width: 80 }} aria-label={`Horas para ${TICKET_LABEL[type]}`} />
+              <button className="btn sm" disabled={!valid || hours === sla[type]} onClick={() => void save(type)}>Salvar</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Se as fotos do checklist são obrigatórias para o técnico fechar a O.S. (o planejamento recomenda que sim). */
 function OsPhotosCard() {
   const say = useToast();
@@ -406,6 +449,7 @@ export function PartnersPage() {
 
       <SignalLimitCard />
       <OsPhotosCard />
+      <SlaCard />
       <SpeedPricesCard />
 
       <div className="g11">

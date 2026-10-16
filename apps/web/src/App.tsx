@@ -12,6 +12,7 @@ import { FinancePage } from "./pages/FinancePage";
 import { PartnerDashboardPage } from "./pages/PartnerDashboardPage";
 import { InstallationsPage } from "./pages/InstallationsPage";
 import { ReservationsPage } from "./pages/ReservationsPage";
+import { TicketsPage } from "./pages/TicketsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
 import { CommandPalette, type Command } from "./ui/CommandPalette";
 import { ChartIcon, ClockIcon, ListIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon, SunIcon } from "./ui/Icons";
@@ -19,7 +20,7 @@ import { Bell, type Notice } from "./ui/Bell";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { useTheme } from "./ui/theme";
 
-type Tab = "inicio" | "financeiro" | "viabilidade" | "reservas" | "instalacoes" | "agenda" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
+type Tab = "inicio" | "financeiro" | "viabilidade" | "reservas" | "instalacoes" | "agenda" | "chamados" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
 
 const ROLE_LABEL: Record<User["role"], string> = {
   atendente: "Atendente",
@@ -30,7 +31,7 @@ const ROLE_LABEL: Record<User["role"], string> = {
 /** A partir de quanto tempo antes do vencimento o portal avisa o parceiro. */
 const EXPIRY_WARN_MS = 3 * 3600_000;
 
-const TAB_LABEL: Record<Tab, string> = { inicio: "Painel", financeiro: "Financeiro", viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
+const TAB_LABEL: Record<Tab, string> = { inicio: "Painel", financeiro: "Financeiro", viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", chamados: "Chamados", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
 
 export function App() {
   return (
@@ -190,6 +191,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
       ...(user.role === "admin_speed" ? [{ id: "go-conferir", group: "Ir para", title: "CTOs para conferir", icon: <PinIcon />, run: () => setTab("conferir") }] : []),
       { id: "go-inst", group: "Ir para", title: "Instalações", icon: <ListIcon />, run: () => setTab("instalacoes") },
       { id: "go-agenda", group: "Ir para", title: "Agenda", icon: <ClockIcon />, run: () => setTab("agenda") },
+      { id: "go-chamados", group: "Ir para", title: "Chamados", icon: <ListIcon />, run: () => setTab("chamados") },
       { id: "go-resv", group: "Ir para", title: "Reservas", hint: `${activeCount} abertas`, icon: <ClockIcon />, run: () => setTab("reservas") },
       { id: "theme", group: "Preferências", title: theme === "dark" ? "Usar tema claro" : "Usar tema escuro", icon: theme === "dark" ? <SunIcon /> : <MoonIcon />, run: toggle },
       { id: "out", group: "Preferências", title: "Sair", icon: <OutIcon />, run: () => void logout() },
@@ -202,6 +204,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     if (soon.length) list.push({ id: "expira", tone: "warn", text: soon.length === 1 ? "Uma reserva vence em menos de 3 horas" : `${soon.length} reservas vencem em menos de 3 horas`, onOpen: () => setTab("reservas") });
     if (dash?.visitasAtrasadas) list.push({ id: "atrasadas", tone: "bad", text: dash.visitasAtrasadas === 1 ? "Uma visita passou do dia sem ser concluída" : `${dash.visitasAtrasadas} visitas passaram do dia sem ser concluídas`, onOpen: () => setTab("agenda") });
     if (dash?.osPendentes) list.push({ id: "os", tone: "warn", text: dash.osPendentes === 1 ? "Uma O.S. pendente: ONU liberada, falta fechar" : `${dash.osPendentes} O.S. pendentes: ONU liberada, falta fechar`, onOpen: () => setTab("instalacoes") });
+    if (dash?.chamadosAtrasados) list.push({ id: "chamados", tone: "bad", text: dash.chamadosAtrasados === 1 ? "Um chamado passou do prazo da Infra" : `${dash.chamadosAtrasados} chamados passaram do prazo da Infra`, onOpen: () => setTab("chamados") });
     if (rede && !rede.ok) list.push({ id: "rede", tone: "bad", text: "A integração com a rede está com problema", onOpen: () => setTab("painel") });
     return list;
   }, [soon, dash, rede]);
@@ -251,6 +254,11 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <button className={`nv ${tab === "agenda" ? "on" : ""}`} onClick={() => setTab("agenda")}>
             <ClockIcon />Agenda
           </button>
+          {user.role !== "admin_speed" && (
+            <button className={`nv ${tab === "chamados" ? "on" : ""}`} onClick={() => setTab("chamados")}>
+              <ListIcon />Chamados {!!dash?.chamadosAbertos && <em className={dash.chamadosAtrasados ? "warn" : ""}>{dash.chamadosAbertos}</em>}
+            </button>
+          )}
           {user.role === "supervisor" && (
             <>
               <div className="grp">Gestão</div>
@@ -270,6 +278,9 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
               </button>
               <button className={`nv ${tab === "parceiros" ? "on" : ""}`} onClick={() => setTab("parceiros")}>
                 <PeopleIcon />Parceiros
+              </button>
+              <button className={`nv ${tab === "chamados" ? "on" : ""}`} onClick={() => setTab("chamados")}>
+                <ListIcon />Chamados
               </button>
               <button className={`nv ${tab === "auditoria" ? "on" : ""}`} onClick={() => setTab("auditoria")}>
                 <ListIcon />Auditoria
@@ -327,6 +338,8 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <PartnerDashboardPage user={user} onGo={(t) => setTab(t)} />
         ) : tab === "financeiro" && user.role === "supervisor" ? (
           <FinancePage />
+        ) : tab === "chamados" ? (
+          <TicketsPage user={user} />
         ) : tab === "agenda" ? (
           <AgendaPage user={user} onOpenInstallation={(id) => { setInstId(id); setTab("instalacoes"); }} />
         ) : tab === "instalacoes" ? (

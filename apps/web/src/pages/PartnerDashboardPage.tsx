@@ -12,7 +12,7 @@ function greeting(): string {
 }
 
 /** Painel do parceiro: o que está acontecendo na operação dele hoje. */
-export function PartnerDashboardPage({ user, onGo }: { user: User; onGo: (tab: "reservas" | "instalacoes" | "agenda" | "financeiro") => void }) {
+export function PartnerDashboardPage({ user, onGo }: { user: User; onGo: (tab: "reservas" | "instalacoes" | "agenda" | "financeiro" | "chamados") => void }) {
   const say = useToast();
   const [d, setD] = useState<Dashboard | null>(null);
 
@@ -40,6 +40,7 @@ export function PartnerDashboardPage({ user, onGo }: { user: User; onGo: (tab: "
             <button className="card kpi kpi-btn" onClick={() => onGo("instalacoes")}><span>O.S. pendentes</span><b>{d.osPendentes}</b><small>ONU liberada, falta fechar</small></button>
             <button className="card kpi kpi-btn" onClick={() => onGo("reservas")}><span>Reservas abertas</span><b>{d.reservasAbertas}</b><small>guardando vaga</small></button>
             <button className="card kpi kpi-btn" onClick={() => onGo("agenda")}><span>Visitas hoje</span><b>{d.visitasHoje}</b><small>na agenda</small></button>
+            <button className={`card kpi kpi-btn ${d.chamadosAtrasados ? "alert" : ""}`} onClick={() => onGo("chamados")}><span>Chamados abertos</span><b>{d.chamadosAbertos}</b><small>{d.chamadosAtrasados ? `${d.chamadosAtrasados} fora do prazo` : "dentro do prazo"}</small></button>
             <button className={`card kpi kpi-btn ${d.visitasAtrasadas ? "alert" : ""}`} onClick={() => onGo("agenda")}><span>Visitas atrasadas</span><b>{d.visitasAtrasadas}</b><small>{d.visitasAtrasadas ? "passaram do dia sem fechar" : "nenhuma atrasada"}</small></button>
           </div>
 
