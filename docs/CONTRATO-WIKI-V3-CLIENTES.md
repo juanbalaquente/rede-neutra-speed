@@ -224,6 +224,43 @@ O chamado é do portal para o parceiro; na Wiki cai na fila da Infra, marcado co
 5. A busca por `alias` no OLTCloud (`device_alias` = login PPPoE) é confiável para achar a ONU de um login, ou é melhor o portal mandar também a serial (que ele já tem da ativação)?
 6. Retenção da `onu_signal_history`: serve para `dias=90`?
 
+## H. Criação de contrato (proposta da Wiki, 16 out 2026; aceita pelo portal, decisões abertas)
+
+A Wiki já tem a criação de contrato no Voalle construída e desligada: `contracts/create` cria o contrato no nome do **parceiro** (um CNPJ com todos os contratos), a conexão PPPoE nasce junto com login igual ao número do contrato, e a Wiki troca para `<contrato>-<CÓDIGO>`, gera a senha (nunca devolvida nem em log), define o ponto de acesso pela sigla da CTO (R1 = 2, ITA = 3, FAT = 11) e o concentrador acompanha. O Voalle sobrescreve o endereço principal do cliente a cada contrato, então a Wiki manda sempre o endereço do cadastro do parceiro e grava o endereço real do assinante só na conexão (API de mapas, com coordenada). Falta só configuração no Voalle (tipo de contrato com "Integração" e campanha "E-commerce - Integração").
+
+### `POST /proxy/redeneutra/v3/contratos` (escrita, `X-RedeNeutra-Write-Key`, `X-RedeNeutra-Partner` obrigatório)
+```json
+{
+  "idempotencyKey": "uuid",
+  "reservaId": "id da reserva no portal (vai na observação do contrato)",
+  "parceiroCnpj": "00000000000000",
+  "plano": { "velocidadeMbps": 600, "valorMensal": 40.00 },
+  "ctoId": "24109",
+  "endereco": { "cep": "34505000", "rua": "Rua ...", "numero": "10", "complemento": "", "bairro": "...", "cidade": "Sabará", "uf": "MG" },
+  "location": { "lat": -19.89, "lng": -43.86 }
+}
+```
+- `422 parceiro_sem_cadastro`: o parceiro precisa estar no Voalle com esse CNPJ e endereço completo. `422 plano_nao_configurado`: a velocidade não tem serviço mapeado na Wiki.
+- Nenhum nome de assinante. O endereço e a coordenada são da instalação e só vão para a conexão.
+- `202 { "operacaoId": "..." }`; `GET /v3/operacoes/{id}` com `tipo: "contrato"`, etapas `contrato_criado`, `conexao_ajustada` e `endereco_gravado`, e, ao concluir, `resultado: { "contrato": "33431", "login": "33431-JHV" }`.
+- O contrato nasce **sem aprovação, logo não fatura**. Proposta da Wiki: aprovar quando a ativação da ONU (v2) chega a `online`, para a cobrança começar na porta ativada. Reserva cancelada antes da ativação: o contrato não aprovado é cancelado. **[DECIDIR - Juan]** confirmar o gatilho e a proporcionalidade do primeiro mês.
+
+**Impacto no portal (a construir):** hoje o atendente digita o número do contrato ao pedir a ativação. Com esta rota o número nasce da criação automática, e o login passa a vir da operação. Isso muda o fluxo da etapa de contrato e fica atrás de um modo próprio (desligado por padrão) até a Wiki entregar e o Juan validar.
+
+## Respostas da Wiki ao pedido (16 out 2026, após as respostas do suporte da Voalle)
+
+- **Bloqueio:** a API do Voalle não tem bloqueio administrativo, só **suspensão** (`Contract/Suspend`, com justificativa). `contracts/unlock` não desfaz bloqueio administrativo. A suspensão provavelmente **interrompe a cobrança**, o que contradiz "bloqueio mantém porta e cobrança". **[DECIDIR - Juan]** (a) inadimplência vira suspensão via API, aceitando que a cobrança pare, ou (b) bloqueio administrativo manual: a operação vira `aguardando_equipe` e abre card no Kanban (fallback já previsto no portal).
+- **Senha PPPoE:** mora em `authentication_contracts.password` no Voalle, e no fluxo novo é a Wiki que a gera ao criar o contrato. A rota `GET /v3/clientes/{login}/senha-pppoe` pode sair sem esperar o analista, com `no-store`, sem log e com registro de quem pediu.
+- **Cancelamento:** não há endpoint de cancelar contrato na API para Terceiros (perguntado à Voalle). Até a resposta, a etapa `contrato_encerrado` vira `aguardando_equipe` (card no Kanban) e as outras duas (OLTCloud e Codemaps) seguem automáticas. **`409 fatura_em_aberto`:** quem paga é o parceiro, não o assinante, então consultar "fatura em aberto do cliente" não faz sentido. **[DECIDIR - Juan]** a regra vira "parceiro com fatura vencida não cancela", ou sai.
+- **PPPoE no snapshot do NE40** é o próximo item da Wiki; o **incidente por CTO** (`cto-off-monitor`) entra junto.
+- **VLAN:** a ONU tem mais de uma (ex.: 1000 e 29) e a Wiki ainda não sabe qual é a de gerência; fica `null` até confirmar com a Infra. Não bloqueia.
+- **CTO 52108 (`CTO_12_P2_P4_R1`):** sem caixa no OLTCloud, então `/vagas` responde 404 e ela fica fora do mapa por sigla (esperado: "conferir"). As fontes divergem (Codemaps: 8 saídas ocupadas no diagrama, 1 livre na lista).
+- **CTO 24109:** Rua Carvalho de Brito, bairro Nações Unidas, Sabará. O geocoder do Codemaps erra o ponto nessa rua (370 a 840 m); para validar a reserva, usar a CTO pelo mapa por sigla, não por endereço.
+- **Viabilidade do Codemaps** devolve no máximo 10 CTOs, mesmo com raio de 1 km. Em área densa, uma CTO mais distante pode não aparecer.
+- **Achar a ONU:** por casamento exato do alias ou do login PPPoE; mandar a serial também é bem-vindo.
+- **Chamados:** Kanban externo com `external_ref = chamadoId`, `source: "redeneutra"` serve. **[DECIDIR - Juan]** qual board e quais colunas valem como `em_atendimento` e `resolvido`, e confirmar que a Wiki baixa as fotos na criação (o link expira em 48 h). Trava de sinal: a Wiki não abre card próprio no `prosseguir`. SLA: a Wiki só guarda e mostra.
+- **Ordem na Wiki:** PPPoE no snapshot + incidente por CTO; senha PPPoE; criação de contrato (assim que o Voalle estiver configurado, testada primeiro num contrato da Speed); chamados; reinício, ativação (v2), bloqueio e cancelamento. Toda escrita continua desligada até a validação do Juan.
+
 ## G. No portal
 - Interfaces novas em `integrations/types.ts`: `CustomerStatusService`, `TicketService` e `CustomerActions`, cada uma com **mock** e cliente real da Wiki que valida a resposta contra este contrato.
 - Escrita (`bloqueio`, `reinicio`, `cancelamento`, `chamados`) atrás de `AUTOMATION_MODE=off|mock|wiki`, **desligado por padrão**, como o `ACTIVATION_MODE`. Só liga com a validação explícita do Juan.
