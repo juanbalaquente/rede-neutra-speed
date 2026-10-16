@@ -16,7 +16,7 @@ Tela do cliente (semáforo de fibra, PPPoE e contrato, sinal de 30 dias), dashbo
 - **Frescor explícito.** Toda leitura traz `atualizadoEm` (ISO 8601 com fuso) por fonte. O portal mostra a idade do dado e marca como velho acima de 15 min (fibra) ou 30 min (PPPoE em snapshot).
 - **Escritas:** `idempotencyKey` (uuid) obrigatória; mesma chave, mesma operação, nunca duas. Resposta `202` com `operacaoId`; o portal consulta `GET /operacoes/{id}` a cada poucos segundos.
 - **Erros:** corpo `{"error": "<codigo>"}`. `404` login desconhecido; `409`/`422` regra de negócio; `5xx` falha da Wiki (o portal trata como indisponível).
-- **Sem senha em log, em lista ou em cache** (ver "Senha PPPoE").
+- **Sem senha em log, em lista ou em cache.** O portal nunca vê nem guarda senha PPPoE (ver seção B).
 
 ---
 
@@ -90,16 +90,9 @@ O planejamento pede alarme no dashboard quando um cliente entra em `loss` e avis
 
 ---
 
-## B. Senha PPPoE sob demanda
+## B. Senha PPPoE: não existe rota
 
-### `GET /clientes/{login}/senha-pppoe`
-O planejamento pede a senha **visível só para quem precisa, com registro de quem consultou**. Proposta: a senha **não é guardada no portal**. O portal a busca na Wiki a cada consulta autorizada, exibe uma vez e registra na auditoria quem pediu (sem gravar o valor).
-
-```json
-{ "login": "12345-JHV", "senha": "…", "consultadoEm": "2026-10-16T10:05:00-03:00" }
-```
-- **Nunca em log, nunca em cache**, e `Cache-Control: no-store`. A Wiki também registra a consulta (login, hora, chave usada).
-- **[DECIDIR]** a fonte é o Voalle (`authentication_contracts.password`?). Depende do analista de Voalle (Tarefa 1 do briefing). No contrato v2 a saída do script do OLTCloud traz a senha em texto puro e **não** deve ser usada como fonte.
+**Decisão da Speed (16 out 2026):** a rede neutra usa a **mesma senha PPPoE padrão** dos demais clientes da Speed. A Wiki a grava ao criar o contrato; não há rota de senha, nem entrega de senha na criação do contrato, nem ação de "trocar senha". O parceiro recebe a senha padrão pelo canal comercial, fora do sistema. A ativação da ONU só precisa do login: o OLTCloud busca a senha sozinho ao configurar a ONU, e o técnico não digita senha no fluxo normal. Por isso a rota `GET /clientes/{login}/senha-pppoe` **saiu do contrato v3**.
 
 ---
 
@@ -214,7 +207,7 @@ O chamado é do portal para o parceiro; na Wiki cai na fila da Infra, marcado co
 3. **Chamados** (pergunta 4) e a **trava de sinal** automática do v2.
 4. **Reinício** (já existe a base no ACS).
 5. **Bloqueio e desbloqueio** (depende da rota do Voalle, analista).
-6. **Cancelamento** (três sistemas, depende do Voalle) e **senha PPPoE** (depende de onde a senha mora).
+6. **Cancelamento** (três sistemas, depende do Voalle). A senha PPPoE não tem rota (seção B).
 
 ## F. Perguntas consolidadas para a Wiki
 1. Incluir os logins da rede neutra no poller de PPPoE do NE40 e servir o lote do snapshot? Intervalo possível?
@@ -250,7 +243,7 @@ A Wiki já tem a criação de contrato no Voalle construída e desligada: `contr
 ## Respostas da Wiki ao pedido (16 out 2026, após as respostas do suporte da Voalle)
 
 - **Bloqueio:** a API do Voalle não tem bloqueio administrativo, só **suspensão** (`Contract/Suspend`, com justificativa). `contracts/unlock` não desfaz bloqueio administrativo. A suspensão provavelmente **interrompe a cobrança**, o que contradiz "bloqueio mantém porta e cobrança". **[DECIDIR - Juan]** (a) inadimplência vira suspensão via API, aceitando que a cobrança pare, ou (b) bloqueio administrativo manual: a operação vira `aguardando_equipe` e abre card no Kanban (fallback já previsto no portal).
-- **Senha PPPoE:** mora em `authentication_contracts.password` no Voalle, e no fluxo novo é a Wiki que a gera ao criar o contrato. A rota `GET /v3/clientes/{login}/senha-pppoe` pode sair sem esperar o analista, com `no-store`, sem log e com registro de quem pediu.
+- **Senha PPPoE:** decidido que não haverá rota (ver seção B). A Wiki grava a senha padrão da Speed ao criar o contrato.
 - **Cancelamento:** não há endpoint de cancelar contrato na API para Terceiros (perguntado à Voalle). Até a resposta, a etapa `contrato_encerrado` vira `aguardando_equipe` (card no Kanban) e as outras duas (OLTCloud e Codemaps) seguem automáticas. **`409 fatura_em_aberto`:** quem paga é o parceiro, não o assinante, então consultar "fatura em aberto do cliente" não faz sentido. **[DECIDIR - Juan]** a regra vira "parceiro com fatura vencida não cancela", ou sai.
 - **PPPoE no snapshot do NE40** é o próximo item da Wiki; o **incidente por CTO** (`cto-off-monitor`) entra junto.
 - **VLAN:** a ONU tem mais de uma (ex.: 1000 e 29) e a Wiki ainda não sabe qual é a de gerência; fica `null` até confirmar com a Infra. Não bloqueia.
@@ -259,7 +252,7 @@ A Wiki já tem a criação de contrato no Voalle construída e desligada: `contr
 - **Viabilidade do Codemaps** devolve no máximo 10 CTOs, mesmo com raio de 1 km. Em área densa, uma CTO mais distante pode não aparecer.
 - **Achar a ONU:** por casamento exato do alias ou do login PPPoE; mandar a serial também é bem-vindo.
 - **Chamados:** Kanban externo com `external_ref = chamadoId`, `source: "redeneutra"` serve. **[DECIDIR - Juan]** qual board e quais colunas valem como `em_atendimento` e `resolvido`, e confirmar que a Wiki baixa as fotos na criação (o link expira em 48 h). Trava de sinal: a Wiki não abre card próprio no `prosseguir`. SLA: a Wiki só guarda e mostra.
-- **Ordem na Wiki:** PPPoE no snapshot + incidente por CTO; senha PPPoE; criação de contrato (assim que o Voalle estiver configurado, testada primeiro num contrato da Speed); chamados; reinício, ativação (v2), bloqueio e cancelamento. Toda escrita continua desligada até a validação do Juan.
+- **Ordem na Wiki:** PPPoE no snapshot + incidente por CTO; criação de contrato (assim que o Voalle estiver configurado, testada primeiro num contrato da Speed); chamados; reinício, ativação (v2), bloqueio e cancelamento. Toda escrita continua desligada até a validação do Juan.
 
 ## G. No portal
 - Interfaces novas em `integrations/types.ts`: `CustomerStatusService`, `TicketService` e `CustomerActions`, cada uma com **mock** e cliente real da Wiki que valida a resposta contra este contrato.

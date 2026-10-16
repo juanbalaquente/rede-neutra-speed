@@ -50,9 +50,9 @@ Pontos em aberto (marcados `[DECIDIR]` no contrato v2): o que acontece quando o 
 3. **Cancelamento** (`POST /v3/clientes/{login}/cancelamento`): três etapas com estado próprio (`contrato_encerrado` no Voalle, `onu_removida` no OLTCloud, `porta_devolvida` no Codemaps). Falha no meio deixa `parcial`; repetir a mesma `idempotencyKey` continua de onde parou. Pergunta: dá para consultar fatura em aberto no Voalle e responder `409 fatura_em_aberto` antes de qualquer etapa?
 4. `GET /v3/operacoes/{id}` para acompanhar as três ações (estados `recebida`, `executando`, `concluida`, `parcial`, `sem_confirmacao`, `aguardando_equipe`, `falhou`).
 
-## Prioridade 5: senha PPPoE sob demanda (seção B do v3)
+## Senha PPPoE: resolvido, sem rota
 
-`GET /v3/clientes/{login}/senha-pppoe`, `Cache-Control: no-store`, nunca em log ou cache. O portal exibe uma vez e registra na auditoria quem pediu, sem gravar o valor. Depende de onde a senha mora (Voalle, `authentication_contracts.password`?), então fica para depois do analista.
+**Decisão da Speed (16 out 2026):** a rede neutra usa a **mesma senha PPPoE padrão** dos demais clientes da Speed. A Wiki a grava ao criar o contrato; não há rota de senha, nem entrega de senha na criação do contrato, nem ação de "trocar senha". O parceiro recebe a senha padrão pelo canal comercial, fora do sistema. A ativação da ONU só precisa do login: o OLTCloud busca a senha sozinho ao configurar a ONU, e o técnico não digita senha no fluxo normal.
 
 ## Pequenas perguntas de dados
 
@@ -68,4 +68,4 @@ Pontos em aberto (marcados `[DECIDIR]` no contrato v2): o que acontece quando o 
 
 ## Ordem sugerida
 
-1 → 2 → 3 (chamados) → 4.1 (reinício) → ativação (v2) → 4.3 → 4.2 → 5. Os itens de Voalle (bloqueio, cancelamento e senha) dependem de resposta do analista e podem andar em paralelo.
+1 → 2 → 3 (chamados) → 4.1 (reinício) → ativação (v2) → 4.3 → 4.2. Os itens de Voalle (bloqueio, cancelamento e senha) dependem de resposta do analista e podem andar em paralelo.

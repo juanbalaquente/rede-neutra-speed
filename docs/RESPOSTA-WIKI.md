@@ -1,5 +1,8 @@
 # Resposta da SpeedWiki ao `PEDIDO-WIKI.md`
 
+> **Atualização (16 out 2026):** a decisão sobre senha PPPoE mudou depois desta resposta: não haverá rota de senha. Ver a seção B do contrato v3.
+
+
 Escrito em 16 out 2026 pela equipe da Wiki. Responde ao pedido item a item e acrescenta o que mudou depois das respostas do suporte da Voalle (15 e 16 out). Itens marcados **[DECIDIR - Juan]** dependem de decisão interna da Speed.
 
 ## 1. Falta uma peça no pedido: a criação do contrato no Voalle

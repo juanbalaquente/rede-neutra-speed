@@ -35,7 +35,7 @@ Piloto com **um parceiro** (um cliente que já compra link da Speed), mas multi-
   5. Liberação da ONU pelo OLTCloud: técnico busca a SN entre as não autorizadas, o portal valida o sinal, autoriza, mostra a VLAN e confirma que a ONU subiu e o PPPoE autenticou. **Trava de sinal:** se o sinal medido diferir mais de **1,5** da média da CTO, só prossegue com justificativa, que abre chamado automático para a Infra. **Atualização (Juan, 9 out 2026):** a referência da trava é o sinal que o técnico **mede na CTO ao chegar, com foto obrigatória**, e não a média do OLTCloud. O sinal na ONU pode ser no máximo **1,5 dB pior** que o da CTO. O limite é um parâmetro editável pela Speed (pode mudar).
   6. Fotos (CTO aberta, etiqueta da porta, medição, sobra de fibra, ONU instalada) com data, hora, GPS e contrato, e fechamento da O.S.
 - **Tela do cliente (semáforo de 3 estados):** Fibra (OLTCloud), Autenticação PPPoE (Voalle/RADIUS) e Situação do contrato (Voalle). Fibra verde com PPPoE vermelho é cadastro; fibra vermelha é problema físico.
-- **Automações sobre o cliente:** bloqueio por inadimplência (bloqueio administrativo no Voalle é o preferido), desbloqueio, reinício de ONU, troca de senha PPPoE, cancelamento (encerra contrato, remove ONU, devolve porta).
+- **Automações sobre o cliente:** bloqueio por inadimplência (bloqueio administrativo no Voalle é o preferido), desbloqueio, reinício de ONU, cancelamento (encerra contrato, remove ONU, devolve porta).
 - **Proteção da rede:** limite de ocupação por CTO por parceiro (sugerido **50%**), limite de reservas simultâneas, auditoria de tudo que mexe na rede ou no cadastro.
 - **Preços (referência):** 600 Mega, Speed recebe R$ 40,00, parceiro vende a R$ 99,90. Tabela fixa por plano é a recomendação do PDF.
 
@@ -178,7 +178,7 @@ Ele confere login e leitura nos três sistemas, cruza a CTO do Codemaps com a oc
 - Toda rota de dado do parceiro filtra por `partner_id` da sessão no servidor; recurso de outro parceiro responde 404.
 - Toda ação que mexe na rede ou no cadastro grava em `audit_log`.
 - Credenciais dos sistemas de origem só no servidor, nunca no navegador.
-- Senha PPPoE visível só para quem precisa, com registro de quem consultou.
+- Senha PPPoE: **decidido que o portal nunca vê nem exibe** (16 out 2026). A Speed usa a mesma senha padrão para a rede neutra, gravada pela Wiki ao criar o contrato e entregue ao parceiro pelo canal comercial. Não há rota, tela nem ação de trocar senha.
 
 ## 10. Decisões em aberto
 
