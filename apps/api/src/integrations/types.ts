@@ -60,6 +60,17 @@ export interface CtoVagas {
 }
 
 /** Mapa de rede: Codemaps (endereço → CTOs, diagrama de splitters) + OLTCloud (clientes vinculados). */
+/** CTO do mapa por sigla: o mesmo formato de /vagas mais a posição (null se a Wiki não tem). */
+export interface RegionCto extends CtoVagas {
+  location: { lat: number; lng: number } | null;
+}
+
+export interface RegionMap {
+  regiao: string;
+  atualizadoEm: string;
+  ctos: RegionCto[];
+}
+
 export interface NetworkMap {
   findNearbyCtos(address: string, radiusM: number): Promise<NearbyResult>;
   /**
@@ -68,6 +79,8 @@ export interface NetworkMap {
    * fresh = lê direto da fonte, sem snapshot; usado na reserva.
    */
   getCtoVagas(ctoId: string, opts?: { fresh?: boolean }): Promise<CtoVagas | null>;
+  /** Mapa completo de uma sigla (v1.1), só CTOs com caixa no OLTCloud. null = sigla desconhecida. Ausente = integração sem essa rota. */
+  getRegionCtos?(sigla: string): Promise<RegionMap | null>;
   /** A integração está de pé e a chave vale? Nunca lança. */
   health(): Promise<{ ok: boolean; detail: string }>;
 }
@@ -250,7 +263,7 @@ export type ContratoEstado = "ativo" | "bloqueado" | "suspenso" | "cancelado" | 
 export interface ClientStatus {
   login: string;
   fibra: { estado: FibraEstado; sinalDbm: number | null; uptimeDesde: string | null; ultimaQuedaEm: string | null; atualizadoEm: string | null };
-  autenticacao: { estado: AutenticacaoEstado; ip: string | null; desde: string | null; atualizadoEm: string | null };
+  autenticacao: { estado: AutenticacaoEstado; ip: string | null; desde: string | null; atualizadoEm: string | null; motivo?: string | null };
   contrato: { estado: ContratoEstado; desde: string | null; atualizadoEm: string | null };
   onu: { serial: string; modelo: string | null; olt: string | null; vlan: number | null } | null;
 }

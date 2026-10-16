@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { RegionMapCard } from "../ui/RegionMapCard";
 import { api, type NetworkPanel, type PanelCto, type PanelDay, type PanelRegion } from "../api";
 
 const PERIODS = [7, 30, 90];
@@ -237,13 +238,14 @@ export function PanelPage() {
             <div className="card kpi"><span>CTOs para conferir</span><b>{t.ctosConferir}</b><small>de {t.ctosVistas} vistas</small></div>
           </div>
           <DailyChart days={data.porDia} />
+          <RegionMapCard />
           {data.regioes.length === 0 ? (
             <p className="note">Nenhuma CTO apareceu em consultas neste período.</p>
           ) : (
             data.regioes.map((r) => <RegionCard key={r.regiao ?? "sem-sigla"} region={r} />)
           )}
           <p className="note">
-            O mapa mostra só as CTOs que apareceram em alguma consulta do período, no último estado lido. Não é a rede inteira: o mapa completo por sigla depende de uma rota da Wiki.
+            Os cartões por sigla abaixo mostram só as CTOs que apareceram em alguma consulta do período, no último estado lido. A rede inteira de cada sigla está no cartão "Rede inteira por sigla".
           </p>
         </div>
       )}

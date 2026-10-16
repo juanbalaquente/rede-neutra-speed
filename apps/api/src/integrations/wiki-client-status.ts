@@ -24,7 +24,7 @@ const statusSchema = z.object({
     ultimaQuedaEm: when,
     atualizadoEm: when,
   }),
-  autenticacao: z.object({ estado: authEstado, ip: z.string().nullable().default(null), desde: when, atualizadoEm: when }),
+  autenticacao: z.object({ estado: authEstado, ip: z.string().nullable().default(null), desde: when, atualizadoEm: when, motivo: z.string().nullable().default(null) }),
   contrato: z.object({ estado: contratoEstado, desde: z.string().nullable().default(null), atualizadoEm: when }),
   onu: z.object({ serial: z.string(), modelo: z.string().nullable().default(null), olt: z.string().nullable().default(null), vlan: z.number().int().nullable().default(null) }).nullable().default(null),
 });

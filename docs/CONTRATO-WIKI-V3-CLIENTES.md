@@ -22,6 +22,8 @@ Tela do cliente (semáforo de fibra, PPPoE e contrato, sinal de 30 dias), dashbo
 
 ## A. Leitura do cliente
 
+> **Entregue pela Wiki em 16 out 2026 (v3, leitura).** `GET /v3/clientes/{login}/status`, `POST /v3/clientes/status` (lote até 200) e `GET /v3/clientes/{login}/sinal?dias=1..90`, com a chave de leitura e `X-RedeNeutra-Partner` obrigatório. Erros: 400 `parceiro_invalido` ou `login_invalido`; 403 `login_de_outro_parceiro` (no lote, qualquer login de outro parceiro recusa a requisição inteira); 404 `login_desconhecido` (sem ONU com esse alias). A ONU precisa ter o alias igual ao login (`12345-JHV`). Até o snapshot do NE40 entrar, `autenticacao` vem `desconhecido` com `motivo: "pppoe_ainda_nao_disponivel"` (o portal mostra "leitura do PPPoE ainda não disponível"). `onu.vlan` é null quando a ONU tem mais de uma VLAN. As quedas da série têm resolução de 6 h. `?fresh=true` é aceito mas hoje não muda nada (a leitura já é ao vivo). Pergunta 1: a Wiki vai incluir os logins da rede neutra no poller do NE40 (próximo item deles). Pergunta 5: a ONU é achada por alias, casamento exato (alias ou login PPPoE); a Wiki aceita também a serial se for mais confiável para nós. Pergunta 6: `dias` até 90, histórico desde 01/07/2026.
+
 ### `GET /clientes/{login}/status`
 O semáforo de três estados da tela do cliente.
 

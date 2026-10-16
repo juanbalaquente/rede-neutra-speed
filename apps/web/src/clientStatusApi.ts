@@ -15,7 +15,7 @@ export interface ClientStatusView {
   status: {
     login: string;
     fibra: { estado: FibraEstado; sinalDbm: number | null; uptimeDesde: string | null; ultimaQuedaEm: string | null; atualizadoEm: string | null };
-    autenticacao: { estado: AutenticacaoEstado; ip: string | null; desde: string | null; atualizadoEm: string | null };
+    autenticacao: { estado: AutenticacaoEstado; ip: string | null; desde: string | null; atualizadoEm: string | null; motivo?: string | null };
     contrato: { estado: ContratoEstado; desde: string | null; atualizadoEm: string | null };
     onu: { serial: string; modelo: string | null; olt: string | null; vlan: number | null } | null;
   };

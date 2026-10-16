@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Http } from "./http.js";
-import { IntegrationError, type CtoVagas, type NearbyResult, type NetworkMap } from "./types.js";
+import { IntegrationError, type CtoVagas, type NearbyResult, type NetworkMap, type RegionMap } from "./types.js";
 
 /**
  * Cliente da API versionada da SpeedWiki (/proxy/redeneutra/v1/*), só leitura.
@@ -38,6 +38,12 @@ const vagasSchema = z.object({
   confidence: z.enum(["fontes_concordam", "conferir"]),
   updatedAt: z.string().datetime({ offset: true }),
   motivos: z.array(z.string()).default([]),
+});
+
+const regionSchema = z.object({
+  regiao: z.string().min(1),
+  atualizadoEm: z.string().datetime({ offset: true }),
+  ctos: z.array(vagasSchema.extend({ location: geoPoint.nullable().default(null) })),
 });
 
 const healthSchema = z.object({ ok: z.boolean() });
@@ -84,6 +90,12 @@ export class WikiNetworkMap implements NetworkMap {
     const { status, body } = await this.get(`/ctos/${encodeURIComponent(ctoId)}/vagas${query}`);
     if (status === 404) return null;
     return this.parse(vagasSchema, body, "vagas");
+  }
+
+  async getRegionCtos(sigla: string): Promise<RegionMap | null> {
+    const { status, body } = await this.get(`/regioes/${encodeURIComponent(sigla)}/ctos`);
+    if (status === 404) return null;
+    return this.parse(regionSchema, body, "mapa da região");
   }
 
   async health(): Promise<{ ok: boolean; detail: string }> {

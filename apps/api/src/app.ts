@@ -21,7 +21,7 @@ import { MONTH_RE, clientesCsv, fechamentoCsv, getDashboard, getFinance, getPric
 import { closeServiceOrder, getInstallation, getOsPhotosRequired, listAgenda, listInstallations, listTechnicians, reschedule, saveCliente, setOsPhotosRequired } from "./services/installations.js";
 import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
-import { networkPanel } from "./services/network-panel.js";
+import { networkPanel, regionMap } from "./services/network-panel.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
 import { runViability } from "./services/viability.js";
 import { createPhotoLink, listPhotos, ownPhoto, photoView, readPhoto, uploadPhoto, verifyPhotoLink } from "./services/photos.js";
@@ -840,6 +840,14 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const parsed = z.coerce.number().int().min(1).max(90).default(30).safeParse(c.req.query("days") || undefined);
     if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 90.");
     return c.json(await networkPanel(db, parsed.data));
+  });
+
+  /** Rede inteira de uma sigla (R1, ITA, FAT), do snapshot da Wiki. */
+  admin.get("/painel/regioes/:sigla", async (c) => {
+    const raw = c.req.param("sigla");
+    if (!/^[A-Za-z0-9]{1,8}$/.test(raw)) throw new AppError(400, "dados_invalidos", "Sigla inválida.");
+    const sigla = raw.toUpperCase();
+    return c.json(await regionMap(db, integrations.network, sigla));
   });
 
   /** Trilha de auditoria com nome de quem fez e do parceiro. Filtros: parceiro, prefixo de ação, período. */

@@ -111,7 +111,7 @@ export function ClientStatusPanel({ installationId }: { installationId: string }
         <>
           <div className="lights">
             <Light title="Fibra" label={FIBRA[s.fibra.estado].label} tone={FIBRA[s.fibra.estado].tone} detail={s.fibra.estado === "online" ? fmtDbm(s.fibra.sinalDbm) : null} age={s.fibra.atualizadoEm} stale={view.fibraVelha} />
-            <Light title="PPPoE" label={PPP[s.autenticacao.estado].label} tone={PPP[s.autenticacao.estado].tone} detail={s.autenticacao.ip} age={s.autenticacao.atualizadoEm} stale={view.pppoeVelho} />
+            <Light title="PPPoE" label={PPP[s.autenticacao.estado].label} tone={PPP[s.autenticacao.estado].tone} detail={s.autenticacao.ip ?? (s.autenticacao.motivo === "pppoe_ainda_nao_disponivel" ? "leitura do PPPoE ainda não disponível" : null)} age={s.autenticacao.atualizadoEm} stale={view.pppoeVelho} />
             <Light title="Contrato" label={CONTRATO[s.contrato.estado].label} tone={CONTRATO[s.contrato.estado].tone} detail={null} age={s.contrato.atualizadoEm} stale={false} />
           </div>
           <div className="g3 os-sum">

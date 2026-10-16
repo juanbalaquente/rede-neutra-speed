@@ -48,7 +48,7 @@ Legenda: **Feito** = funciona e está testado · **Parcial** = existe, mas falta
 | Clientes | **Falta** |
 | Chamados | Feito no portal (mock) |
 | Financeiro | Feito |
-| Mapa da rede | **Falta** |
+| Mapa da rede | Parcial: painel da Speed com a rede inteira por sigla (pontos coloridos por estado), sem mapa de fundo; o mapa do parceiro e o "simular falha" do protótipo não existem |
 | Resumo do mês | **Falta** |
 | Avisos (sino e toasts) | Feito |
 

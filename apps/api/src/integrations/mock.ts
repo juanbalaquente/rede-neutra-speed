@@ -1,4 +1,4 @@
-import type { CtoVagas, NearbyResult, NetworkMap } from "./types.js";
+import type { CtoVagas, NearbyResult, NetworkMap, RegionMap } from "./types.js";
 
 interface MockCto {
   /** Id da caixa; quando falta, o nome faz o papel de id. */
@@ -68,6 +68,16 @@ export class MockNetworkMap implements NetworkMap {
       updatedAt: new Date(Date.now() - (cto.ageMinutes ?? 0) * 60_000).toISOString(),
       motivos: cto.motivos ?? [],
     };
+  }
+
+  async getRegionCtos(sigla: string): Promise<RegionMap | null> {
+    const wanted = sigla.toUpperCase();
+    const list = this.ctos.filter((c) => (c.regiao === undefined ? "ITA" : c.regiao) === wanted && !c.unresolved);
+    if (!list.length) return null;
+    const ctos = await Promise.all(
+      list.map(async (c) => ({ ...(await this.getCtoVagas(c.id ?? c.name))!, location: { lat: c.lat, lng: c.lng } })),
+    );
+    return { regiao: wanted, atualizadoEm: new Date().toISOString(), ctos };
   }
 
   async health() {

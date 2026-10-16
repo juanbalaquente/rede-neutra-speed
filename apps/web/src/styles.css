@@ -475,3 +475,16 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .fleet .pbar { margin-top: 8px; }
 .alarms { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .alarms li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* Mapa da rede por sigla */
+.regmap-kpis { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+.regmap-kpis > div { display: grid; }
+.regmap-kpis b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.regmap-kpis small { color: var(--mute); font-size: 12px; }
+.regmap-chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line2); background: var(--surf); color: var(--ink); border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.regmap-chip.on { border-color: var(--data); background: var(--data-soft); }
+.regmap-chip i { width: 9px; height: 9px; border-radius: 50%; }
+.regmap-svg { width: 100%; height: auto; display: block; background: var(--surf2); border: 1px solid var(--line); border-radius: 10px; }
+.regmap-svg circle { cursor: pointer; transition: r 0.1s; outline: none; }
+.regmap-svg circle:focus-visible { stroke: var(--ink); stroke-width: 2; }
+.regmap-tip { position: absolute; left: 10px; bottom: 10px; background: var(--surf); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.08); }

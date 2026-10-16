@@ -2,6 +2,8 @@ import { count, eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { rowsOf } from "../db/rows.js";
 import { portReservations } from "../db/schema.js";
+import type { NetworkMap } from "../integrations/types.js";
+import { AppError } from "../lib/errors.js";
 
 export type CtoEstado = "com_vaga" | "sem_vaga" | "conferir";
 
@@ -143,5 +145,71 @@ export async function networkPanel(db: Db, days: number, now = new Date()): Prom
     },
     porDia,
     regioes,
+  };
+}
+
+export interface RegionMapCto {
+  ctoId: string;
+  name: string;
+  estado: CtoEstado;
+  livres: number;
+  totalVagas: number;
+  reservasAbertas: number;
+  location: { lat: number; lng: number } | null;
+  atualizadoEm: string | null;
+}
+
+export interface RegionMapView {
+  regiao: string;
+  atualizadoEm: string;
+  totais: { ctos: number; comVaga: number; semVaga: number; conferir: number; vagasLivres: number; totalVagas: number; semLocalizacao: number };
+  ctos: RegionMapCto[];
+}
+
+/** Rede inteira de uma sigla (rota v1.1 da Wiki), com o estado de cada CTO e as reservas abertas do portal. */
+export async function regionMap(db: Db, network: NetworkMap, sigla: string): Promise<RegionMapView> {
+  if (!network.getRegionCtos) throw new AppError(503, "mapa_indisponivel", "A integração atual não oferece o mapa por sigla.");
+  let map;
+  try {
+    map = await network.getRegionCtos(sigla);
+  } catch (e) {
+    console.error("[mapa] falha ao ler a região:", e instanceof Error ? e.message : e);
+    throw new AppError(502, "sistema_indisponivel", "A consulta à rede da Speed está indisponível agora. Tente de novo em alguns minutos.");
+  }
+  if (!map) throw new AppError(404, "regiao_desconhecida", "Sigla desconhecida na rede.");
+  const open = await db
+    .select({ ctoId: portReservations.ctoId, n: count() })
+    .from(portReservations)
+    .where(eq(portReservations.status, "ativa"))
+    .groupBy(portReservations.ctoId);
+  const openBy = new Map(open.map((r) => [r.ctoId, Number(r.n)]));
+  const ctos: RegionMapCto[] = map.ctos
+    .map((c) => {
+      const conferir = c.confidence === "conferir" || c.totalVagas === 0;
+      return {
+        ctoId: c.ctoId,
+        name: c.name,
+        estado: (conferir ? "conferir" : c.vagasLivres > 0 ? "com_vaga" : "sem_vaga") as CtoEstado,
+        livres: conferir ? 0 : c.vagasLivres,
+        totalVagas: c.totalVagas,
+        reservasAbertas: openBy.get(c.ctoId) ?? 0,
+        location: c.location,
+        atualizadoEm: c.updatedAt,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    regiao: map.regiao,
+    atualizadoEm: map.atualizadoEm,
+    totais: {
+      ctos: ctos.length,
+      comVaga: ctos.filter((c) => c.estado === "com_vaga").length,
+      semVaga: ctos.filter((c) => c.estado === "sem_vaga").length,
+      conferir: ctos.filter((c) => c.estado === "conferir").length,
+      vagasLivres: ctos.reduce((s, c) => s + c.livres, 0),
+      totalVagas: ctos.reduce((s, c) => s + c.totalVagas, 0),
+      semLocalizacao: ctos.filter((c) => !c.location).length,
+    },
+    ctos,
   };
 }
