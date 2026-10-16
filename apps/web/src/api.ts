@@ -444,9 +444,11 @@ export interface Finance {
 }
 
 export type OperationType = "bloqueio" | "desbloqueio" | "reinicio" | "cancelamento";
-export type OperationState = "recebida" | "executando" | "concluida" | "parcial" | "sem_confirmacao" | "aguardando_equipe" | "falhou";
+export type OperationState = "recebida" | "executando" | "concluida" | "parcial" | "sem_confirmacao" | "aguardando_equipe" | "falhou" | "aguardando_aprovacao" | "recusada";
 
 export interface CustomerOperation {
+  /** Motivo dado pela Speed quando recusa a operação. */
+  decisionReason?: string | null;
   id: string;
   reservationId: string;
   type: OperationType;

@@ -4,6 +4,7 @@ import { useToast } from "../ui/Toast";
 import { parseBrl } from "../money";
 import { UsersPanel } from "../ui/UsersPanel";
 import { CtoLimitsCard } from "../ui/CtoLimitsCard";
+import { ApprovalsCard } from "../ui/ApprovalsCard";
 import { ticketApi, type TicketType } from "../ticketsApi";
 import { TICKET_LABEL } from "./TicketsPage";
 
@@ -452,6 +453,7 @@ export function PartnersPage() {
       <OsPhotosCard />
       <SlaCard />
       <CtoLimitsCard />
+      <ApprovalsCard />
       <SpeedPricesCard />
 
       <div className="g11">

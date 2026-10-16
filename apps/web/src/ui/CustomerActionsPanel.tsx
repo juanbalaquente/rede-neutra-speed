@@ -12,8 +12,10 @@ const STATE: Record<OperationState, { label: string; tone: string }> = {
   sem_confirmacao: { label: "Sem confirmação", tone: "b-warn" },
   aguardando_equipe: { label: "Com a equipe da Speed", tone: "b-data" },
   falhou: { label: "Falhou", tone: "b-bad" },
+  aguardando_aprovacao: { label: "Aguardando aprovação da Speed", tone: "b-warn" },
+  recusada: { label: "Recusada pela Speed", tone: "b-bad" },
 };
-const OPEN: OperationState[] = ["recebida", "executando", "parcial", "aguardando_equipe"];
+const OPEN: OperationState[] = ["recebida", "executando", "parcial", "aguardando_equipe", "aguardando_aprovacao"];
 
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const errMsg = (e: unknown, fb: string) => (e instanceof Error ? e.message : fb);
@@ -35,7 +37,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
   useEffect(load, [load]);
 
   // Acompanha a operação aberta: pergunta à Speed a cada poucos segundos.
-  const open = ops?.find((o) => OPEN.includes(o.state) && o.state !== "parcial" && o.state !== "aguardando_equipe") ?? null;
+  const open = ops?.find((o) => OPEN.includes(o.state) && o.state !== "parcial" && o.state !== "aguardando_equipe" && o.state !== "aguardando_aprovacao") ?? null;
   useEffect(() => {
     if (!open) return;
     const t = setInterval(() => {
@@ -128,6 +130,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
                 {o.state === "parcial" && <button className="linkbtn" onClick={() => void retry(o.id)}>Repetir</button>}
               </div>
               {o.reason && <small className="muted">{o.reason}</small>}
+              {o.state === "recusada" && o.decisionReason && <small style={{ color: "var(--bad)" }}>Motivo da Speed: {o.decisionReason}</small>}
               {o.steps.length > 0 && (
                 <ol className="atv-steps ops-steps">
                   {o.steps.map((s) => (

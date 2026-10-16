@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { activations, customerOperations, partners, portReservations } from "../db/schema.js";
+import { activations, customerOperations, partners, portReservations, settings } from "../db/schema.js";
 import { OPERATION_FINAL, type CustomerActions, type OperationSnapshot, type OperationState, type OperationType } from "../integrations/types.js";
 import { OperationRefused } from "../integrations/wiki-actions.js";
 import { AppError, isUniqueViolation } from "../lib/errors.js";
@@ -17,6 +17,7 @@ const REFUSAL_TEXT: Record<string, string> = {
 
 /** Dados da operação para a tela. Nunca carrega segredo, senha nem saída crua de equipamento. */
 export const operationView = (o: Row) => ({
+  decisionReason: o.decisionReason,
   id: o.id,
   reservationId: o.reservationId,
   type: o.type as OperationType,
@@ -92,12 +93,14 @@ export async function startOperation(
   if (!partner?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código cadastrado.");
   const login = await loginOf(db, reservation.id);
   const key = input.idempotencyKey ?? randomUUID();
+  // A Speed pode exigir a aprovação dela para certos tipos: a operação espera, sem chegar à Wiki, até ser aprovada.
+  const needsApproval = (await getApprovalTypes(db)).includes(input.type);
 
   let row: Row;
   try {
     const [created] = await db
       .insert(customerOperations)
-      .values({ partnerId: reservation.partnerId, reservationId: reservation.id, userId: user.id, type: input.type, login, reason: input.reason?.trim() || null, idempotencyKey: key })
+      .values({ partnerId: reservation.partnerId, reservationId: reservation.id, userId: user.id, type: input.type, login, reason: input.reason?.trim() || null, idempotencyKey: key, state: needsApproval ? "aguardando_aprovacao" : "recebida" })
       .returning();
     row = created!;
     await recordAudit(db, { partnerId: reservation.partnerId, userId: user.id, action: `cliente.${input.type}_pedido`, entity: "customer_operation", entityId: row.id, ip: opts.ip, data: { login, contract: reservation.contractNumber, motivo: row.reason } });
@@ -110,7 +113,7 @@ export async function startOperation(
     }
     row = same;
   }
-  if (row.wikiOperationId) return row;
+  if (row.wikiOperationId || row.state === "aguardando_aprovacao") return row;
   return send(db, svc, row, partner.code);
 }
 
@@ -187,4 +190,73 @@ export async function listOperations(db: Db, user: SessionUser, reservationId: s
 
 export async function getOperation(db: Db, svc: CustomerActions, user: SessionUser, id: string) {
   return operationView(await refreshOperation(db, svc, user, id));
+}
+
+// ── Aprovação da Speed (planejamento: o administrador "aprova ou recusa operações") ──────────────────────────────
+
+export const APPROVAL_KEY = "aprovacao.operacoes";
+export const OPERATION_TYPES: OperationType[] = ["bloqueio", "desbloqueio", "reinicio", "cancelamento"];
+
+/** Tipos de operação que só seguem para a Wiki depois que a Speed aprova. Padrão: nenhum. */
+export async function getApprovalTypes(db: Db): Promise<OperationType[]> {
+  const [row] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, APPROVAL_KEY));
+  const saved = Array.isArray(row?.value) ? (row!.value as unknown[]) : [];
+  return OPERATION_TYPES.filter((t) => saved.includes(t));
+}
+
+export async function setApprovalTypes(db: Db, user: SessionUser, types: OperationType[], ip?: string | null) {
+  const before = await getApprovalTypes(db);
+  const next = OPERATION_TYPES.filter((t) => types.includes(t));
+  await db
+    .insert(settings)
+    .values({ key: APPROVAL_KEY, value: next, updatedBy: user.id })
+    .onConflictDoUpdate({ target: settings.key, set: { value: next, updatedBy: user.id, updatedAt: new Date() } });
+  await recordAudit(db, { partnerId: null, userId: user.id, action: "config.aprovacao", entity: "setting", entityId: APPROVAL_KEY, ip, data: { before, after: next } });
+  return next;
+}
+
+/** Operações esperando a Speed, de todos os parceiros (as mais antigas primeiro). */
+export async function listPendingApprovals(db: Db) {
+  const rows = await db
+    .select({ o: customerOperations, partnerName: partners.name, contract: portReservations.contractNumber, nickname: portReservations.nickname })
+    .from(customerOperations)
+    .innerJoin(partners, eq(partners.id, customerOperations.partnerId))
+    .innerJoin(portReservations, eq(portReservations.id, customerOperations.reservationId))
+    .where(eq(customerOperations.state, "aguardando_aprovacao"))
+    .orderBy(customerOperations.createdAt);
+  return rows.map((r) => ({ ...operationView(r.o), partnerName: r.partnerName, contract: r.contract, nickname: r.nickname }));
+}
+
+async function pendingOperation(db: Db, id: string): Promise<Row> {
+  const [row] = await db.select().from(customerOperations).where(eq(customerOperations.id, id));
+  if (!row) throw new AppError(404, "operacao_nao_encontrada", "Operação não encontrada.");
+  if (row.state !== "aguardando_aprovacao") throw new AppError(409, "sem_o_que_decidir", "Essa operação não está esperando aprovação.");
+  return row;
+}
+
+/** A Speed aprova: a operação segue para a Wiki com a mesma chave. A decisão fica na auditoria. */
+export async function approveOperation(db: Db, svc: CustomerActions, admin: SessionUser, id: string, ip?: string | null) {
+  const row = await pendingOperation(db, id);
+  const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, row.partnerId));
+  if (!partner?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código cadastrado.");
+  const [approved] = await db
+    .update(customerOperations)
+    .set({ state: "recebida", decidedBy: admin.id, decidedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(customerOperations.id, id), eq(customerOperations.state, "aguardando_aprovacao")))
+    .returning();
+  if (!approved) throw new AppError(409, "sem_o_que_decidir", "Essa operação não está esperando aprovação.");
+  await recordAudit(db, { partnerId: row.partnerId, userId: admin.id, action: "cliente.operacao_aprovada", entity: "customer_operation", entityId: row.id, ip, data: { tipo: row.type, login: row.login } });
+  return operationView(await send(db, svc, approved, partner.code));
+}
+
+export async function refuseOperation(db: Db, admin: SessionUser, id: string, reason: string, ip?: string | null) {
+  const row = await pendingOperation(db, id);
+  const [refused] = await db
+    .update(customerOperations)
+    .set({ state: "recusada", decidedBy: admin.id, decidedAt: new Date(), decisionReason: reason.trim(), updatedAt: new Date() })
+    .where(and(eq(customerOperations.id, id), eq(customerOperations.state, "aguardando_aprovacao")))
+    .returning();
+  if (!refused) throw new AppError(409, "sem_o_que_decidir", "Essa operação não está esperando aprovação.");
+  await recordAudit(db, { partnerId: row.partnerId, userId: admin.id, action: "cliente.operacao_recusada_pela_speed", entity: "customer_operation", entityId: row.id, ip, data: { tipo: row.type, login: row.login, motivo: reason.trim() } });
+  return operationView(refused);
 }

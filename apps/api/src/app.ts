@@ -14,6 +14,7 @@ import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
 import { getContract, retryContract, startContract } from "./services/contracts.js";
+import { approveOperation, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
 import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
@@ -879,6 +880,28 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const parsed = z.coerce.number().int().min(1).max(90).default(30).safeParse(c.req.query("days") || undefined);
     if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 90.");
     return c.json(await networkPanel(db, parsed.data));
+  });
+
+  /** Operações do cliente final que só seguem para a Wiki depois que a Speed aprova (padrão: nenhuma). */
+  admin.get("/settings/aprovacoes", async (c) => c.json({ types: await getApprovalTypes(db), all: OPERATION_TYPES }));
+
+  admin.put("/settings/aprovacoes", async (c) => {
+    const body = await parseBody(c, z.object({ types: z.array(z.enum(["bloqueio", "desbloqueio", "reinicio", "cancelamento"])) }));
+    return c.json({ types: await setApprovalTypes(db, c.get("user"), body.types, clientIp(c)), all: OPERATION_TYPES });
+  });
+
+  admin.get("/operations/pending", async (c) => c.json({ operations: await listPendingApprovals(db) }));
+
+  admin.post("/operations/:id/approve", async (c) => {
+    if (!integrations.actions) throw new AppError(503, "automacao_desligada", "As automações do cliente ainda não estão habilitadas.");
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ operation: await approveOperation(db, integrations.actions, c.get("user"), id, clientIp(c)) });
+  });
+
+  admin.post("/operations/:id/refuse", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(c, z.object({ reason: z.string().trim().min(5).max(300) }));
+    return c.json({ operation: await refuseOperation(db, c.get("user"), id, body.reason, clientIp(c)) });
   });
 
   /** Visão consolidada da Speed: portas, receita e chamados por parceiro, instalações fora do padrão e CTOs com muitos chamados. */

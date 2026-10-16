@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { request } from "../api";
 
 export interface Overview {
-  totais: { portasAtivas: number; receitaMensalCents: number; chamadosAbertos: number; chamadosAtrasados: number; foraDoPadrao: number };
+  totais: { portasAtivas: number; receitaMensalCents: number; chamadosAbertos: number; chamadosAtrasados: number; foraDoPadrao: number; aprovacoesPendentes: number };
   parceiros: { partnerId: string; name: string; code: string | null; status: string; portasAtivas: number; bloqueados: number; reservasAbertas: number; receitaMensalCents: number; chamadosAbertos: number; chamadosAtrasados: number; foraDoPadrao: number }[];
   foraDoPadrao: { reservationId: string; partnerName: string; contract: string | null; ctoName: string; sinalCtoDbm: number; sinalFinalDbm: number; minimoDbm: number; excessoDb: number }[];
   hotspots: { partnerId: string; partnerName: string; ctoId: string; ctoName: string | null; total: number; abertos: number; ultimoEm: string }[];
