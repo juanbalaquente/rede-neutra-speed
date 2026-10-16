@@ -7,12 +7,14 @@ import { MockActivationService } from "./mock-activation.js";
 import { MockCustomerActions } from "./mock-actions.js";
 import { MockTicketService } from "./mock-tickets.js";
 import { MockClientStatus } from "./mock-client-status.js";
-import type { ActivationService, ClientStatusService, CustomerActions, Integrations, NetworkMap, TicketService } from "./types.js";
+import { MockContractService } from "./mock-contracts.js";
+import type { ActivationService, ClientStatusService, ContractService, CustomerActions, Integrations, NetworkMap, TicketService } from "./types.js";
 import { WikiNetworkMap } from "./wiki.js";
 import { WikiActivationService } from "./wiki-activation.js";
 import { WikiCustomerActions } from "./wiki-actions.js";
 import { WikiTicketService } from "./wiki-tickets.js";
 import { WikiClientStatus } from "./wiki-client-status.js";
+import { WikiContractService } from "./wiki-contracts.js";
 
 function createActivation(config: Config, log: ApiCallLogger): ActivationService | undefined {
   if (config.ACTIVATION_MODE === "off") return undefined;
@@ -46,11 +48,19 @@ function createClientStatus(config: Config, log: ApiCallLogger): ClientStatusSer
   return new WikiClientStatus(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_API_KEY!);
 }
 
+function createContracts(config: Config, log: ApiCallLogger): ContractService | undefined {
+  if (config.CONTRACT_MODE === "off") return undefined;
+  if (config.CONTRACT_MODE === "mock") return new MockContractService();
+  const missing = (["WIKI_BASE_URL", "WIKI_WRITE_KEY"] as const).filter((k) => !config[k]);
+  if (missing.length) throw new Error(`CONTRACT_MODE=wiki sem: ${missing.join(", ")}`);
+  return new WikiContractService(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!);
+}
+
 export function createIntegrations(config: Config, log: ApiCallLogger): Integrations {
   const activation = createActivation(config, log);
   const actions = createActions(config, log);
   const { network } = createNetwork(config, log);
-  return { network, activation, actions, tickets: createTickets(config, log), clientStatus: createClientStatus(config, log) };
+  return { network, activation, actions, tickets: createTickets(config, log), clientStatus: createClientStatus(config, log), contracts: createContracts(config, log) };
 }
 
 function createNetwork(config: Config, log: ApiCallLogger): { network: NetworkMap } {

@@ -151,6 +151,8 @@ export const portReservations = pgTable(
     osData: jsonb("os_data"),
     /** Situação do contrato do cliente final no portal: ativo | bloqueado | cancelado (o bloqueio por inadimplência não libera a porta). */
     customerStatus: text("customer_status").notNull().default("ativo"),
+    /** Endereço estruturado da instalação (cep, rua, número, bairro, cidade, UF), pedido para criar o contrato. */
+    installAddress: jsonb("install_address"),
     cancelReason: text("cancel_reason"),
     cancelledBy: uuid("cancelled_by").references(() => users.id),
     createdAt: createdAt(),
@@ -260,6 +262,34 @@ export const customerOperations = pgTable(
     uniqueIndex("customer_operations_open_idx")
       .on(t.reservationId, t.type)
       .where(sql`${t.state} IN ('recebida', 'executando', 'parcial', 'aguardando_equipe')`),
+  ],
+);
+
+/** Criação do contrato no Voalle pela Wiki (contrato v3, seção H). O número e o login nascem daqui. */
+export const contractRequests = pgTable(
+  "contract_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").notNull().references(() => partners.id),
+    reservationId: uuid("reservation_id").notNull().references(() => portReservations.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    idempotencyKey: uuid("idempotency_key").notNull().unique(),
+    wikiOperationId: text("wiki_operation_id"),
+    /** recebida | executando | concluida | parcial | aguardando_equipe | falhou */
+    state: text("state").notNull().default("recebida"),
+    steps: jsonb("steps"),
+    /** Preenchidos quando a Wiki conclui: número do contrato e login PPPoE. */
+    contract: text("contract"),
+    login: text("login"),
+    /** Motivo da recusa ou da falha, em texto curto. */
+    reason: text("reason"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("contract_requests_reservation_idx").on(t.reservationId, t.createdAt),
+    // Um contrato por reserva, salvo se o pedido anterior falhou: dois cliques não viram dois contratos no Voalle.
+    uniqueIndex("contract_requests_live_idx").on(t.reservationId).where(sql`${t.state} <> 'falhou'`),
   ],
 );
 

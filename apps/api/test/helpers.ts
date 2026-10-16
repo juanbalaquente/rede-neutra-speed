@@ -11,12 +11,12 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "../src/auth/password.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
 import { MemoryPhotoStorage } from "../src/storage/photos.js";
-import type { ActivationService, CustomerActions, NetworkMap, TicketService, ClientStatusService } from "../src/integrations/types.js";
+import type { ActivationService, CustomerActions, NetworkMap, TicketService, ClientStatusService, ContractService } from "../src/integrations/types.js";
 import { seed } from "../src/scripts/seed.js";
 
 export const PASSWORD = "senha12345a";
 
-export async function setup(network: NetworkMap = new MockNetworkMap(), activation?: ActivationService, env: Record<string, string> = {}, actions?: CustomerActions, tickets?: TicketService, clientStatus?: ClientStatusService) {
+export async function setup(network: NetworkMap = new MockNetworkMap(), activation?: ActivationService, env: Record<string, string> = {}, actions?: CustomerActions, tickets?: TicketService, clientStatus?: ClientStatusService, contracts?: ContractService) {
   const client = new PGlite();
   const db = drizzle(client, { schema }) as unknown as Db;
   await migrate(drizzle(client), { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
@@ -24,7 +24,7 @@ export async function setup(network: NetworkMap = new MockNetworkMap(), activati
 
   const config = loadConfig({ NODE_ENV: "test", ...env });
   const photoStorage = new MemoryPhotoStorage();
-  const app = createApp({ db, config, integrations: { network, activation, actions, tickets, clientStatus }, photoStorage });
+  const app = createApp({ db, config, integrations: { network, activation, actions, tickets, clientStatus, contracts }, photoStorage });
 
   async function login(email: string): Promise<string> {
     const res = await app.request("/api/auth/login", {

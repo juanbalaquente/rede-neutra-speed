@@ -14,6 +14,7 @@ import {
 import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 import { clienteIncomplete } from "./installations.js";
+import { createdContract } from "./contracts.js";
 import { hasKind } from "./photos.js";
 import { openSignalTicket, type TicketEnv } from "./tickets.js";
 
@@ -68,14 +69,15 @@ export async function listPendingOnus(db: Db, svc: ActivationService, user: Sess
 export interface StartActivationInput {
   reservationId: string;
   serial: string;
-  contrato: string;
+  /** Número do contrato digitado. Com CONTRACT_MODE ligado é ignorado: vale o contrato criado pela Wiki. */
+  contrato?: string;
   /** Sinal medido pelo técnico na CTO (dBm). Referência da trava de sinal. */
   sinalCtoDbm: number;
   /** Permite repetir o pedido sem duplicar (ex.: a rede caiu na resposta). */
   idempotencyKey?: string;
 }
 
-export async function startActivation(db: Db, svc: ActivationService, user: SessionUser, input: StartActivationInput, opts: { ip?: string | null } = {}) {
+export async function startActivation(db: Db, svc: ActivationService, user: SessionUser, input: StartActivationInput, opts: { ip?: string | null; contractsEnabled?: boolean } = {}) {
   const partnerId = requirePartner(user);
   const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, partnerId));
   if (!partner?.code) {
@@ -97,8 +99,18 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
     throw new AppError(422, "foto_medicao_obrigatoria", "Envie a foto da medição de sinal na CTO antes de liberar a ONU.");
   }
 
+  // Com a criação automática ligada, o contrato e o login nascem do Voalle (via Wiki) e não podem ser digitados.
+  let contrato = input.contrato ?? "";
+  let pppLogin = `${contrato}-${partner.code}`;
+  if (opts.contractsEnabled) {
+    const made = await createdContract(db, reservation.id);
+    if (!made) throw new AppError(409, "contrato_nao_criado", "Crie o contrato do cliente antes de liberar a ONU.");
+    contrato = made.contract;
+    pppLogin = made.login;
+  } else if (!/^\d{1,12}$/.test(contrato)) {
+    throw new AppError(400, "dados_invalidos", "Informe o número do contrato (só dígitos).");
+  }
   const serial = input.serial.trim().toUpperCase();
-  const pppLogin = `${input.contrato}-${partner.code}`;
   const key = input.idempotencyKey ?? randomUUID();
   const limiteDb = await getSignalLimit(db);
 
@@ -113,14 +125,14 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
         idempotencyKey: key,
         ctoId: reservation.ctoId,
         serial,
-        contract: input.contrato,
+        contract: contrato,
         pppLogin,
         sinalCtoDbm: input.sinalCtoDbm,
         limiteDb,
       })
       .returning();
     row = created!;
-    await db.update(portReservations).set({ contractNumber: input.contrato, visitStatus: "em_execucao", updatedAt: new Date() }).where(eq(portReservations.id, reservation.id));
+    await db.update(portReservations).set({ contractNumber: contrato, visitStatus: "em_execucao", updatedAt: new Date() }).where(eq(portReservations.id, reservation.id));
     await recordAudit(db, {
       partnerId,
       userId: user.id,

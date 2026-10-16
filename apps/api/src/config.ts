@@ -29,6 +29,8 @@ const envSchema = z.object({
   AUTOMATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
   /** Status do cliente (semáforo e sinal de 30 dias), só leitura. off = desligado (padrão); mock; wiki = rotas /proxy/redeneutra/v3 com WIKI_API_KEY. */
   CLIENT_STATUS_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /** Criação do contrato no Voalle pela Wiki (ESCRITA em produção). off = desligada (padrão; o contrato é informado à mão); mock; wiki = rota /proxy/redeneutra/v3/contratos, só com validação do Juan. */
+  CONTRACT_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
   /** Chave de escrita da Wiki (X-RedeNeutra-Write-Key), separada da de leitura. */
   WIKI_WRITE_KEY: z.string().optional(),
   /** Pasta das fotos de campo. Em produção é um volume do Docker (entra no backup). */

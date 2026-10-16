@@ -13,6 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
+import { getContract, retryContract, startContract } from "./services/contracts.js";
 import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
 import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
 import { TICKET_TYPES } from "./db/schema.js";
@@ -279,6 +280,42 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     return c.json({ activations: (await listActivations(db, c.get("user"))).map(activationView) });
   });
 
+  // ── Criação do contrato no Voalle pela Wiki (CONTRACT_MODE) ──
+  /** enabled:false = modo desligado: o contrato segue sendo informado à mão na ativação. */
+  app.get("/reservations/:id/contract", requireUser, async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    if (!integrations.contracts) return c.json({ enabled: false, contract: null });
+    return c.json({ enabled: true, contract: await getContract(db, integrations.contracts, c.get("user"), id) });
+  });
+
+  app.post("/reservations/:id/contract", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    if (!integrations.contracts) throw new AppError(503, "contrato_desligado", "A criação automática de contrato ainda não está habilitada.");
+    const body = await parseBody(
+      c,
+      z.object({
+        endereco: z.object({
+          cep: z.string().regex(/^\d{8}$/, "CEP com 8 dígitos"),
+          rua: z.string().trim().min(2).max(120),
+          numero: z.string().trim().min(1).max(12),
+          complemento: z.string().trim().max(60).default(""),
+          bairro: z.string().trim().min(2).max(80),
+          cidade: z.string().trim().min(2).max(80),
+          uf: z.string().trim().length(2).transform((s) => s.toUpperCase()),
+        }),
+        idempotencyKey: z.string().uuid().optional(),
+      }),
+    );
+    const contract = await startContract(db, integrations.contracts, c.get("user"), id, body.endereco, { ip: clientIp(c), idempotencyKey: body.idempotencyKey });
+    return c.json({ contract }, 202);
+  });
+
+  app.post("/reservations/:id/contract/retry", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    if (!integrations.contracts) throw new AppError(503, "contrato_desligado", "A criação automática de contrato ainda não está habilitada.");
+    return c.json({ contract: await retryContract(db, integrations.contracts, c.get("user"), id, { ip: clientIp(c) }) });
+  });
+
   app.get("/reservations/:id/onus-pendentes", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));
     return c.json({ onus: await listPendingOnus(db, activationSvc(), c.get("user"), id) });
@@ -290,12 +327,12 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
       z.object({
         reservationId: z.string().uuid(),
         serial: z.string().trim().min(6).max(40).regex(/^[A-Za-z0-9]+$/, "serial só com letras e números"),
-        contrato: z.string().regex(/^\d{1,12}$/, "número do contrato, só dígitos"),
+        contrato: z.string().regex(/^\d{1,12}$/, "número do contrato, só dígitos").optional(),
         sinalCtoDbm: z.number().min(-40).max(0),
         idempotencyKey: z.string().uuid().optional(),
       }),
     );
-    const created = await startActivation(db, activationSvc(), c.get("user"), body, { ip: clientIp(c) });
+    const created = await startActivation(db, activationSvc(), c.get("user"), body, { ip: clientIp(c), contractsEnabled: !!integrations.contracts });
     return c.json({ activation: activationView(created) }, 202);
   });
 

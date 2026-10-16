@@ -208,6 +208,44 @@ export interface CustomerActions {
   get(operacaoId: string, partnerCode: string): Promise<OperationSnapshot | null>;
 }
 
+// ── Criação de contrato no Voalle, pela Wiki (contrato v3, seção H) ──
+
+export interface ContractAddress {
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+}
+
+export interface ContractRequest {
+  idempotencyKey: string;
+  reservaId: string;
+  parceiroCnpj: string;
+  partnerCode: string;
+  plano: { velocidadeMbps: number; valorMensal: number };
+  ctoId: string;
+  endereco: ContractAddress;
+  location: { lat: number; lng: number } | null;
+}
+
+export interface ContractSnapshot {
+  operacaoId: string;
+  estado: OperationState;
+  etapas: OperationStep[];
+  /** Só quando concluída. */
+  resultado: { contrato: string; login: string } | null;
+  atualizadoEm: string;
+}
+
+/** ESCRITA em produção: cria o contrato do assinante no Voalle. Só liga com CONTRACT_MODE e validação do Juan. */
+export interface ContractService {
+  create(req: ContractRequest): Promise<{ operacaoId: string; estado: OperationState }>;
+  get(operacaoId: string, partnerCode: string): Promise<ContractSnapshot | null>;
+}
+
 export interface TicketRequest {
   idempotencyKey: string;
   tipo: string;
@@ -252,6 +290,8 @@ export interface Integrations {
   tickets?: TicketService;
   /** Ausente = CLIENT_STATUS_MODE=off: a tela do cliente mostra que o status ainda não está ligado. */
   clientStatus?: ClientStatusService;
+  /** Ausente = CONTRACT_MODE=off: o contrato segue sendo informado à mão na ativação. */
+  contracts?: ContractService;
 }
 
 // ── Tela do cliente: semáforo e histórico de sinal (leitura, contrato v3, seção A) ──
