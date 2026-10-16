@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { RegionMapCard } from "../ui/RegionMapCard";
+import { SpeedOverview } from "../ui/SpeedOverview";
 import { api, type NetworkPanel, type PanelCto, type PanelDay, type PanelRegion } from "../api";
 
 const PERIODS = [7, 30, 90];
@@ -230,6 +231,7 @@ export function PanelPage() {
       {data && t && (
         // Recarregando: mantém o painel anterior esmaecido, sem pular o layout.
         <div style={{ display: "grid", gap: 14, opacity: loading ? 0.55 : 1, transition: "opacity .2s" }}>
+          <SpeedOverview />
           <div className="kpis">
             <div className="card kpi"><span>Consultas</span><b>{t.consultas}</b><small>nos últimos {data.days} dias</small></div>
             <div className="card kpi"><span>Com viabilidade</span><b>{pct(t.viaveis, t.consultas)}</b><small>{t.viaveis} consultas</small></div>

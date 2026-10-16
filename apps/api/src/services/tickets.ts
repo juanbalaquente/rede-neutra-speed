@@ -6,6 +6,7 @@ import { TICKET_TYPES, activations, partners, photos, portReservations, settings
 import type { TicketRemoteState, TicketService } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
+import { HOTSPOT_DAYS, HOTSPOT_MIN_TICKETS, ticketHotspots } from "./speed-overview.js";
 import { LINK_MAX_HOURS, signPhotoLink } from "./photos.js";
 
 type Ticket = typeof tickets.$inferSelect;
@@ -175,6 +176,13 @@ export async function createTicket(db: Db, env: TicketEnv, user: SessionUser, in
     .returning();
   await db.insert(ticketMessages).values({ ticketId: created!.id, author: "sistema", body: origin === "sistema" ? "Chamado aberto automaticamente pela trava de sinal." : "Chamado aberto." });
   await recordAudit(db, { partnerId: user.partnerId, userId: user.id, action: "chamado.aberto", entity: "ticket", entityId: created!.id, ip: opts.ip, data: { tipo: input.type, origem: origin, cto: ctoName, slaHoras: sla } });
+  // Muitos chamados do mesmo parceiro na mesma CTO: avisa a Speed na auditoria no momento em que cruza o limite.
+  if (ctoId) {
+    const hot = (await ticketHotspots(db)).find((h) => h.partnerId === user.partnerId && h.ctoId === ctoId);
+    if (hot && hot.total === HOTSPOT_MIN_TICKETS) {
+      await recordAudit(db, { partnerId: user.partnerId, userId: null, action: "chamado.muitos_na_cto", entity: "ticket", entityId: created!.id, data: { cto: ctoName ?? ctoId, total: hot.total, dias: HOTSPOT_DAYS } });
+    }
+  }
   return deliver(db, env, created!);
 }
 

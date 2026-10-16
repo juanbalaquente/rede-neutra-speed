@@ -14,6 +14,7 @@ import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
 import { getContract, retryContract, startContract } from "./services/contracts.js";
+import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
 import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
 import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
@@ -879,6 +880,9 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 90.");
     return c.json(await networkPanel(db, parsed.data));
   });
+
+  /** Visão consolidada da Speed: portas, receita e chamados por parceiro, instalações fora do padrão e CTOs com muitos chamados. */
+  admin.get("/painel/parceiros", async (c) => c.json(await speedOverview(db)));
 
   /** Limite de ocupação por CTO (por parceiro ou para todos). 100 = liberada caso a caso. */
   admin.get("/cto-limits", async (c) => c.json({ limits: await listCtoLimits(db) }));

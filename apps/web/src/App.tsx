@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { clientStatusApi, type Fleet } from "./clientStatusApi";
+import { loadOverview, type Overview } from "./ui/SpeedOverview";
 import { api, type Dashboard, type MfaState, type Partner, type Reservation, type User } from "./api";
 import { LoginPage } from "./pages/LoginPage";
 import { MfaSetupPage } from "./pages/MfaSetupPage";
@@ -127,11 +128,15 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   // Avisos do sino: o parceiro vê visitas atrasadas e O.S. pendentes; a Speed vê a rede fora do ar.
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [fleet, setFleet] = useState<Fleet | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [rede, setRede] = useState<{ ok: boolean; detail: string } | null>(null);
   useEffect(() => {
     const isAdmin = user.role === "admin_speed";
     const poll = () => {
-      if (isAdmin) api.integrationsHealth().then((h) => setRede({ ok: h.ok, detail: h.detail })).catch(() => {});
+      if (isAdmin) {
+        api.integrationsHealth().then((h) => setRede({ ok: h.ok, detail: h.detail })).catch(() => {});
+        loadOverview().then(setOverview).catch(() => {});
+      }
       else {
         api.dashboard().then(setDash).catch(() => {});
         // Desligado (503) ou fora do ar: sem alarme, sem barulho.
@@ -214,9 +219,11 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     if (dash?.osPendentes) list.push({ id: "os", tone: "warn", text: dash.osPendentes === 1 ? "Uma O.S. pendente: ONU liberada, falta fechar" : `${dash.osPendentes} O.S. pendentes: ONU liberada, falta fechar`, onOpen: () => setTab("instalacoes") });
     if (dash?.chamadosAtrasados) list.push({ id: "chamados", tone: "bad", text: dash.chamadosAtrasados === 1 ? "Um chamado passou do prazo da Infra" : `${dash.chamadosAtrasados} chamados passaram do prazo da Infra`, onOpen: () => setTab("chamados") });
     if (fleet?.alarmes.length) list.push({ id: "fibra", tone: "bad", text: fleet.alarmes.length === 1 ? "Um cliente está sem fibra ou sem PPPoE" : `${fleet.alarmes.length} clientes estão sem fibra ou sem PPPoE`, onOpen: () => setTab("inicio") });
+    if (overview?.hotspots.length) list.push({ id: "hotspots", tone: "warn", text: overview.hotspots.length === 1 ? "Uma CTO com muitos chamados do mesmo parceiro" : `${overview.hotspots.length} CTOs com muitos chamados do mesmo parceiro`, onOpen: () => setTab("painel") });
+    if (overview?.totais.chamadosAtrasados) list.push({ id: "chamados-atrasados", tone: "bad", text: `${overview.totais.chamadosAtrasados} chamado(s) de parceiros fora do prazo`, onOpen: () => setTab("chamados") });
     if (rede && !rede.ok) list.push({ id: "rede", tone: "bad", text: "A integração com a rede está com problema", onOpen: () => setTab("painel") });
     return list;
-  }, [soon, dash, fleet, rede]);
+  }, [soon, dash, fleet, overview, rede]);
 
   const consult = useCallback((address: string) => {
     setTab("viabilidade");
