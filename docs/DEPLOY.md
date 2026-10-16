@@ -99,7 +99,7 @@ Durante os testes o servidor pode estar com `MFA_REQUIRED=false`, `INTEGRATIONS_
 1. `MFA_REQUIRED=true` no `.env` e recriar a API (`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build api`). Conferir com `printenv MFA_REQUIRED` dentro do container. Supervisor e admin configuram o 2FA no primeiro acesso: guardar os códigos de recuperação.
 2. `INTEGRATIONS_MODE=wiki` com `WIKI_BASE_URL` e `WIKI_API_KEY`; `/api/health` deve devolver `"integrations":"wiki"` e `ok:true`.
 3. Conta de teste (`testejuan@teste.com`): trocar a senha ou desativar, e cancelar as reservas que ela deixou.
-4. `ACTIVATION_MODE`, `AUTOMATION_MODE` e `CLIENT_STATUS_MODE` só mudam de `off` quando a Wiki entregar as rotas correspondentes e o Juan validar numa ONU de teste.
+4. `ACTIVATION_MODE`, `AUTOMATION_MODE`, `CONTRACT_MODE` e `CLIENT_STATUS_MODE` só mudam de `off` quando a Wiki entregar as rotas correspondentes e o Juan validar numa ONU de teste.
 5. Parceiro real: cadastrar com o código (ex.: JHV), siglas do piloto (R1, ITA, FAT), limites e o primeiro supervisor; conferir o SLA dos chamados e os preços por plano.
 6. Backup restaurável: rodar `deploy/backup-db.sh` e conferir o arquivo e o espelho das fotos.
 7. Se o `update.sh` falhar com `cannot assign requested address` (IPv6 do Docker Hub), é o IPv6 do servidor: ver `/etc/sysctl.d/99-no-ipv6.conf`. Sem mudança de código, `up -d --no-build api` basta para aplicar só o `.env`.

@@ -22,6 +22,10 @@ Complementa o [contrato v1](CONTRATO-WIKI-V1.md) (leitura). Mesmo modelo: rotas 
 - **Rota oficial `POST /api/v2/ftth/equipment/auth` do OLTCloud:** o suporte não respondeu; a Wiki segue com a rota da tela, que funciona.
 - **Calendário:** as rotas v2 só entram depois que a v1 estiver validada com o Codemaps liberado, e com autorização do Juan.
 
+## Estado em 16 out 2026: construída pela Wiki, desligada
+
+As rotas abaixo existem na Wiki, com `X-RedeNeutra-Write-Key` (valor entregue quando ligarem) e **`X-RedeNeutra-Partner` obrigatórios em todas**. `porta` é aceita e ignorada (o portal não manda). `pppLogin` e `alias` precisam ser `<contrato>-<CÓDIGO do header>` (senão `422 login_fora_do_padrao`); a mesma `idempotencyKey` devolve a mesma ativação; serial já em outra ativação aberta é `409 serial_em_ativacao`. Hoje todas as rotas respondem `503 chave_de_escrita_nao_configurada`; depois da chave, o POST e a decisão respondem `503 ativacao_desligada` ou `503 leitura_de_sinal_pendente` até a Wiki validar a leitura de sinal ao vivo e fazer o teste com uma ONU da Speed. `vistaEm` nos pendentes é o horário da **consulta** (o OLTCloud não informa quando a ONU apareceu). O portal já segue tudo isso: manda o header em toda chamada, trata esses três 503 como "ainda não liberada" (o pedido fica guardado e pode ser repetido) e mostra a recusa com texto claro.
+
 ## Autenticação
 
 - **Chave própria para escrita** (ex.: `X-RedeNeutra-Write-Key`), separada da chave de leitura da v1. Vazou a de leitura? Ninguém autoriza ONU com ela.

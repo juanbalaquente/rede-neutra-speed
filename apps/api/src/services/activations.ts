@@ -193,6 +193,10 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
       .returning();
     return updated!;
   } catch (e) {
+    if (e instanceof ActivationRefused && e.status === 503) {
+      // Wiki com a v2 ainda desligada: o pedido fica guardado e pode ser repetido quando a Speed ligar.
+      throw new AppError(503, "ativacao_indisponivel", "A liberação de ONU ainda não foi liberada pela Speed. Tente mais tarde ou fale com a Speed.");
+    }
     if (e instanceof ActivationRefused || (e instanceof Error && (e as { code?: string }).code === "serial_nao_pendente")) {
       const code = e instanceof ActivationRefused ? e.code : "serial_nao_pendente";
       await db.update(activations).set({ state: "falhou", snapshot: { motivo: code }, updatedAt: new Date() }).where(eq(activations.id, row.id));
@@ -200,10 +204,6 @@ export async function startActivation(db: Db, svc: ActivationService, user: Sess
       throw new AppError(409, code, ACTIVATION_REFUSAL_TEXT[code] ?? "A Speed recusou a ativação.");
     }
     // Falha de rede: a ativação fica "recebida" e o mesmo pedido (mesma chave) pode ser repetido sem duplicar.
-    if (e instanceof ActivationRefused && e.status === 503) {
-      // Wiki com a v2 ainda desligada: o pedido fica guardado e pode ser repetido quando a Speed ligar.
-      throw new AppError(503, "ativacao_indisponivel", "A liberação de ONU ainda não foi liberada pela Speed. Tente mais tarde ou fale com a Speed.");
-    }
     throw e;
   }
 }

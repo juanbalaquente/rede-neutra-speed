@@ -37,7 +37,9 @@ Decisões que precisamos de vocês:
 - **SLA:** o portal manda `slaHoras` por chamado (configurável pela Speed, valores ainda sob decisão da diretoria). A Wiki só guarda e mostra à Infra.
 - Só mensagens com `autor: infra` voltam para o portal; as do parceiro e do sistema já estão lá.
 
-## Prioridade 3: ativação de ONU (v2)
+## Prioridade 3: ativação de ONU (v2): construída e desligada pela Wiki (16 out)
+
+O portal já está alinhado ao que a Wiki informou (header de parceiro em toda chamada, 503 de rota desligada tratados, `serial_em_ativacao` e `login_fora_do_padrao` com texto claro, `porta` não enviada, `vistaEm` tratado como hora da consulta). **Falta a Wiki:** entregar a chave de escrita, validar a leitura de sinal ao vivo e fazer o teste com uma ONU da Speed; depois o Juan valida e liga `ACTIVATION_MODE=wiki`. O texto abaixo segue como referência.
 
 Rotas: `GET /v2/onus/pendentes?ctoId=`, `POST /v2/ativacoes`, `GET /v2/ativacoes/{id}`, `POST /v2/ativacoes/{id}/decisao`. Regras já combinadas (decisões de 14 out): login PPPoE = `<contrato>-<CÓDIGO>` e alias da ONU igual ao login; trava de sinal com limite editável pela Speed (referência = medição do técnico na CTO, com foto; padrão 1,5 dB); estado `aguardando_decisao` com prazo de 30 min; falha de provisionamento deixa a ONU **autorizada** em `falha_provisionamento`, sem desautorizar; senha PPPoE nunca em resposta, log ou cache.
 

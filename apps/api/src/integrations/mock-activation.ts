@@ -30,7 +30,7 @@ export class MockActivationService implements ActivationService {
     { serial: "ZTEGC0000BAD", modelo: "F670L", vistaEm: "2026-10-09T10:05:00-03:00" },
   ];
 
-  async listPendingOnus(): Promise<PendingOnu[]> {
+  async listPendingOnus(_ctoId?: string, _partnerCode?: string): Promise<PendingOnu[]> {
     return this.pending.map((o) => ({ ...o }));
   }
 

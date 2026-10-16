@@ -151,6 +151,7 @@ export function ActivationPanel({
   const say = useToast();
   const [activation, setActivation] = useState<Activation | null>(existing);
   const [onus, setOnus] = useState<PendingOnu[] | null>(null);
+  const [onusError, setOnusError] = useState<string | null>(null);
   const [serial, setSerial] = useState("");
   const [confirm, setConfirm] = useState("");
   const [draft, setDraft, clearDraft] = useDraft(`ativacao:${reservation.id}`, { contrato: "", sinal: "" });
@@ -167,8 +168,12 @@ export function ActivationPanel({
 
   const loadOnus = useCallback(() => {
     setOnus(null);
+    setOnusError(null);
     api.pendingOnus(reservation.id).then((r) => setOnus(r.onus)).catch((e) => {
-      say(e instanceof Error ? e.message : "Falha ao listar as ONUs.", "bad");
+      const text = e instanceof Error ? e.message : "Falha ao listar as ONUs.";
+      say(text, "bad");
+      // Fica na tela (não só no aviso): a Speed pode ainda não ter liberado a liberação de ONU.
+      setOnusError(text);
       setOnus([]);
     });
   }, [reservation.id, say]);
@@ -244,6 +249,8 @@ export function ActivationPanel({
               <span>ONU a liberar</span>
               {onus === null ? (
                 <small>Buscando ONUs aguardando autorização…</small>
+              ) : onusError ? (
+                <small className="error" role="alert">{onusError} <button type="button" className="linkbtn" onClick={loadOnus}>Tentar de novo</button></small>
               ) : onus.length === 0 ? (
                 <small>Nenhuma ONU aguardando autorização nessa OLT. Ligue a ONU do cliente e <button type="button" className="linkbtn" onClick={loadOnus}>atualize a lista</button>.</small>
               ) : (
