@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, photoUrl, type Installation, type InstallationDetail, type Photo, type User } from "../api";
 import { PHOTO_KINDS, PHOTO_LABEL } from "../photoKinds";
+import { ClientStatusPanel } from "../ui/ClientStatusPanel";
 import { CustomerActionsPanel } from "../ui/CustomerActionsPanel";
 import { PhotoSlots } from "../ui/PhotoSlots";
 import { useToast } from "../ui/Toast";
@@ -188,6 +189,7 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
           {inst.os.observacao && <p className="muted" style={{ margin: 0 }}>{inst.os.observacao}</p>}
         </div>
       )}
+      {inst.osClosedAt && inst.customerStatus !== "cancelado" && <ClientStatusPanel installationId={inst.id} />}
       {isPartner && inst.osClosedAt && (
         <CustomerActionsPanel installationId={inst.id} customerStatus={inst.customerStatus} user={user} onChanged={() => { load(); onChanged(); }} />
       )}

@@ -444,3 +444,34 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .ops-h { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ops-steps { margin-top: 4px; }
 .atv-steps li.bad i { background: var(--bad); border-color: var(--bad); }
+
+/* Situação do cliente na rede */
+.banner.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, var(--line2)); }
+.lights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .lights { grid-template-columns: minmax(0, 1fr); } }
+.light { display: grid; gap: 3px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surf2); }
+.light > small { color: var(--mute); font-size: 12px; }
+.light .lamp { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; font-size: 15px; }
+.light .lamp i { width: 10px; height: 10px; border-radius: 50%; background: var(--dim); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dim) 22%, transparent); }
+.light.t-ok .lamp i { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.light.t-warn .lamp i { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.light.t-bad .lamp i { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent); }
+.light .ld { font-size: 12.5px; color: var(--ink2); }
+.light .stale { color: var(--warn); font-size: 12px; }
+.sigchart { display: grid; gap: 4px; }
+.sig-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sig-svg { width: 100%; height: auto; display: block; }
+.sig-grid { stroke: var(--line); stroke-width: 1; }
+.sig-tick { fill: var(--mute); font-size: 10.5px; font-family: var(--mono, monospace); }
+.sig-line { fill: none; stroke: var(--data); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.sig-min { stroke: var(--warn); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.sig-drop { fill: var(--bad); opacity: 0.16; }
+.sig-cross { stroke: var(--dim); stroke-width: 1; }
+.sig-dot { fill: var(--data); stroke: var(--surf); stroke-width: 2; }
+.sig-tip { font-size: 12.5px; color: var(--ink2); }
+.fleet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.fleet b { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-right: 6px; }
+.fleet small { color: var(--mute); }
+.fleet .pbar { margin-top: 8px; }
+.alarms { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.alarms li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

@@ -50,7 +50,7 @@ export class MockClientStatus implements ClientStatusService {
       },
       autenticacao: {
         estado: s.ppp,
-        ip: s.ppp === "conectado" ? `100.64.${this.seed(login) % 200}.${(this.seed(login) >> 8) % 250}` : null,
+        ip: s.ppp === "conectado" ? `100.64.${this.seed(login) % 200}.${(this.seed(login) >>> 8) % 250}` : null,
         desde: s.ppp === "conectado" ? iso(6 * 24 * 3600_000) : null,
         atualizadoEm: iso(opts.fresh ? 2_000 : 9 * 60_000),
       },
