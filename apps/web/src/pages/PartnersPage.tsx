@@ -3,6 +3,7 @@ import { api, type AdminPartner, type PartnerLimits } from "../api";
 import { useToast } from "../ui/Toast";
 import { parseBrl } from "../money";
 import { UsersPanel } from "../ui/UsersPanel";
+import { CtoLimitsCard } from "../ui/CtoLimitsCard";
 import { ticketApi, type TicketType } from "../ticketsApi";
 import { TICKET_LABEL } from "./TicketsPage";
 
@@ -450,6 +451,7 @@ export function PartnersPage() {
       <SignalLimitCard />
       <OsPhotosCard />
       <SlaCard />
+      <CtoLimitsCard />
       <SpeedPricesCard />
 
       <div className="g11">
