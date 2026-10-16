@@ -237,4 +237,44 @@ export interface Integrations {
   actions?: CustomerActions;
   /** Ausente = AUTOMATION_MODE=off: o chamado fica guardado no portal ("recebido") até a integração ligar. */
   tickets?: TicketService;
+  /** Ausente = CLIENT_STATUS_MODE=off: a tela do cliente mostra que o status ainda não está ligado. */
+  clientStatus?: ClientStatusService;
+}
+
+// ── Tela do cliente: semáforo e histórico de sinal (leitura, contrato v3, seção A) ──
+
+export type FibraEstado = "online" | "offline" | "loss" | "sem_energia" | "inativo" | "desabilitada" | "desconhecido";
+export type AutenticacaoEstado = "conectado" | "desconectado" | "desconhecido";
+export type ContratoEstado = "ativo" | "bloqueado" | "suspenso" | "cancelado" | "desconhecido";
+
+export interface ClientStatus {
+  login: string;
+  fibra: { estado: FibraEstado; sinalDbm: number | null; uptimeDesde: string | null; ultimaQuedaEm: string | null; atualizadoEm: string | null };
+  autenticacao: { estado: AutenticacaoEstado; ip: string | null; desde: string | null; atualizadoEm: string | null };
+  contrato: { estado: ContratoEstado; desde: string | null; atualizadoEm: string | null };
+  onu: { serial: string; modelo: string | null; olt: string | null; vlan: number | null } | null;
+}
+
+export interface SignalSeries {
+  login: string;
+  dias: number;
+  pontos: { em: string; rxDbm: number }[];
+  quedas: { inicio: string; fim: string | null; tipo: "loss" | "sem_energia" | "offline" }[];
+}
+
+export interface ClientSummary {
+  login: string;
+  fibra: FibraEstado;
+  autenticacao: AutenticacaoEstado;
+  contrato: ContratoEstado;
+  fibraEm: string | null;
+  autenticacaoEm: string | null;
+}
+
+/** Leitura do estado dos clientes. Resposta de rota fora do ar vira erro (IntegrationError); login desconhecido, null. */
+export interface ClientStatusService {
+  status(login: string, partnerCode: string, opts?: { fresh?: boolean }): Promise<ClientStatus | null>;
+  signal(login: string, partnerCode: string, dias: number): Promise<SignalSeries | null>;
+  /** Até 200 logins, sempre do snapshot. */
+  summary(logins: string[], partnerCode: string): Promise<ClientSummary[]>;
 }

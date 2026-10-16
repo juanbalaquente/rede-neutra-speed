@@ -27,6 +27,8 @@ const envSchema = z.object({
    * off = desligadas (padrão); mock = Wiki de mentira; wiki = rotas /proxy/redeneutra/v3, só com validação do Juan.
    */
   AUTOMATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /** Status do cliente (semáforo e sinal de 30 dias), só leitura. off = desligado (padrão); mock; wiki = rotas /proxy/redeneutra/v3 com WIKI_API_KEY. */
+  CLIENT_STATUS_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
   /** Chave de escrita da Wiki (X-RedeNeutra-Write-Key), separada da de leitura. */
   WIKI_WRITE_KEY: z.string().optional(),
   /** Pasta das fotos de campo. Em produção é um volume do Docker (entra no backup). */

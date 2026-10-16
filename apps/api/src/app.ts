@@ -13,6 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
+import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
 import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
 import { TICKET_TYPES } from "./db/schema.js";
 import { getOperation, listOperations, operationView, refreshOperation, retryOperation, startOperation } from "./services/customer-ops.js";
@@ -510,6 +511,21 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     if (!integrations.actions) throw new AppError(503, "automacao_desligada", "As automações do cliente não estão habilitadas.");
     return integrations.actions;
   };
+
+  // ── Estado do cliente na rede: semáforo e sinal (leitura, contrato v3 seção A) ──
+  app.get("/installations/:id/status", requireUser, async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const fresh = c.req.query("fresh") === "true";
+    return c.json(await getClientStatus(db, integrations.clientStatus, c.get("user"), id, { fresh }));
+  });
+
+  app.get("/installations/:id/signal", requireUser, async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const days = Number(c.req.query("days") ?? 30);
+    return c.json(await getClientSignal(db, integrations.clientStatus, c.get("user"), id, days));
+  });
+
+  app.get("/dashboard/rede", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json(await getFleetStatus(db, integrations.clientStatus, c.get("user"))));
 
   app.get("/installations/:id/operations", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));
