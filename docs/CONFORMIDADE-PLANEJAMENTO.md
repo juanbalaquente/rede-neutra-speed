@@ -56,7 +56,7 @@ Legenda: **Feito** = funciona e está testado · **Parcial** = existe, mas falta
 
 | Fase | Itens | Pronto |
 |---|---|---|
-| **1. MVP** | login e perfis, viabilidade, reserva, contrato no Voalle, liberação da ONU, tela do cliente, painel admin | 6 de 7 (falta o **contrato no Voalle**, **Externo**; a tela do cliente está pronta contra mock, esperando a Wiki) |
+| **1. MVP** | login e perfis, viabilidade, reserva, contrato no Voalle, liberação da ONU, tela do cliente, painel admin | 7 de 7 no portal; **contrato no Voalle**, liberação da ONU e tela do cliente rodam contra mock e esperam as rotas da Wiki (**Externo**) |
 | **2. Operação** | calendário, fotos e O.S., histórico de sinal, bloqueio/desbloqueio/reinício, chamados, preços e dashboard | **calendário, fotos e O.S., preços e dashboard feitos**; faltam histórico de sinal, bloqueio/desbloqueio/reinício e chamados (**Externos**) |
 | **3. Gestão** | financeiro, relatórios, WhatsApp, limites por CTO, auditoria consultável | financeiro e planilhas, auditoria consultável e limite de ocupação por parceiro; faltam WhatsApp, limite por CTO e PDF |
 

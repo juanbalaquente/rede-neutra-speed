@@ -15,6 +15,10 @@ Escrito em 16 out 2026. O portal (https://redeneutra.spdlink.com.br) já está n
 - Erros no formato `{"error": "<codigo>"}`, mensagens curtas em português, nunca com segredo ou saída crua de equipamento.
 - **O portal nunca liga escrita sozinho**: cada modo (`ACTIVATION_MODE`, `AUTOMATION_MODE`) fica desligado até a gente validar com vocês numa ONU/contrato de teste da própria Speed.
 
+## Atualização (16 out 2026): criação de contrato
+
+A Wiki propôs `POST /v3/contratos` (contrato v3, seção H) e o portal já tem o lado dele pronto contra mock (`CONTRACT_MODE`): endereço estruturado, acompanhamento das etapas `contrato_criado`, `conexao_ajustada`, `endereco_gravado` e uso do login devolvido na ativação. Pontos para fechar: (1) o **cancelamento do contrato não aprovado** quando a reserva é cancelada antes da ativação: qual rota o portal chama (por exemplo `POST /v3/contratos/{operacaoId}/cancelamento`)? (2) confirmar que `resultado.login` sempre vem como `<contrato>-<CÓDIGO>` (o portal recusa qualquer outro formato); (3) `valorMensal` é o preço que a Speed cobra do parceiro pelo plano, não o preço ao assinante.
+
 ## Prioridade 1: destrava o painel e os alarmes (leitura)
 
 1. **PPPoE no snapshot do NE40 para a rede neutra.** Vocês já responderam que vão incluir os logins no poller (pergunta 1). Precisamos de: `autenticacao.estado` (`conectado`/`desconectado`), `ip` e `desde` por login, e o `POST /clientes/status` servindo isso do snapshot. Qualquer intervalo até 15 min serve. Quando entrar, a tela do cliente deixa de mostrar "leitura do PPPoE ainda não disponível" e o painel mostra fibra online e PPPoE conectado lado a lado.
