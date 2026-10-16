@@ -558,7 +558,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
       }),
     );
     const created = await createTicket(db, ticketEnv(), c.get("user"), body, { ip: clientIp(c) });
-    return c.json({ ticket: await getTicket(db, ticketEnv(), c.get("user"), created.id) }, 201);
+    return c.json({ ticket: await getTicket(db, ticketEnv(), c.get("user"), created.id, false) }, 201);
   });
 
   app.get("/tickets/:id", requireUser, async (c) => {

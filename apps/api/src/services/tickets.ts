@@ -198,9 +198,9 @@ export async function listTickets(db: Db, user: SessionUser) {
 }
 
 /** Chamado com o histórico. Enquanto está aberto, pergunta à Wiki: o estado e as mensagens da Infra entram aqui. */
-export async function getTicket(db: Db, env: TicketEnv, user: SessionUser, id: string) {
+export async function getTicket(db: Db, env: TicketEnv, user: SessionUser, id: string, refresh = true) {
   let t = await ownTicket(db, user, id);
-  if (env.svc && t.wikiTicketId && !FINAL_STATES.includes(t.state) && user.role !== "admin_speed") {
+  if (refresh && env.svc && t.wikiTicketId && !FINAL_STATES.includes(t.state) && user.role !== "admin_speed") {
     const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, t.partnerId));
     try {
       const snap = await env.svc.get(t.wikiTicketId, partner?.code ?? "");
@@ -247,7 +247,7 @@ export async function addTicketMessage(db: Db, env: TicketEnv, user: SessionUser
       console.error("[chamado] mensagem não chegou à Wiki:", e instanceof Error ? e.message : e);
     }
   }
-  return getTicket(db, env, user, id);
+  return getTicket(db, env, user, id, false);
 }
 
 /** Reenvia à Wiki um chamado que ficou "recebido". */
@@ -256,7 +256,7 @@ export async function retryTicket(db: Db, env: TicketEnv, user: SessionUser, id:
   if (t.state !== "recebido") throw new AppError(409, "sem_o_que_reenviar", "Esse chamado já foi entregue.");
   if (!env.svc) throw new AppError(503, "automacao_desligada", "A integração com a Infra ainda não está habilitada. O chamado continua guardado.");
   await deliver(db, env, t);
-  return getTicket(db, env, user, id);
+  return getTicket(db, env, user, id, false);
 }
 
 /** Chamado automático da trava de sinal, com as duas medições e a justificativa. Nunca derruba a decisão do técnico. */
