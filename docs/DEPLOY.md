@@ -92,6 +92,18 @@ cd /opt/rede-neutra && sh deploy/update.sh
 
 Faz o backup, o `git pull --ff-only`, reconstrói os containers e confere a saúde da API. Antes de uma atualização grande, tire um snapshot da VM no ESXi.
 
+## Go-live (antes de entrar parceiro real)
+
+Durante os testes o servidor pode estar com `MFA_REQUIRED=false`, `INTEGRATIONS_MODE` em `mock` ou conta de teste ativa. Antes do piloto:
+
+1. `MFA_REQUIRED=true` no `.env` e recriar a API (`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build api`). Conferir com `printenv MFA_REQUIRED` dentro do container. Supervisor e admin configuram o 2FA no primeiro acesso: guardar os códigos de recuperação.
+2. `INTEGRATIONS_MODE=wiki` com `WIKI_BASE_URL` e `WIKI_API_KEY`; `/api/health` deve devolver `"integrations":"wiki"` e `ok:true`.
+3. Conta de teste (`testejuan@teste.com`): trocar a senha ou desativar, e cancelar as reservas que ela deixou.
+4. `ACTIVATION_MODE`, `AUTOMATION_MODE` e `CLIENT_STATUS_MODE` só mudam de `off` quando a Wiki entregar as rotas correspondentes e o Juan validar numa ONU de teste.
+5. Parceiro real: cadastrar com o código (ex.: JHV), siglas do piloto (R1, ITA, FAT), limites e o primeiro supervisor; conferir o SLA dos chamados e os preços por plano.
+6. Backup restaurável: rodar `deploy/backup-db.sh` e conferir o arquivo e o espelho das fotos.
+7. Se o `update.sh` falhar com `cannot assign requested address` (IPv6 do Docker Hub), é o IPv6 do servidor: ver `/etc/sysctl.d/99-no-ipv6.conf`. Sem mudança de código, `up -d --no-build api` basta para aplicar só o `.env`.
+
 ## 7. Depois (modelo da Wiki, quando valer a pena)
 
 A Wiki entrega por GitHub Actions: o runner empacota o código, envia por `scp` e roda o build por SSH, com `SERVER_HOST`, `SERVER_USER` e `SERVER_SSH_KEY` nos *Secrets*. Para o portal isso exige a porta 22 aberta na borda (de preferência só para as faixas `actions` de `api.github.com/meta`, que mudam com o tempo), uma chave SSH **nova e exclusiva** e o `main` atualizado. Até lá, `deploy/update.sh` basta.

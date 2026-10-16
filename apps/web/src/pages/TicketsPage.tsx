@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Installation, type User } from "../api";
+import { api, photoUrl, type Installation, type Photo, type User } from "../api";
+import { PHOTO_LABEL } from "../photoKinds";
 import { ticketApi, type Ticket, type TicketDetail, type TicketState, type TicketType } from "../ticketsApi";
 import { useDraft } from "../ui/useDraft";
 import { useToast } from "../ui/Toast";
@@ -50,6 +51,16 @@ function NewTicket({ onCreated, onCancel }: { onCreated: (t: TicketDetail) => vo
   const [form, set, clear] = useDraft("chamado-novo", { type: "cto_com_problema", description: "", reservationId: "", cto: "", signal: "" });
   const [clients, setClients] = useState<Installation[]>([]);
   const [busy, setBusy] = useState(false);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  // As fotos oferecidas são as do cliente escolhido; trocar de cliente zera a seleção.
+  useEffect(() => {
+    setPicked([]);
+    if (!form.reservationId) { setPhotos([]); return; }
+    let alive = true;
+    api.photos(form.reservationId).then((r) => alive && setPhotos(r.photos)).catch(() => alive && setPhotos([]));
+    return () => { alive = false; };
+  }, [form.reservationId]);
   useEffect(() => {
     api.installations().then((r) => setClients(r.installations.filter((i) => i.customerStatus !== "cancelado"))).catch(() => setClients([]));
   }, []);
@@ -68,6 +79,7 @@ function NewTicket({ onCreated, onCancel }: { onCreated: (t: TicketDetail) => vo
         reservationId: form.reservationId || null,
         ctoId: !form.reservationId && form.cto.trim() ? form.cto.trim() : null,
         signalDbm: signal,
+        photoIds: picked,
       });
       clear();
       say(ticket.undelivered ? "Chamado guardado. A entrega à Infra será refeita." : "Chamado aberto");
@@ -109,6 +121,26 @@ function NewTicket({ onCreated, onCancel }: { onCreated: (t: TicketDetail) => vo
           <input value={form.signal} onChange={(e) => set({ signal: e.target.value })} inputMode="decimal" placeholder="-21,5" />
           {!signalOk && <small className="error">Entre -40 e 0.</small>}
         </label>
+        {photos.length > 0 && (
+          <fieldset className="fld" style={{ border: 0, padding: 0, margin: 0 }}>
+            <span>Fotos para a Infra (até 6)</span>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {photos.map((p) => {
+                const on = picked.includes(p.id);
+                const full = !on && picked.length >= 6;
+                return (
+                  <label key={p.id} style={{ display: "grid", gap: 4, width: 96, opacity: full ? 0.5 : 1 }}>
+                    <img src={photoUrl(p.id)} alt={PHOTO_LABEL[p.kind] ?? p.kind} style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 8, outline: on ? "2px solid var(--data)" : "1px solid var(--line2)" }} />
+                    <span style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12 }}>
+                      <input type="checkbox" checked={on} disabled={full} onChange={() => setPicked((cur) => (on ? cur.filter((x) => x !== p.id) : [...cur, p.id]))} style={{ width: "auto" }} />
+                      {PHOTO_LABEL[p.kind] ?? p.kind}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        )}
         <label className="fld">
           <span>O que está acontecendo</span>
           <textarea value={form.description} onChange={(e) => set({ description: e.target.value })} rows={4} maxLength={2000} style={{ ...inputStyle, font: "inherit", resize: "vertical" }} />

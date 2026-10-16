@@ -39,7 +39,7 @@ type SlaMap = Record<TicketType, number>;
 export const ticketApi = {
   list: () => request<{ tickets: Ticket[] }>("GET", "/tickets"),
   get: (id: string) => request<{ ticket: TicketDetail }>("GET", `/tickets/${id}`),
-  create: (input: { type: TicketType; description: string; reservationId?: string | null; ctoId?: string | null; signalDbm?: number | null }) =>
+  create: (input: { type: TicketType; description: string; reservationId?: string | null; ctoId?: string | null; signalDbm?: number | null; photoIds?: string[] }) =>
     request<{ ticket: TicketDetail }>("POST", "/tickets", input),
   message: (id: string, text: string) => request<{ ticket: TicketDetail }>("POST", `/tickets/${id}/messages`, { text }),
   retry: (id: string) => request<{ ticket: TicketDetail }>("POST", `/tickets/${id}/retry`),
