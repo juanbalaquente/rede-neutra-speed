@@ -62,12 +62,24 @@ export interface FinanceClient {
   priceCents: number | null;
   costCents: number;
   activatedAt: Date;
+  /** CTO onde a porta está e situação do contrato do assinante (ativo | bloqueado). */
+  ctoName: string;
+  customerStatus: string;
   /** null = ainda não marcado neste mês. */
   paid: boolean | null;
 }
 
+/** Filtros dos relatórios (planejamento: período, plano, CTO e status). O período é o mês. */
+export interface FinanceFilters {
+  planId?: string;
+  /** Id ou parte do nome da CTO. */
+  cto?: string;
+  /** ativo | bloqueado (contrato) ou pago | em_aberto (pagamento do mês). */
+  status?: "ativo" | "bloqueado" | "pago" | "em_aberto";
+}
+
 /** Porta ativa no mês: reserva convertida com a O.S. fechada até o fim do mês. */
-export async function getFinance(db: Db, user: SessionUser, month: string) {
+export async function getFinance(db: Db, user: SessionUser, month: string, filters: FinanceFilters = {}) {
   const partnerId = requirePartner(user);
   const { end } = monthBounds(month);
   const rows = await db
@@ -77,7 +89,12 @@ export async function getFinance(db: Db, user: SessionUser, month: string) {
     .leftJoin(plans, eq(plans.id, portReservations.planId))
     .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.status, "convertida"), isNotNull(portReservations.osClosedAt)));
   const NO_PLAN = { id: "sem-plano", name: "Sem plano", speedMbps: 0, speedPriceCents: 0 };
-  const active = rows.filter((x) => x.r.osClosedAt! < end).map((x) => ({ r: x.r, plan: x.plan ?? NO_PLAN }));
+  const cto = filters.cto?.trim().toLowerCase();
+  const active = rows
+    .filter((x) => x.r.osClosedAt! < end)
+    .map((x) => ({ r: x.r, plan: x.plan ?? NO_PLAN }))
+    .filter(({ r, plan }) => (!filters.planId || plan.id === filters.planId) && (!cto || r.ctoId.toLowerCase() === cto || r.ctoName.toLowerCase().includes(cto)))
+    .filter(({ r }) => filters.status !== "ativo" && filters.status !== "bloqueado" ? true : r.customerStatus === filters.status);
   const ids = active.map((x) => x.r.id);
   const priceRows = await db.select().from(partnerPrices).where(eq(partnerPrices.partnerId, partnerId));
   const price = new Map(priceRows.map((p) => [p.planId, p.priceCents]));
@@ -94,12 +111,16 @@ export async function getFinance(db: Db, user: SessionUser, month: string) {
       priceCents: price.get(plan.id) ?? null,
       costCents: plan.speedPriceCents,
       activatedAt: r.osClosedAt!,
+      ctoName: r.ctoName,
+      customerStatus: r.customerStatus,
       paid: paid.get(r.id) ?? null,
     }))
+    .filter((c) => (filters.status === "pago" ? c.paid === true : filters.status === "em_aberto" ? c.paid !== true : true))
     .sort((a, b) => a.activatedAt.getTime() - b.activatedAt.getTime());
 
   const byPlan = new Map<string, { planId: string; plan: string; speedMbps: number; qtd: number; custoCents: number; faturamentoCents: number }>();
-  for (const { r, plan } of active) {
+  const kept = new Set(clients.map((c) => c.id));
+  for (const { r, plan } of active.filter((x) => kept.has(x.r.id))) {
     const row = byPlan.get(plan.id) ?? { planId: plan.id, plan: plan.name, speedMbps: plan.speedMbps, qtd: 0, custoCents: 0, faturamentoCents: 0 };
     row.qtd += 1;
     row.custoCents += plan.speedPriceCents;
@@ -161,8 +182,8 @@ const csv = (header: string[], rows: unknown[][]) => "﻿" + [header, ...rows].m
 
 export function clientesCsv(f: Awaited<ReturnType<typeof getFinance>>): string {
   return csv(
-    ["Contrato", "Apelido", "Plano", "Ativado em", "Preço de venda (R$)", "Custo Speed (R$)", "Pago no mês"],
-    f.clientes.map((c) => [c.contract, c.nickname, c.plan, c.activatedAt.toISOString().slice(0, 10), brl(c.priceCents), brl(c.costCents), c.paid === null ? "não marcado" : c.paid ? "sim" : "não"]),
+    ["Contrato", "Apelido", "Plano", "CTO", "Situação", "Ativado em", "Preço de venda (R$)", "Custo Speed (R$)", "Pago no mês"],
+    f.clientes.map((c) => [c.contract, c.nickname, c.plan, c.ctoName, c.customerStatus, c.activatedAt.toISOString().slice(0, 10), brl(c.priceCents), brl(c.costCents), c.paid === null ? "não marcado" : c.paid ? "sim" : "não"]),
   );
 }
 

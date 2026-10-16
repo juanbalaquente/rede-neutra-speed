@@ -184,7 +184,7 @@ export const api = {
   dashboard: () => request<Dashboard>("GET", "/dashboard"),
   prices: () => request<{ prices: PlanPrice[] }>("GET", "/prices"),
   setPrice: (planId: string, priceCents: number) => request<{ prices: PlanPrice[] }>("PUT", "/prices", { planId, priceCents }),
-  finance: (month: string) => request<Finance>("GET", `/finance?month=${month}`),
+  finance: (month: string, filters: FinanceFilters = {}) => request<Finance>("GET", `/finance?month=${month}${financeQuery(filters)}`),
   markPayment: (reservationId: string, month: string, paid: boolean) => request<{ ok: true }>("PUT", "/finance/payments", { reservationId, month, paid }),
   adminPlans: () => request<{ plans: { id: string; name: string; speedMbps: number; speedPriceCents: number; active: boolean }[] }>("GET", "/admin/plans"),
   setSpeedPrice: (id: string, speedPriceCents: number) => request<{ plans: { id: string; name: string; speedMbps: number; speedPriceCents: number; active: boolean }[] }>("PATCH", `/admin/plans/${id}`, { speedPriceCents }),
@@ -433,8 +433,23 @@ export interface FinanceClient {
   priceCents: number | null;
   costCents: number;
   activatedAt: string;
+  ctoName: string;
+  customerStatus: string;
   paid: boolean | null;
 }
+
+export interface FinanceFilters {
+  planId?: string;
+  cto?: string;
+  status?: "ativo" | "bloqueado" | "pago" | "em_aberto";
+}
+
+/** "&planId=…&cto=…&status=…" só com o que foi preenchido. */
+export const financeQuery = (f: FinanceFilters): string =>
+  Object.entries(f)
+    .filter(([, v]) => v !== undefined && v !== "")
+    .map(([k, v]) => `&${k}=${encodeURIComponent(String(v))}`)
+    .join("");
 
 export interface Finance {
   month: string;

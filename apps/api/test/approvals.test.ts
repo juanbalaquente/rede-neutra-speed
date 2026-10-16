@@ -100,3 +100,55 @@ describe("aprovação da Speed", () => {
     expect((await (await ctx.call(adm, "GET", "/admin/settings/aprovacoes")).json()).types).toEqual(["reinicio"]);
   });
 });
+
+describe("operações em lote", () => {
+  async function second(partnerCookie: string, contract: string) {
+    // Mais um cliente instalado do mesmo parceiro.
+    await ctx.call(partnerCookie, "POST", "/viability", { address: ADDRESS });
+    const { reservation } = await (await ctx.call(partnerCookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: ADDRESS })).json();
+    await ctx.setCliente(partnerCookie, reservation.id);
+    await ctx.upload(partnerCookie, reservation.id, { kind: "medicao" });
+    const { activation } = await (await ctx.call(partnerCookie, "POST", "/activations", { reservationId: reservation.id, serial: "ZTEGC0000001", contrato: contract, sinalCtoDbm: -20 })).json();
+    for (let i = 0; i < 5; i++) await ctx.call(partnerCookie, "GET", `/activations/${activation.id}`);
+    for (const kind of OS_REQUIRED_KINDS.filter((k) => k !== "medicao")) await ctx.upload(partnerCookie, reservation.id, { kind });
+    await ctx.call(partnerCookie, "POST", `/reservations/${reservation.id}/os/close`, { sinalFinalDbm: -21, modeloOnu: "F670L", serialOnu: "ZTEGC0000001" });
+    return reservation.id as string;
+  }
+  const batch = (cookie: string, body: object) => ctx.call(cookie, "POST", "/operations/batch", body);
+
+  it("bloqueia vários de uma vez, pula quem não pode e não deixa o lote cair", async () => {
+    const { sup, id: a } = await installedClient();
+    const b = await second(sup, "10002");
+    const ghost = crypto.randomUUID();
+    await startOp(sup, b, { type: "bloqueio", reason: "já bloqueado antes" });
+    const res = await batch(sup, { type: "bloqueio", reservationIds: [a, b, ghost], reason: "inadimplência" });
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body).toMatchObject({ feitos: 1, pulados: 2 });
+    const by = Object.fromEntries(body.results.map((r: { reservationId: string }) => [r.reservationId, r]));
+    expect(by[a]).toMatchObject({ ok: true, state: "recebida" });
+    expect(by[b].ok).toBe(false); // já tem bloqueio em andamento
+    expect(by[ghost]).toMatchObject({ ok: false, error: "Cliente não encontrado." });
+    expect((await ctx.db.select().from(auditLog)).filter((l) => l.action === "cliente.lote")).toHaveLength(1);
+  });
+
+  it("não aceita cancelamento em lote, passa de 50 ou lista vazia; respeita a aprovação da Speed", async () => {
+    const { sup, id } = await installedClient();
+    expect((await batch(sup, { type: "cancelamento", reservationIds: [id], reason: "x" })).status).toBe(400);
+    expect((await batch(sup, { type: "reinicio", reservationIds: [] })).status).toBe(400);
+    expect((await batch(sup, { type: "reinicio", reservationIds: Array.from({ length: 51 }, () => crypto.randomUUID()) })).status).toBe(400);
+    const adm = await ctx.login("admin@speed.test");
+    await ctx.call(adm, "PUT", "/admin/settings/aprovacoes", { types: ["reinicio"] });
+    const res = await (await batch(sup, { type: "reinicio", reservationIds: [id] })).json();
+    expect(res.results[0]).toMatchObject({ ok: true, state: "aguardando_aprovacao" });
+  });
+
+  it("não alcança cliente de outro parceiro", async () => {
+    const { id } = await installedClient();
+    const other = await ctx.createPartner("Outro", "22222222000122", { code: "OUT" });
+    const cookie = await ctx.login(other.supervisor);
+    const res = await (await batch(cookie, { type: "bloqueio", reservationIds: [id], reason: "x" })).json();
+    expect(res).toMatchObject({ feitos: 0, pulados: 1 });
+    expect(res.results[0].error).toBe("Cliente não encontrado.");
+  });
+});

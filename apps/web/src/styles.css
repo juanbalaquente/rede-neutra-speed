@@ -488,3 +488,15 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .regmap-svg circle { cursor: pointer; transition: r 0.1s; outline: none; }
 .regmap-svg circle:focus-visible { stroke: var(--ink); stroke-width: 2; }
 .regmap-tip { position: absolute; left: 10px; bottom: 10px; background: var(--surf); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+
+/* Impressão e PDF dos relatórios (Ctrl P / "Salvar como PDF"): só o conteúdo, sem menu, barra nem botões */
+@media print {
+  .side, .top, .no-print, .toast, .banner, nav { display: none !important; }
+  .app { display: block; }
+  body, .main, .page { background: #fff !important; color: #000 !important; }
+  .card { box-shadow: none !important; border: 1px solid #ccc !important; break-inside: avoid; }
+  .kpis { break-inside: avoid; }
+  .fade-page { animation: none !important; }
+  a[href]::after { content: none !important; }
+  table.hist { font-size: 11px; }
+}

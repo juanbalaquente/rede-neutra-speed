@@ -14,7 +14,7 @@ import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
 import { getContract, retryContract, startContract } from "./services/contracts.js";
-import { approveOperation, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
+import { approveOperation, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
 import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
@@ -524,7 +524,20 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     return c.json({ prices: await getPrices(db, c.get("user")) });
   });
 
-  app.get("/finance", requireUser, requireRole("supervisor"), async (c) => c.json(await getFinance(db, c.get("user"), monthQuery(c))));
+  /** Filtros dos relatórios: plano, CTO (id ou parte do nome) e status (contrato ou pagamento). */
+  const financeFilters = (c: Context) => {
+    const parsed = z
+      .object({
+        planId: z.string().uuid().optional(),
+        cto: z.string().trim().min(1).max(60).optional(),
+        status: z.enum(["ativo", "bloqueado", "pago", "em_aberto"]).optional(),
+      })
+      .safeParse({ planId: c.req.query("planId") || undefined, cto: c.req.query("cto") || undefined, status: c.req.query("status") || undefined });
+    if (!parsed.success) throw new AppError(400, "dados_invalidos", "Filtro inválido: planId, cto ou status (ativo, bloqueado, pago, em_aberto).");
+    return parsed.data;
+  };
+
+  app.get("/finance", requireUser, requireRole("supervisor"), async (c) => c.json(await getFinance(db, c.get("user"), monthQuery(c), financeFilters(c))));
 
   app.put("/finance/payments", requireUser, requireRole("supervisor"), async (c) => {
     const body = await parseBody(c, z.object({ reservationId: z.string().uuid(), month: z.string().regex(MONTH_RE), paid: z.boolean() }));
@@ -537,7 +550,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const month = monthQuery(c);
     const type = z.enum(["clientes", "fechamento"]).safeParse(c.req.query("type") || "fechamento");
     if (!type.success) throw new AppError(400, "dados_invalidos", "type: clientes ou fechamento.");
-    const f = await getFinance(db, c.get("user"), month);
+    const f = await getFinance(db, c.get("user"), month, financeFilters(c));
     c.header("Content-Type", "text/csv; charset=utf-8");
     c.header("Content-Disposition", `attachment; filename="${type.data}-${month}.csv"`);
     return c.body(type.data === "clientes" ? clientesCsv(f) : fechamentoCsv(f));
@@ -566,6 +579,21 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
   });
 
   app.get("/dashboard/rede", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json(await getFleetStatus(db, integrations.clientStatus, c.get("user"))));
+
+  /** Bloquear, desbloquear ou reiniciar vários clientes de uma vez (até 50). Cancelamento não entra em lote. */
+  app.post("/operations/batch", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    if (!integrations.actions) throw new AppError(503, "automacao_desligada", "As automações do cliente ainda não estão habilitadas.");
+    const body = await parseBody(
+      c,
+      z.object({
+        type: z.enum(["bloqueio", "desbloqueio", "reinicio"]),
+        reservationIds: z.array(z.string().uuid()).min(1).max(50),
+        reason: z.string().trim().max(300).nullish(),
+      }),
+    );
+    const results = await startBatch(db, integrations.actions, c.get("user"), body, { ip: clientIp(c) });
+    return c.json({ results, feitos: results.filter((r) => r.ok).length, pulados: results.filter((r) => !r.ok).length }, 202);
+  });
 
   app.get("/installations/:id/operations", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));

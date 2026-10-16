@@ -176,3 +176,59 @@ describe("painel do parceiro", () => {
     void a;
   });
 });
+
+describe("filtros dos relatórios", () => {
+  async function setupBase() {
+    const { sup, ate } = await partner();
+    const p600 = await planByMbps(600);
+    const p1g = await planByMbps(1000);
+    await ctx.call(sup, "PUT", "/prices", { planId: p600.id, priceCents: 9990 });
+    await ctx.call(sup, "PUT", "/prices", { planId: p1g.id, priceCents: 13990 });
+    const a = await installed(ate, 600, "10001");
+    const b = await installed(ate, 600, "10002");
+    const c = await installed(ate, 1000, "10003");
+    await ctx.call(sup, "PUT", "/finance/payments", { reservationId: a, month: THIS_MONTH, paid: true });
+    return { sup, ate, p600, p1g, a, b, c };
+  }
+  const fin = async (cookie: string, query: string) => (await (await ctx.call(cookie, "GET", `/finance?month=${THIS_MONTH}${query}`)).json()) as { resumo: { portasAtivas: number; custoCents: number; faturamentoCents: number; recebidoCents: number }; porPlano: { plan: string }[]; clientes: { contract: string; ctoName: string }[] };
+
+  it("filtra por plano, e o resumo e o fechamento seguem o filtro", async () => {
+    const { sup, p1g } = await setupBase();
+    expect((await fin(sup, "")).resumo.portasAtivas).toBe(3);
+    const only = await fin(sup, `&planId=${p1g.id}`);
+    expect(only.resumo).toMatchObject({ portasAtivas: 1, faturamentoCents: 13990 });
+    expect(only.porPlano).toHaveLength(1);
+    expect(only.clientes.map((c) => c.contract)).toEqual(["10003"]);
+  });
+
+  it("filtra por CTO (id ou parte do nome) e por status de pagamento", async () => {
+    const { sup } = await setupBase();
+    expect((await fin(sup, "&cto=TESTE-01")).resumo.portasAtivas).toBe(3);
+    expect((await fin(sup, "&cto=cto-teste-01")).resumo.portasAtivas).toBe(3); // sem diferenciar maiúsculas
+    expect((await fin(sup, "&cto=NAO-EXISTE")).resumo.portasAtivas).toBe(0);
+    const paid = await fin(sup, "&status=pago");
+    expect(paid.clientes.map((c) => c.contract)).toEqual(["10001"]);
+    expect(paid.resumo.recebidoCents).toBe(9990);
+    expect((await fin(sup, "&status=em_aberto")).clientes.map((c) => c.contract).sort()).toEqual(["10002", "10003"]);
+  });
+
+  it("filtra por situação do contrato (bloqueado) e valida os valores", async () => {
+    const { sup, b } = await setupBase();
+    const { portReservations } = await import("../src/db/schema.js");
+    await ctx.db.update(portReservations).set({ customerStatus: "bloqueado" }).where(eq(portReservations.id, b));
+    expect((await fin(sup, "&status=bloqueado")).clientes.map((c) => c.contract)).toEqual(["10002"]);
+    expect((await fin(sup, "&status=ativo")).resumo.portasAtivas).toBe(2);
+    expect((await ctx.call(sup, "GET", `/finance?month=${THIS_MONTH}&status=qualquer`)).status).toBe(400);
+    expect((await ctx.call(sup, "GET", `/finance?month=${THIS_MONTH}&planId=nao-e-uuid`)).status).toBe(400);
+  });
+
+  it("a planilha respeita os filtros e traz CTO e situação", async () => {
+    const { sup, p600 } = await setupBase();
+    const res = await ctx.call(sup, "GET", `/finance/export?month=${THIS_MONTH}&type=clientes&planId=${p600.id}`);
+    const text = new TextDecoder().decode(await res.arrayBuffer());
+    expect(text).toContain("CTO;Situação");
+    expect(text).toContain("10001");
+    expect(text).toContain("CTO-TESTE-01");
+    expect(text).not.toContain("10003");
+  });
+});

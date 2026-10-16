@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Finance, type PlanPrice } from "../api";
+import { financeQuery, api, type Finance, type FinanceFilters, type PlanPrice } from "../api";
 import { brl, parseBrl } from "../money";
 import { useToast } from "../ui/Toast";
 
@@ -60,10 +60,12 @@ export function FinancePage() {
   const [month, setMonth] = useState(thisMonth());
   const [f, setF] = useState<Finance | null>(null);
   const [prices, setPrices] = useState<PlanPrice[] | null>(null);
+  const [filters, setFilters] = useState<FinanceFilters>({});
+  const [ctoText, setCtoText] = useState("");
 
   const load = useCallback(() => {
-    api.finance(month).then(setF).catch((e) => { say(errMsg(e, "Falha ao carregar o financeiro."), "bad"); setF(null); });
-  }, [month, say]);
+    api.finance(month, filters).then(setF).catch((e) => { say(errMsg(e, "Falha ao carregar o financeiro."), "bad"); setF(null); });
+  }, [month, filters, say]);
   useEffect(() => {
     setF(null);
     load();
@@ -89,12 +91,44 @@ export function FinancePage() {
           <h1>Financeiro</h1>
           <p>Quanto você paga à Speed, quanto fatura dos seus clientes e o que já recebeu.</p>
         </div>
-        <div className="ag-nav">
+        <div className="ag-nav no-print">
           <button className="btn sec sm" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Mês anterior">‹</button>
           <b className="ag-title" style={{ minWidth: 130, textAlign: "center" }}>{monthTitle(month)}</b>
           <button className="btn sec sm" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Próximo mês" disabled={month >= thisMonth()}>›</button>
         </div>
       </div>
+
+      <div className="card no-print">
+        <div className="summary" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label className="fld" style={{ minWidth: 170 }}>
+            <span>Plano</span>
+            <select value={filters.planId ?? ""} onChange={(e) => setFilters({ ...filters, planId: e.target.value || undefined })}>
+              <option value="">Todos</option>
+              {(prices ?? []).map((p) => <option key={p.planId} value={p.planId}>{p.name}</option>)}
+            </select>
+          </label>
+          <label className="fld" style={{ minWidth: 150 }}>
+            <span>Situação</span>
+            <select value={filters.status ?? ""} onChange={(e) => setFilters({ ...filters, status: (e.target.value || undefined) as FinanceFilters["status"] })}>
+              <option value="">Todas</option>
+              <option value="ativo">Contrato ativo</option>
+              <option value="bloqueado">Contrato bloqueado</option>
+              <option value="pago">Pago no mês</option>
+              <option value="em_aberto">Em aberto no mês</option>
+            </select>
+          </label>
+          <label className="fld" style={{ width: 170 }}>
+            <span>CTO</span>
+            <input value={ctoText} onChange={(e) => setCtoText(e.target.value)} onBlur={() => setFilters({ ...filters, cto: ctoText.trim() || undefined })} onKeyDown={(e) => { if (e.key === "Enter") setFilters({ ...filters, cto: ctoText.trim() || undefined }); }} placeholder="nome ou id" />
+          </label>
+          {(filters.planId || filters.status || filters.cto) && <button className="linkbtn" onClick={() => { setFilters({}); setCtoText(""); }}>Limpar filtros</button>}
+          <button className="btn sec sm" style={{ marginLeft: "auto" }} onClick={() => window.print()}>Imprimir ou salvar em PDF</button>
+        </div>
+      </div>
+
+      {(filters.planId || filters.status || filters.cto) && (
+        <p className="note">Relatório filtrado: {[filters.planId ? `plano ${prices?.find((p) => p.planId === filters.planId)?.name ?? ""}` : null, filters.status ? `situação ${filters.status.replace("_", " ")}` : null, filters.cto ? `CTO "${filters.cto}"` : null].filter(Boolean).join(" · ")}. Os totais e as planilhas seguem o filtro.</p>
+      )}
 
       {prices && prices.some((p) => p.salePriceCents === null) && (
         <p className="note">Cadastre o preço de venda de cada plano abaixo. Sem ele, o faturamento e o lucro ficam incompletos.</p>
@@ -151,8 +185,8 @@ export function FinancePage() {
         <div className="ch">
           <div><h3>Clientes e pagamento</h3><small>marque quem pagou em {monthTitle(month).toLowerCase()}</small></div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <a className="btn sec sm" href={`/api/finance/export?month=${month}&type=fechamento`}>Fechamento (planilha)</a>
-            <a className="btn sec sm" href={`/api/finance/export?month=${month}&type=clientes`}>Base de clientes (planilha)</a>
+            <a className="btn sec sm no-print" href={`/api/finance/export?month=${month}&type=fechamento${financeQuery(filters)}`}>Fechamento (planilha)</a>
+            <a className="btn sec sm no-print" href={`/api/finance/export?month=${month}&type=clientes${financeQuery(filters)}`}>Base de clientes (planilha)</a>
           </div>
         </div>
         {f === null ? (

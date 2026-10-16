@@ -2,6 +2,7 @@ import { RouteLink } from "../ui/RouteLink";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, photoUrl, type Installation, type InstallationDetail, type Photo, type User } from "../api";
 import { PHOTO_KINDS, PHOTO_LABEL } from "../photoKinds";
+import { BatchBar } from "../ui/BatchBar";
 import { ClientStatusPanel } from "../ui/ClientStatusPanel";
 import { CustomerActionsPanel } from "../ui/CustomerActionsPanel";
 import { PhotoSlots } from "../ui/PhotoSlots";
@@ -217,6 +218,7 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
   const [list, setList] = useState<Installation[] | null>(null);
   const [selected, setSelected] = useState<string | null>(initialId ?? null);
   const [filter, setFilter] = useState<Filter>("todas");
+  const [picked, setPicked] = useState<string[]>([]);
   const isAdmin = user.role === "admin_speed";
 
   const load = useCallback(() => {
@@ -235,6 +237,8 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
     }
   }, [list, filter]);
 
+  // Só cliente instalado e não cancelado entra em ação em lote (até 50 por vez).
+  const batchable = shown.filter((i) => i.osClosedAt && i.customerStatus !== "cancelado");
   const FILTERS: [Filter, string][] = [["todas", "Todas"], ["andamento", "Em andamento"], ["os", "O.S. pendente"], ["concluidas", "Concluídas"], ["canceladas", "Canceladas"]];
 
   return (
@@ -251,6 +255,8 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
         ))}
       </div>
 
+      {!isAdmin && <BatchBar selected={picked} all={list ?? []} onClear={() => setPicked([])} onDone={() => { setPicked([]); load(); }} />}
+
       <div className="card">
         {list === null ? (
           <p className="empty">Carregando…</p>
@@ -260,6 +266,17 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
           <table className="hist inst">
             <thead>
               <tr>
+                {!isAdmin && (
+                  <th style={{ width: 34 }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todos os clientes instalados desta lista"
+                      style={{ width: "auto" }}
+                      checked={batchable.length > 0 && batchable.every((i) => picked.includes(i.id))}
+                      onChange={(e) => setPicked(e.target.checked ? batchable.slice(0, 50).map((i) => i.id) : [])}
+                    />
+                  </th>
+                )}
                 <th>Contrato</th>
                 {isAdmin && <th>Parceiro</th>}
                 <th>CTO</th>
@@ -270,6 +287,19 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
             <tbody>
               {shown.map((i) => (
                 <tr key={i.id} className={i.id === selected ? "on" : ""}>
+                  {!isAdmin && (
+                    <td>
+                      {i.osClosedAt && i.customerStatus !== "cancelado" ? (
+                        <input
+                          type="checkbox"
+                          aria-label={`Selecionar ${i.contract ?? "cliente"}`}
+                          style={{ width: "auto" }}
+                          checked={picked.includes(i.id)}
+                          onChange={(e) => setPicked((cur) => (e.target.checked ? [...cur, i.id].slice(0, 50) : cur.filter((x) => x !== i.id)))}
+                        />
+                      ) : null}
+                    </td>
+                  )}
                   <td style={{ fontFamily: "var(--font)" }}>
                     <button className="rowbtn" onClick={() => setSelected(i.id)}>
                       {i.contract ?? "sem contrato"}{i.nickname ? ` · ${i.nickname}` : ""}

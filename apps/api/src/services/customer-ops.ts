@@ -260,3 +260,53 @@ export async function refuseOperation(db: Db, admin: SessionUser, id: string, re
   await recordAudit(db, { partnerId: row.partnerId, userId: admin.id, action: "cliente.operacao_recusada_pela_speed", entity: "customer_operation", entityId: row.id, ip, data: { tipo: row.type, login: row.login, motivo: reason.trim() } });
   return operationView(refused);
 }
+
+// ── Em lote (planejamento: as automações rodam "a partir da tela do cliente ou em lote") ───────────────────────
+
+export const BATCH_MAX = 50;
+export type BatchType = "bloqueio" | "desbloqueio" | "reinicio";
+
+export interface BatchResult {
+  reservationId: string;
+  ok: boolean;
+  operationId: string | null;
+  state: string | null;
+  /** Texto curto para o parceiro quando o cliente foi pulado ou falhou. */
+  error: string | null;
+}
+
+/**
+ * Bloqueia, desbloqueia ou reinicia vários clientes de uma vez. Cada cliente vira uma operação normal (com as mesmas regras,
+ * idempotência e aprovação da Speed); um que não pode ser feito é pulado com o motivo, sem barrar os outros.
+ * Cancelamento fica de fora de propósito: encerra contrato e devolve a vaga, e deve ser decidido cliente a cliente.
+ */
+export async function startBatch(
+  db: Db,
+  svc: CustomerActions,
+  user: SessionUser,
+  input: { type: BatchType; reservationIds: string[]; reason?: string | null },
+  opts: { ip?: string | null } = {},
+): Promise<BatchResult[]> {
+  const ids = [...new Set(input.reservationIds)];
+  if (ids.length === 0 || ids.length > BATCH_MAX) throw new AppError(400, "dados_invalidos", `Escolha de 1 a ${BATCH_MAX} clientes.`);
+  const results: BatchResult[] = [];
+  for (const reservationId of ids) {
+    try {
+      const op = await startOperation(db, svc, user, reservationId, { type: input.type, reason: input.reason }, { ip: opts.ip });
+      results.push({ reservationId, ok: true, operationId: op.id, state: op.state, error: null });
+    } catch (e) {
+      // Recusa de regra de negócio (já bloqueado, sem ONU, outro parceiro...) é resultado, não erro do lote.
+      if (e instanceof AppError) results.push({ reservationId, ok: false, operationId: null, state: null, error: e.status === 404 ? "Cliente não encontrado." : e.message });
+      else throw e;
+    }
+  }
+  await recordAudit(db, {
+    partnerId: user.partnerId,
+    userId: user.id,
+    action: "cliente.lote",
+    entity: "customer_operation",
+    ip: opts.ip,
+    data: { tipo: input.type, pedidos: ids.length, feitos: results.filter((r) => r.ok).length, pulados: results.filter((r) => !r.ok).length },
+  });
+  return results;
+}
