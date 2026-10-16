@@ -1,3 +1,4 @@
+import { RouteLink } from "../ui/RouteLink";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, photoUrl, type Installation, type InstallationDetail, type Photo, type User } from "../api";
 import { PHOTO_KINDS, PHOTO_LABEL } from "../photoKinds";
@@ -145,7 +146,7 @@ function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: In
   );
 }
 
-function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: () => void }) {
+function Detail({ id, user, onChanged, onOpenTicket }: { id: string; user: User; onChanged: () => void; onOpenTicket?: (installationId: string) => void }) {
   const [inst, setInst] = useState<InstallationDetail | null>(null);
   const [tick, setTick] = useState(0);
   const isPartner = user.role !== "admin_speed";
@@ -163,6 +164,10 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
         <div>
           <h3>{inst.contract ? `Contrato ${inst.contract}` : "Sem contrato ainda"}{inst.nickname ? ` · ${inst.nickname}` : ""}</h3>
           <small>{inst.ctoName} · {inst.address}{inst.partnerName ? ` · ${inst.partnerName}` : ""}</small>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+            <RouteLink to={{ lat: inst.ctoLat, lng: inst.ctoLng }} label="Rota até a CTO" />
+            <RouteLink to={{ lat: inst.lat, lng: inst.lng }} label="Rota até o cliente" />
+          </div>
         </div>
         {inst.customerStatus === "cancelado" ? <span className="badge b-mute">Cliente cancelado</span> : inst.customerStatus === "bloqueado" ? <span className="badge b-warn">Bloqueado</span> : inst.osClosedAt ? <span className="badge b-ok">O.S. fechada</span> : inst.status === "convertida" ? <span className="badge b-warn">O.S. pendente</span> : <span className="badge b-data">Reservada</span>}
       </div>
@@ -189,7 +194,7 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
           {inst.os.observacao && <p className="muted" style={{ margin: 0 }}>{inst.os.observacao}</p>}
         </div>
       )}
-      {inst.osClosedAt && inst.customerStatus !== "cancelado" && <ClientStatusPanel installationId={inst.id} />}
+      {inst.osClosedAt && inst.customerStatus !== "cancelado" && <ClientStatusPanel installationId={inst.id} onOpenTicket={isPartner ? onOpenTicket : undefined} />}
       {isPartner && inst.osClosedAt && (
         <CustomerActionsPanel installationId={inst.id} customerStatus={inst.customerStatus} user={user} onChanged={() => { load(); onChanged(); }} />
       )}
@@ -207,7 +212,7 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
 }
 
 /** Instalações: acompanhamento de cada cliente até a O.S. fechada, com as fotos de campo. */
-export function InstallationsPage({ user, initialId }: { user: User; initialId?: string | null }) {
+export function InstallationsPage({ user, initialId, onOpenTicket }: { user: User; initialId?: string | null; onOpenTicket?: (installationId: string) => void }) {
   const say = useToast();
   const [list, setList] = useState<Installation[] | null>(null);
   const [selected, setSelected] = useState<string | null>(initialId ?? null);
@@ -294,7 +299,7 @@ export function InstallationsPage({ user, initialId }: { user: User; initialId?:
         )}
       </div>
 
-      {selected && <Detail key={selected} id={selected} user={user} onChanged={load} />}
+      {selected && <Detail key={selected} id={selected} user={user} onChanged={load} onOpenTicket={onOpenTicket} />}
     </main>
   );
 }

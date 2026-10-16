@@ -78,6 +78,13 @@
       "when": 1792170920420,
       "tag": "0010_contratos",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792173974133,
+      "tag": "0011_limites_cto_e_aprovacoes",
+      "breakpoints": true
     }
   ]
 }

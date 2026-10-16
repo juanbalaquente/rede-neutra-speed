@@ -1,3 +1,4 @@
+import { RouteLink } from "../ui/RouteLink";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, type Partner, type User, type ViabilityCto, type ViabilityResult } from "../api";
 import { motivoLabel } from "../motivos";
@@ -187,6 +188,7 @@ export function ViabilityPage({
                 <div className="sumrow"><span>Vagas livres</span><b style={{ fontWeight: 500 }}>{sel.vagas} de {sel.totalVagas}</b></div>
                 <div className="sumrow"><span>Distância</span><b style={{ fontWeight: 500 }}>{sel.distanceM} m</b></div>
                 <div className="sumrow"><span>Reserva</span><b style={{ fontWeight: 500 }}>48 horas</b></div>
+                {sel.location && <div><RouteLink to={sel.location} label="Rota até a CTO" /></div>}
                 {partner && <div className="sumrow"><span>Seu limite</span><b style={{ fontWeight: 500 }}>{partner.maxCtoOccupancyPct}% das vagas da CTO</b></div>}
               </>
             )}

@@ -5,6 +5,7 @@ import { activations, contractRequests, partners, portReservations, viabilityQue
 import { IntegrationError, type NetworkMap } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
+import { effectiveMaxPct } from "./cto-limits.js";
 import { isStale } from "./freshness.js";
 
 export const LIVE_STATUSES = ["ativa", "convertida"] as const;
@@ -121,7 +122,7 @@ export async function createReservation(
     throw new AppError(422, "viabilidade_necessaria", "Consulte a viabilidade deste endereço antes de reservar (a consulta vale por 24 horas).");
   }
   // A consulta mais recente marcou a CTO para conferência (dado fraco).
-  const entry = (listed.result as { ctos?: { ctoId: string; blocked: string | null }[] } | null)?.ctos?.find((c) => c.ctoId === input.ctoId);
+  const entry = (listed.result as { ctos?: { ctoId: string; blocked: string | null; location?: { lat: number; lng: number } | null }[] } | null)?.ctos?.find((c) => c.ctoId === input.ctoId);
   if (entry?.blocked === "conferir") {
     throw new AppError(409, "vaga_nao_confirmada", "Não foi possível confirmar as vagas dessa CTO. A Speed precisa conferir antes de vender.");
   }
@@ -159,7 +160,8 @@ export async function createReservation(
     if (live + 1 > cto.vagasLivres) throw new AppError(409, "sem_vaga", "Não há mais vagas livres nessa CTO.");
 
     const usage = (await partnerUsageByCto(tx as Db, partnerId, [input.ctoId])).get(input.ctoId) ?? 0;
-    if (usage + 1 > maxVagasForPartner(cto.totalVagas, partner.maxCtoOccupancyPct)) {
+    const limit = (await effectiveMaxPct(tx as Db, partnerId, [input.ctoId], partner.maxCtoOccupancyPct)).get(input.ctoId)!;
+    if (usage + 1 > maxVagasForPartner(cto.totalVagas, limit.pct)) {
       throw new AppError(409, "limite_ocupacao_cto", "Limite de ocupação dessa CTO para o parceiro atingido.");
     }
 
@@ -176,6 +178,8 @@ export async function createReservation(
         address: input.address,
         lat: input.lat ?? null,
         lng: input.lng ?? null,
+        ctoLat: entry?.location?.lat ?? null,
+        ctoLng: entry?.location?.lng ?? null,
         status: "ativa",
         expiresAt,
         createdAt: now,

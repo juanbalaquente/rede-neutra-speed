@@ -46,11 +46,16 @@ function dueText(t: Ticket): string {
 
 const inputStyle = { border: "1px solid var(--line2)", borderRadius: 9, padding: "9px 11px", background: "var(--surf)", color: "var(--ink)" } as const;
 
-function NewTicket({ onCreated, onCancel }: { onCreated: (t: TicketDetail) => void; onCancel: () => void }) {
+function NewTicket({ onCreated, onCancel, reservationId }: { onCreated: (t: TicketDetail) => void; onCancel: () => void; reservationId?: string | null }) {
   const say = useToast();
   const [form, set, clear] = useDraft("chamado-novo", { type: "cto_com_problema", description: "", reservationId: "", cto: "", signal: "" });
   const [clients, setClients] = useState<Installation[]>([]);
   const [busy, setBusy] = useState(false);
+  // Vindo da tela do cliente: já abre com o cliente escolhido.
+  useEffect(() => {
+    if (reservationId) set({ reservationId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservationId]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [picked, setPicked] = useState<string[]>([]);
   // As fotos oferecidas são as do cliente escolhido; trocar de cliente zera a seleção.
@@ -232,12 +237,12 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
 
 type Filter = "abertos" | "atrasados" | "resolvidos" | "todos";
 
-export function TicketsPage({ user, initialId }: { user: User; initialId?: string | null }) {
+export function TicketsPage({ user, initialId, startFor }: { user: User; initialId?: string | null; startFor?: string | null }) {
   const [list, setList] = useState<Ticket[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("abertos");
   const [selected, setSelected] = useState<string | null>(initialId ?? null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(!!startFor);
   const isAdmin = user.role === "admin_speed";
 
   const load = useCallback(() => {
@@ -258,7 +263,7 @@ export function TicketsPage({ user, initialId }: { user: User; initialId?: strin
         {!isAdmin && !creating && <button className="btn" onClick={() => { setCreating(true); setSelected(null); }}>Novo chamado</button>}
       </div>
 
-      {creating && <NewTicket onCancel={() => setCreating(false)} onCreated={(t) => { setCreating(false); setSelected(t.id); load(); }} />}
+      {creating && <NewTicket reservationId={startFor} onCancel={() => setCreating(false)} onCreated={(t) => { setCreating(false); setSelected(t.id); load(); }} />}
 
       <div className="seg" role="tablist" aria-label="Filtro">
         {FILTERS.map(([f, label]) => (

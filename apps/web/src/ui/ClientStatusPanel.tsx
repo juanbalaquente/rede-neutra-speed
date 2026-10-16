@@ -57,7 +57,7 @@ function Light({ title, label, tone, detail, age, stale }: { title: string; labe
  * Semáforo do cliente instalado: fibra (OLTCloud), PPPoE (NE40) e contrato (Voalle), com o sinal da ONU nos últimos dias.
  * Cada fonte responde por si; uma fora do ar aparece como "Sem leitura", sem derrubar o resto. Só leitura.
  */
-export function ClientStatusPanel({ installationId }: { installationId: string }) {
+export function ClientStatusPanel({ installationId, onOpenTicket }: { installationId: string; onOpenTicket?: (installationId: string) => void }) {
   const say = useToast();
   const [view, setView] = useState<ClientStatusView | null>(null);
   const [problem, setProblem] = useState<{ code: string; message: string } | null>(null);
@@ -101,7 +101,10 @@ export function ClientStatusPanel({ installationId }: { installationId: string }
     <div className="summary" style={{ borderTop: "1px solid var(--line)", display: "grid", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <b style={{ fontWeight: 500 }}>Situação na rede</b>
-        <button className="btn sec sm" disabled={busy} onClick={() => void load(true)}>{busy ? "Consultando…" : "Consultar de novo"}</button>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {onOpenTicket && <button className="btn sec sm" onClick={() => onOpenTicket(installationId)}>Abrir chamado</button>}
+          <button className="btn sec sm" disabled={busy} onClick={() => void load(true)}>{busy ? "Consultando…" : "Consultar de novo"}</button>
+        </div>
       </div>
 
       {problem && <p className="error" role="alert">{problem.message}</p>}

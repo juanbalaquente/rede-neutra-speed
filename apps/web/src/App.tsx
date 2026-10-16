@@ -97,6 +97,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [clienteFor, setClienteFor] = useState<string | null>(null);
   /** Instalação aberta a partir da agenda. */
   const [instId, setInstId] = useState<string | null>(null);
+  const [ticketFor, setTicketFor] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -145,6 +146,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   // A instalação escolhida na agenda só vale para a abertura da tela.
   useEffect(() => {
     if (tab !== "instalacoes") setInstId(null);
+    if (tab !== "chamados") setTicketFor(null);
   }, [tab]);
 
   // O formulário de dados do cliente só abre logo depois de reservar.
@@ -346,11 +348,11 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
         ) : tab === "financeiro" && user.role === "supervisor" ? (
           <FinancePage />
         ) : tab === "chamados" ? (
-          <TicketsPage user={user} />
+          <TicketsPage key={ticketFor ?? "lista"} user={user} startFor={ticketFor} />
         ) : tab === "agenda" ? (
           <AgendaPage user={user} onOpenInstallation={(id) => { setInstId(id); setTab("instalacoes"); }} />
         ) : tab === "instalacoes" ? (
-          <InstallationsPage user={user} initialId={instId} />
+          <InstallationsPage user={user} initialId={instId} onOpenTicket={(id) => { setTicketFor(id); setTab("chamados"); }} />
         ) : tab === "viabilidade" ? (
           <ViabilityPage
             user={user}

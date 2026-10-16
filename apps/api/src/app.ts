@@ -14,6 +14,7 @@ import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
 import { getContract, retryContract, startContract } from "./services/contracts.js";
+import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
 import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
 import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
 import { TICKET_TYPES } from "./db/schema.js";
@@ -877,6 +878,27 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const parsed = z.coerce.number().int().min(1).max(90).default(30).safeParse(c.req.query("days") || undefined);
     if (!parsed.success) throw new AppError(400, "dados_invalidos", "days: informe de 1 a 90.");
     return c.json(await networkPanel(db, parsed.data));
+  });
+
+  /** Limite de ocupação por CTO (por parceiro ou para todos). 100 = liberada caso a caso. */
+  admin.get("/cto-limits", async (c) => c.json({ limits: await listCtoLimits(db) }));
+
+  admin.put("/cto-limits", async (c) => {
+    const body = await parseBody(
+      c,
+      z.object({
+        partnerId: z.string().uuid().nullable(),
+        ctoId: z.string().trim().min(1).max(60),
+        maxPct: z.number().int().min(0).max(100),
+        reason: z.string().trim().min(5).max(300),
+      }),
+    );
+    return c.json({ limit: await setCtoLimit(db, c.get("user"), body, clientIp(c)) });
+  });
+
+  admin.delete("/cto-limits/:id", async (c) => {
+    await deleteCtoLimit(db, c.get("user"), z.string().uuid().parse(c.req.param("id")), clientIp(c));
+    return c.json({ ok: true });
   });
 
   /** Rede inteira de uma sigla (R1, ITA, FAT), do snapshot da Wiki. */

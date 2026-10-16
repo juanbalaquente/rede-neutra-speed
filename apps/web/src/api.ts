@@ -78,6 +78,10 @@ export interface Reservation {
   /** Reserva é por vaga; só reservas antigas têm número de porta. */
   port: number | null;
   address: string;
+  lat: number | null;
+  lng: number | null;
+  ctoLat: number | null;
+  ctoLng: number | null;
   status: "ativa" | "convertida" | "cancelada" | "expirada";
   expiresAt: string | null;
   createdAt: string;
@@ -347,6 +351,11 @@ export interface Installation {
   partnerName: string | null;
   ctoName: string;
   address: string;
+  /** Posição do endereço do cliente e da CTO (para os links de rota); null em registros antigos. */
+  lat: number | null;
+  lng: number | null;
+  ctoLat: number | null;
+  ctoLng: number | null;
   status: "ativa" | "convertida" | "cancelada";
   contract: string | null;
   nickname: string | null;

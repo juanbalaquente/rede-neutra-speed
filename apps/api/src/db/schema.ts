@@ -134,6 +134,9 @@ export const portReservations = pgTable(
     address: text("address").notNull(),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
+    /** Posição da CTO na hora da reserva (para o link de rota do técnico). */
+    ctoLat: doublePrecision("cto_lat"),
+    ctoLng: doublePrecision("cto_lng"),
     status: reservationStatus("status").notNull().default("ativa"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     contractNumber: text("contract_number"),
@@ -253,6 +256,10 @@ export const customerOperations = pgTable(
     /** recebida | executando | concluida | parcial | sem_confirmacao | aguardando_equipe | falhou */
     state: text("state").notNull().default("recebida"),
     steps: jsonb("steps"),
+    /** Aprovação da Speed (quando o tipo exige): quem decidiu, quando e o motivo da recusa. */
+    decidedBy: uuid("decided_by").references(() => users.id),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionReason: text("decision_reason"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -261,7 +268,26 @@ export const customerOperations = pgTable(
     // Uma operação em andamento por reserva e tipo: dois cliques não viram duas ordens.
     uniqueIndex("customer_operations_open_idx")
       .on(t.reservationId, t.type)
-      .where(sql`${t.state} IN ('recebida', 'executando', 'parcial', 'aguardando_equipe')`),
+      .where(sql`${t.state} IN ('recebida', 'executando', 'parcial', 'aguardando_equipe', 'aguardando_aprovacao')`),
+  ],
+);
+
+/** Limite de ocupação por CTO (planejamento: "por parceiro e por CTO"). Vale no lugar do percentual do parceiro. partner_id nulo = todos os parceiros. */
+export const ctoLimits = pgTable(
+  "cto_limits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").references(() => partners.id),
+    ctoId: text("cto_id").notNull(),
+    /** Percentual máximo das vagas da CTO que o parceiro pode ocupar. 100 = liberada caso a caso. */
+    maxPct: integer("max_pct").notNull(),
+    reason: text("reason").notNull(),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("cto_limits_partner_cto_idx").on(t.partnerId, t.ctoId).where(sql`${t.partnerId} IS NOT NULL`),
+    uniqueIndex("cto_limits_all_cto_idx").on(t.ctoId).where(sql`${t.partnerId} IS NULL`),
   ],
 );
 

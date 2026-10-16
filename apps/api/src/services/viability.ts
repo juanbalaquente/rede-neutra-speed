@@ -6,6 +6,7 @@ import type { NetworkMap } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 import { isStale } from "./freshness.js";
+import { effectiveMaxPct } from "./cto-limits.js";
 import {
   expireOverdueReservations,
   isRegionAllowed,
@@ -74,6 +75,7 @@ export async function runViability(
   const ids = candidates.map((c) => c.ctoId).filter((id): id is string => id !== null);
   const reserved = await liveReservationsByCto(db, ids);
   const usage = partner ? await partnerUsageByCto(db, partner.id, ids) : new Map<string, number>();
+  const limits = partner ? await effectiveMaxPct(db, partner.id, ids, partner.maxCtoOccupancyPct) : new Map<string, { pct: number }>();
 
   const ctos: ViabilityCto[] = [];
   /** Vagas livres reais de cada CTO lida (antes do limite do parceiro), para o painel da Speed. */
@@ -111,7 +113,7 @@ export async function runViability(
     let blockedReason: ViabilityCto["blockedReason"] = livres === 0 ? "sem_vaga_livre" : null;
     if (!blockedReason && partner) {
       const used = usage.get(c.ctoId) ?? 0;
-      if (used + 1 > maxVagasForPartner(detail.totalVagas, partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";
+      if (used + 1 > maxVagasForPartner(detail.totalVagas, limits.get(c.ctoId)?.pct ?? partner.maxCtoOccupancyPct)) blockedReason = "limite_ocupacao";
     }
     // Motivos informativos (não bloqueiam) seguem para a Speed.
     ctos.push({ ...base, totalVagas: detail.totalVagas, vagas: blockedReason ? 0 : livres, blockedReason, motivos: detail.motivos });
@@ -142,6 +144,7 @@ export async function runViability(
           ctoId: c.ctoId,
           name: c.name,
           regiao: c.regiao,
+          location: c.location,
           vagas: c.vagas,
           livres: c.ctoId !== null ? (livresById.get(c.ctoId) ?? null) : null,
           totalVagas: c.totalVagas,
