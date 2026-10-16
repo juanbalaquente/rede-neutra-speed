@@ -15,6 +15,7 @@ import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
 import { getContract, retryContract, startContract } from "./services/contracts.js";
 import { approveOperation, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
+import { signalQuality } from "./services/signal-quality.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
 import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
@@ -576,6 +577,12 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const id = z.string().uuid().parse(c.req.param("id"));
     const days = Number(c.req.query("days") ?? 30);
     return c.json(await getClientSignal(db, integrations.clientStatus, c.get("user"), id, days));
+  });
+
+  /** Qualidade média do sinal da base e clientes com mais quedas (histórico da Wiki, guardado por 10 min). */
+  app.get("/dashboard/sinal", requireUser, requireRole("supervisor"), async (c) => {
+    const days = Number(c.req.query("days") ?? 30);
+    return c.json(await signalQuality(db, integrations.clientStatus, c.get("user"), { days }));
   });
 
   app.get("/dashboard/rede", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json(await getFleetStatus(db, integrations.clientStatus, c.get("user"))));

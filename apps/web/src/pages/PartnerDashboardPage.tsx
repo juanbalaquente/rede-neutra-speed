@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, api, type Dashboard, type User } from "../api";
 import { clientStatusApi, type Fleet } from "../clientStatusApi";
 import { BarChart } from "../ui/BarChart";
+import { SignalQualityCard } from "../ui/SignalQualityCard";
 import { useToast } from "../ui/Toast";
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -56,6 +57,8 @@ export function PartnerDashboardPage({ user, onGo }: { user: User; onGo: (tab: "
             <button className={`card kpi kpi-btn ${d.chamadosAtrasados ? "alert" : ""}`} onClick={() => onGo("chamados")}><span>Chamados abertos</span><b>{d.chamadosAbertos}</b><small>{d.chamadosAtrasados ? `${d.chamadosAtrasados} fora do prazo` : "dentro do prazo"}</small></button>
             <button className={`card kpi kpi-btn ${d.visitasAtrasadas ? "alert" : ""}`} onClick={() => onGo("agenda")}><span>Visitas atrasadas</span><b>{d.visitasAtrasadas}</b><small>{d.visitasAtrasadas ? "passaram do dia sem fechar" : "nenhuma atrasada"}</small></button>
           </div>
+
+          {user.role === "supervisor" && <SignalQualityCard onOpen={(id) => onGo("instalacoes", id)} />}
 
           <div className="g11">
             <BarChart title="Instalações por mês" unit="Instalações" bars={d.serie.map((s) => ({ label: monthLabel(s.month), value: s.instalacoes }))} />

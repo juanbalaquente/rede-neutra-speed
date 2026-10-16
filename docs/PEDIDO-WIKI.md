@@ -54,6 +54,10 @@ Pontos em aberto (marcados `[DECIDIR]` no contrato v2): o que acontece quando o 
 
 **Decisão da Speed (16 out 2026):** a rede neutra usa a **mesma senha PPPoE padrão** dos demais clientes da Speed. A Wiki a grava ao criar o contrato; não há rota de senha, nem entrega de senha na criação do contrato, nem ação de "trocar senha". O parceiro recebe a senha padrão pelo canal comercial, fora do sistema. A ativação da ONU só precisa do login: o OLTCloud busca a senha sozinho ao configurar a ONU, e o técnico não digita senha no fluxo normal.
 
+## Novo pedido: sinal da base em lote
+
+O portal agora mostra a qualidade média do sinal da base e os clientes com mais quedas. Hoje ele faz **uma chamada `GET /clientes/{login}/sinal` por cliente** (de 5 em 5, com resultado guardado por 10 min), o que é aceitável no piloto mas pesa com centenas de clientes. Pedido opcional: `POST /v3/clientes/sinal-resumo` com `{ "logins": [...], "dias": 30 }` (até 200) devolvendo, por login, `mediaDbm`, `ultimoDbm`, `piorDbm` e a lista de quedas (`inicio`, `fim`, `tipo`), sempre do histórico (`onu_signal_history`). Mesmas regras de header e de login de outro parceiro.
+
 ## Pequenas perguntas de dados
 
 - A CTO `52108` (`CTO_12_P2_P4_R1`) vem com `totalVagas: 0`, e o portal trata como "conferir". É esperado (sem caixa no OLTCloud) ou dado incompleto?
