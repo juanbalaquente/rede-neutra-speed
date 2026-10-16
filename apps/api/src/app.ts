@@ -13,6 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
+import { getOperation, listOperations, operationView, refreshOperation, retryOperation, startOperation } from "./services/customer-ops.js";
 import { MONTH_RE, clientesCsv, fechamentoCsv, getDashboard, getFinance, getPrices, markPayment, monthOf, setPrice, setSpeedPrice } from "./services/finance.js";
 import { closeServiceOrder, getInstallation, getOsPhotosRequired, listAgenda, listInstallations, listTechnicians, reschedule, saveCliente, setOsPhotosRequired } from "./services/installations.js";
 import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
@@ -501,6 +502,41 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
 
   /** Painel operacional do parceiro: portas ativas, O.S. pendentes, visitas e evolução dos últimos 6 meses. */
   app.get("/dashboard", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json(await getDashboard(db, c.get("user"))));
+
+  // ── Automações do cliente final (desligadas por padrão: AUTOMATION_MODE) ─────
+  const actionsSvc = () => {
+    if (!integrations.actions) throw new AppError(503, "automacao_desligada", "As automações do cliente não estão habilitadas.");
+    return integrations.actions;
+  };
+
+  app.get("/installations/:id/operations", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ operations: await listOperations(db, c.get("user"), id) });
+  });
+
+  app.post("/installations/:id/operations", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(
+      c,
+      z.object({
+        type: z.enum(["bloqueio", "desbloqueio", "reinicio", "cancelamento"]),
+        reason: z.string().trim().max(500).nullable().optional(),
+        idempotencyKey: z.string().uuid().optional(),
+      }),
+    );
+    const row = await startOperation(db, actionsSvc(), c.get("user"), id, body, { ip: clientIp(c) });
+    return c.json({ operation: operationView(row) }, 202);
+  });
+
+  app.get("/operations/:id", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ operation: await getOperation(db, actionsSvc(), c.get("user"), id) });
+  });
+
+  app.post("/operations/:id/retry", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ operation: operationView(await retryOperation(db, actionsSvc(), c.get("user"), id, { ip: clientIp(c) })) });
+  });
 
   // ── Planos ────────────────────────────────────────────────────────────────
   app.get("/plans", requireUser, async (c) => {

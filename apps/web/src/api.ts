@@ -185,6 +185,13 @@ export const api = {
   adminPlans: () => request<{ plans: { id: string; name: string; speedMbps: number; speedPriceCents: number; active: boolean }[] }>("GET", "/admin/plans"),
   setSpeedPrice: (id: string, speedPriceCents: number) => request<{ plans: { id: string; name: string; speedMbps: number; speedPriceCents: number; active: boolean }[] }>("PATCH", `/admin/plans/${id}`, { speedPriceCents }),
 
+  // ── Automações do cliente (bloquear, desbloquear, reiniciar, cancelar) ──
+  operations: (installationId: string) => request<{ operations: CustomerOperation[] }>("GET", `/installations/${installationId}/operations`),
+  startOperation: (installationId: string, body: { type: OperationType; reason?: string | null; idempotencyKey?: string }) =>
+    request<{ operation: CustomerOperation }>("POST", `/installations/${installationId}/operations`, body),
+  operation: (id: string) => request<{ operation: CustomerOperation }>("GET", `/operations/${id}`),
+  retryOperation: (id: string) => request<{ operation: CustomerOperation }>("POST", `/operations/${id}/retry`),
+
   // ── Instalações e O.S. ──
   installations: () => request<{ installations: Installation[] }>("GET", "/installations"),
   installation: (id: string) => request<{ installation: InstallationDetail }>("GET", `/installations/${id}`),
@@ -340,7 +347,7 @@ export interface Installation {
   partnerName: string | null;
   ctoName: string;
   address: string;
-  status: "ativa" | "convertida";
+  status: "ativa" | "convertida" | "cancelada";
   contract: string | null;
   nickname: string | null;
   planName: string | null;
@@ -352,6 +359,8 @@ export interface Installation {
   onuSerial: string | null;
   photoKinds: PhotoKind[];
   osClosedAt: string | null;
+  /** ativo | bloqueado | cancelado. */
+  customerStatus: "ativo" | "bloqueado" | "cancelado";
   createdAt: string;
 }
 
@@ -421,4 +430,19 @@ export interface Finance {
   resumo: { portasAtivas: number; custoCents: number; faturamentoCents: number; lucroCents: number; recebidoCents: number; emAbertoCents: number; pagos: number; semPreco: number };
   porPlano: { planId: string; plan: string; speedMbps: number; qtd: number; custoCents: number; faturamentoCents: number; lucroCents: number; margemPct: number | null }[];
   clientes: FinanceClient[];
+}
+
+export type OperationType = "bloqueio" | "desbloqueio" | "reinicio" | "cancelamento";
+export type OperationState = "recebida" | "executando" | "concluida" | "parcial" | "sem_confirmacao" | "aguardando_equipe" | "falhou";
+
+export interface CustomerOperation {
+  id: string;
+  reservationId: string;
+  type: OperationType;
+  login: string;
+  reason: string | null;
+  state: OperationState;
+  steps: { nome: string; estado: "pendente" | "concluida" | "falhou"; motivo?: string | null }[];
+  createdAt: string;
+  updatedAt: string;
 }

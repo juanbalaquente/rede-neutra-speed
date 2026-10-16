@@ -437,3 +437,10 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .bell-pop .dot.bad { background: var(--bad); }
 .banner { margin: 12px 24px 0; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; border: 1px solid var(--line2); }
 .banner.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 40%, var(--line2)); }
+
+/* Ações do cliente */
+.ops { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ops li { display: grid; gap: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ops-h { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ops-steps { margin-top: 4px; }
+.atv-steps li.bad i { background: var(--bad); border-color: var(--bad); }

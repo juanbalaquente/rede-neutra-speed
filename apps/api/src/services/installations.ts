@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
 import { activations, partners, photos, plans, portReservations, settings, type PhotoKind } from "../db/schema.js";
@@ -90,10 +90,9 @@ export async function closeServiceOrder(db: Db, user: SessionUser, reservationId
 
 /** Linha da lista de instalações (uma por reserva viva ou convertida). */
 export async function listInstallations(db: Db, user: SessionUser) {
-  const scope =
-    user.role === "admin_speed"
-      ? inArray(portReservations.status, ["ativa", "convertida"])
-      : and(eq(portReservations.partnerId, user.partnerId!), inArray(portReservations.status, ["ativa", "convertida"]));
+  // Cliente cancelado depois de instalado continua na lista (histórico, fotos e O.S.); reserva cancelada antes disso não.
+  const visible = or(inArray(portReservations.status, ["ativa", "convertida"]), and(eq(portReservations.status, "cancelada"), isNotNull(portReservations.osClosedAt)));
+  const scope = user.role === "admin_speed" ? visible : and(eq(portReservations.partnerId, user.partnerId!), visible);
   const rows = await db
     .select({
       r: portReservations,
@@ -142,6 +141,7 @@ export async function listInstallations(db: Db, user: SessionUser) {
     onuSerial: act.get(r.id)?.serial ?? null,
     photoKinds: [...(kinds.get(r.id) ?? [])],
     osClosedAt: r.osClosedAt,
+    customerStatus: r.customerStatus,
     createdAt: r.createdAt,
   }));
 }

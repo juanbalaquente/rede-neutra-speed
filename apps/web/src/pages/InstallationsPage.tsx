@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, photoUrl, type Installation, type InstallationDetail, type Photo, type User } from "../api";
 import { PHOTO_KINDS, PHOTO_LABEL } from "../photoKinds";
+import { CustomerActionsPanel } from "../ui/CustomerActionsPanel";
 import { PhotoSlots } from "../ui/PhotoSlots";
 import { useToast } from "../ui/Toast";
 import { useDraft } from "../ui/useDraft";
@@ -18,7 +19,7 @@ const ACT_LABEL: Record<string, { label: string; tone: string }> = {
   falhou: { label: "Falhou", tone: "b-bad" },
 };
 
-type Filter = "todas" | "andamento" | "os" | "concluidas";
+type Filter = "todas" | "andamento" | "os" | "concluidas" | "canceladas";
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const errMsg = (e: unknown, fb: string) => (e instanceof Error ? e.message : fb);
@@ -162,7 +163,7 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
           <h3>{inst.contract ? `Contrato ${inst.contract}` : "Sem contrato ainda"}{inst.nickname ? ` · ${inst.nickname}` : ""}</h3>
           <small>{inst.ctoName} · {inst.address}{inst.partnerName ? ` · ${inst.partnerName}` : ""}</small>
         </div>
-        {inst.osClosedAt ? <span className="badge b-ok">O.S. fechada</span> : inst.status === "convertida" ? <span className="badge b-warn">O.S. pendente</span> : <span className="badge b-data">Reservada</span>}
+        {inst.customerStatus === "cancelado" ? <span className="badge b-mute">Cliente cancelado</span> : inst.customerStatus === "bloqueado" ? <span className="badge b-warn">Bloqueado</span> : inst.osClosedAt ? <span className="badge b-ok">O.S. fechada</span> : inst.status === "convertida" ? <span className="badge b-warn">O.S. pendente</span> : <span className="badge b-data">Reservada</span>}
       </div>
       <div className="summary">
         <b style={{ fontWeight: 500 }}>Fotos</b>
@@ -186,6 +187,9 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
           </div>
           {inst.os.observacao && <p className="muted" style={{ margin: 0 }}>{inst.os.observacao}</p>}
         </div>
+      )}
+      {isPartner && inst.osClosedAt && (
+        <CustomerActionsPanel installationId={inst.id} customerStatus={inst.customerStatus} user={user} onChanged={() => { load(); onChanged(); }} />
       )}
       {open && (
         <OsForm
@@ -218,12 +222,13 @@ export function InstallationsPage({ user, initialId }: { user: User; initialId?:
     switch (filter) {
       case "andamento": return all.filter((i) => i.status === "ativa" || (i.status === "convertida" && !i.osClosedAt && i.activationState !== "online"));
       case "os": return all.filter((i) => i.status === "convertida" && !i.osClosedAt);
-      case "concluidas": return all.filter((i) => i.osClosedAt);
+      case "concluidas": return all.filter((i) => i.osClosedAt && i.customerStatus !== "cancelado");
+      case "canceladas": return all.filter((i) => i.customerStatus === "cancelado");
       default: return all;
     }
   }, [list, filter]);
 
-  const FILTERS: [Filter, string][] = [["todas", "Todas"], ["andamento", "Em andamento"], ["os", "O.S. pendente"], ["concluidas", "Concluídas"]];
+  const FILTERS: [Filter, string][] = [["todas", "Todas"], ["andamento", "Em andamento"], ["os", "O.S. pendente"], ["concluidas", "Concluídas"], ["canceladas", "Canceladas"]];
 
   return (
     <main className="page fade-page">
@@ -268,7 +273,11 @@ export function InstallationsPage({ user, initialId }: { user: User; initialId?:
                   <td className="mono">{i.ctoName}</td>
                   <td className="tab">{PHOTO_KINDS.filter((k) => i.photoKinds.includes(k.kind)).length} / {PHOTO_KINDS.length}</td>
                   <td>
-                    {i.osClosedAt ? (
+                    {i.customerStatus === "cancelado" ? (
+                      <span className="badge b-mute">Cancelado</span>
+                    ) : i.customerStatus === "bloqueado" ? (
+                      <span className="badge b-warn">Bloqueado</span>
+                    ) : i.osClosedAt ? (
                       <span className="badge b-ok">O.S. fechada</span>
                     ) : i.activationState ? (
                       <span className={`badge ${ACT_LABEL[i.activationState]?.tone ?? "b-mute"}`}>{ACT_LABEL[i.activationState]?.label ?? i.activationState}</span>

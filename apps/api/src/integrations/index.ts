@@ -4,9 +4,11 @@ import { createHttp, type ApiCallLogger } from "./http.js";
 import { MockNetworkMap } from "./mock.js";
 import { OltcloudClient } from "./oltcloud.js";
 import { MockActivationService } from "./mock-activation.js";
-import type { ActivationService, Integrations, NetworkMap } from "./types.js";
+import { MockCustomerActions } from "./mock-actions.js";
+import type { ActivationService, CustomerActions, Integrations, NetworkMap } from "./types.js";
 import { WikiNetworkMap } from "./wiki.js";
 import { WikiActivationService } from "./wiki-activation.js";
+import { WikiCustomerActions } from "./wiki-actions.js";
 
 function createActivation(config: Config, log: ApiCallLogger): ActivationService | undefined {
   if (config.ACTIVATION_MODE === "off") return undefined;
@@ -16,10 +18,19 @@ function createActivation(config: Config, log: ApiCallLogger): ActivationService
   return new WikiActivationService(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!);
 }
 
+function createActions(config: Config, log: ApiCallLogger): CustomerActions | undefined {
+  if (config.AUTOMATION_MODE === "off") return undefined;
+  if (config.AUTOMATION_MODE === "mock") return new MockCustomerActions();
+  const missing = (["WIKI_BASE_URL", "WIKI_WRITE_KEY"] as const).filter((k) => !config[k]);
+  if (missing.length) throw new Error(`AUTOMATION_MODE=wiki sem: ${missing.join(", ")}`);
+  return new WikiCustomerActions(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!);
+}
+
 export function createIntegrations(config: Config, log: ApiCallLogger): Integrations {
   const activation = createActivation(config, log);
+  const actions = createActions(config, log);
   const { network } = createNetwork(config, log);
-  return { network, activation };
+  return { network, activation, actions };
 }
 
 function createNetwork(config: Config, log: ApiCallLogger): { network: NetworkMap } {

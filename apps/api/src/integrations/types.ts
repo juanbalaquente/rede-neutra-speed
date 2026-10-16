@@ -154,8 +154,51 @@ export interface ActivationService {
   decide(ativacaoId: string, decision: ActivationDecision): Promise<ActivationSnapshot>;
 }
 
+export type OperationType = "bloqueio" | "desbloqueio" | "reinicio" | "cancelamento";
+
+export type OperationState = "recebida" | "executando" | "concluida" | "parcial" | "sem_confirmacao" | "aguardando_equipe" | "falhou";
+
+/** Estados em que a Wiki não muda mais sozinha. "parcial" e "aguardando_equipe" pedem ação (repetir ou esperar a Speed). */
+export const OPERATION_FINAL: readonly OperationState[] = ["concluida", "sem_confirmacao", "falhou"];
+
+export interface OperationStep {
+  nome: string;
+  estado: "pendente" | "concluida" | "falhou";
+  motivo?: string | null;
+}
+
+export interface OperationRequest {
+  idempotencyKey: string;
+  tipo: OperationType;
+  login: string;
+  /** Código do parceiro: a Wiki confere que o login termina com ele (defesa contra vazamento entre parceiros). */
+  partnerCode: string;
+  motivo?: string | null;
+}
+
+export interface OperationSnapshot {
+  operacaoId: string;
+  tipo: OperationType;
+  login: string;
+  estado: OperationState;
+  etapas: OperationStep[];
+  atualizadoEm: string;
+}
+
+/**
+ * Automações do cliente final, executadas pela Wiki (contrato v3). É ESCRITA em produção:
+ * só liga com AUTOMATION_MODE e validação do Juan. Desligada por padrão.
+ */
+export interface CustomerActions {
+  start(req: OperationRequest): Promise<{ operacaoId: string; estado: OperationState }>;
+  /** null = a Wiki não conhece essa operação. O código do parceiro vai junto: a Wiki confere o dono da operação. */
+  get(operacaoId: string, partnerCode: string): Promise<OperationSnapshot | null>;
+}
+
 export interface Integrations {
   network: NetworkMap;
   /** Ausente = ACTIVATION_MODE=off: as rotas de ativação respondem 503. */
   activation?: ActivationService;
+  /** Ausente = AUTOMATION_MODE=off: as automações do cliente respondem 503. */
+  actions?: CustomerActions;
 }

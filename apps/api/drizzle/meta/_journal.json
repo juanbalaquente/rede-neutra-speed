@@ -57,6 +57,13 @@
       "when": 1792099794080,
       "tag": "0007_precos_e_pagamentos",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792153950375,
+      "tag": "0008_operacoes_do_cliente",
+      "breakpoints": true
     }
   ]
 }

@@ -22,6 +22,11 @@ const envSchema = z.object({
    * wiki = rotas /proxy/redeneutra/v2 da SpeedWiki, só com validação do Juan.
    */
   ACTIVATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /**
+   * Automações do cliente final: bloquear, desbloquear, reiniciar e cancelar (ESCRITA em produção).
+   * off = desligadas (padrão); mock = Wiki de mentira; wiki = rotas /proxy/redeneutra/v3, só com validação do Juan.
+   */
+  AUTOMATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
   /** Chave de escrita da Wiki (X-RedeNeutra-Write-Key), separada da de leitura. */
   WIKI_WRITE_KEY: z.string().optional(),
   /** Pasta das fotos de campo. Em produção é um volume do Docker (entra no backup). */

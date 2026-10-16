@@ -149,6 +149,8 @@ export const portReservations = pgTable(
     osClosedAt: timestamp("os_closed_at", { withTimezone: true }),
     osClosedBy: uuid("os_closed_by").references(() => users.id),
     osData: jsonb("os_data"),
+    /** Situação do contrato do cliente final no portal: ativo | bloqueado | cancelado (o bloqueio por inadimplência não libera a porta). */
+    customerStatus: text("customer_status").notNull().default("ativo"),
     cancelReason: text("cancel_reason"),
     cancelledBy: uuid("cancelled_by").references(() => users.id),
     createdAt: createdAt(),
@@ -226,6 +228,39 @@ export const payments = pgTable(
     markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("payments_unique_idx").on(t.reservationId, t.month), index("payments_partner_month_idx").on(t.partnerId, t.month)],
+);
+
+/**
+ * Automações sobre o cliente final (bloquear, desbloquear, reiniciar, cancelar). A execução é da Wiki
+ * (contrato v3); aqui fica o pedido, o estado e as etapas, nunca segredo nem saída crua de equipamento.
+ */
+export const customerOperations = pgTable(
+  "customer_operations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").notNull().references(() => partners.id),
+    reservationId: uuid("reservation_id").notNull().references(() => portReservations.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    /** bloqueio | desbloqueio | reinicio | cancelamento */
+    type: text("type").notNull(),
+    login: text("login").notNull(),
+    reason: text("reason"),
+    /** Mesma chave a cada tentativa: a Wiki continua de onde parou, sem refazer o que já concluiu. */
+    idempotencyKey: uuid("idempotency_key").notNull().unique(),
+    wikiOperationId: text("wiki_operation_id"),
+    /** recebida | executando | concluida | parcial | sem_confirmacao | aguardando_equipe | falhou */
+    state: text("state").notNull().default("recebida"),
+    steps: jsonb("steps"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_operations_reservation_idx").on(t.reservationId, t.createdAt),
+    // Uma operação em andamento por reserva e tipo: dois cliques não viram duas ordens.
+    uniqueIndex("customer_operations_open_idx")
+      .on(t.reservationId, t.type)
+      .where(sql`${t.state} IN ('recebida', 'executando', 'parcial', 'aguardando_equipe')`),
+  ],
 );
 
 /** Parâmetros da Speed editáveis em tela (ex.: limite da trava de sinal). Cada mudança vai para a auditoria. */
