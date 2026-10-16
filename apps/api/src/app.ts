@@ -13,6 +13,8 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
+import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
+import { TICKET_TYPES } from "./db/schema.js";
 import { getOperation, listOperations, operationView, refreshOperation, retryOperation, startOperation } from "./services/customer-ops.js";
 import { MONTH_RE, clientesCsv, fechamentoCsv, getDashboard, getFinance, getPrices, markPayment, monthOf, setPrice, setSpeedPrice } from "./services/finance.js";
 import { closeServiceOrder, getInstallation, getOsPhotosRequired, listAgenda, listInstallations, listTechnicians, reschedule, saveCliente, setOsPhotosRequired } from "./services/installations.js";
@@ -311,7 +313,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
         z.object({ acao: z.literal("prosseguir"), justificativa: z.string().max(1000) }),
       ]),
     );
-    return c.json({ activation: activationView(await decideActivation(db, activationSvc(), c.get("user"), id, body, { ip: clientIp(c) })) });
+    return c.json({ activation: activationView(await decideActivation(db, activationSvc(), c.get("user"), id, body, { ip: clientIp(c), tickets: ticketEnv() })) });
   });
 
   // ── Fotos de campo ────────────────────────────────────────────────────────
@@ -538,6 +540,43 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     return c.json({ operation: operationView(await retryOperation(db, actionsSvc(), c.get("user"), id, { ip: clientIp(c) })) });
   });
 
+  // ── Chamados de infraestrutura ────────────────────────────────────────────
+  const ticketEnv = (): TicketEnv => ({ svc: integrations.tickets, linkSecret: config.SESSION_SECRET, baseUrl: config.PUBLIC_BASE_URL });
+
+  app.get("/tickets", requireUser, async (c) => c.json({ tickets: await listTickets(db, c.get("user")) }));
+
+  app.post("/tickets", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const body = await parseBody(
+      c,
+      z.object({
+        type: z.enum(TICKET_TYPES),
+        description: z.string().trim().min(5).max(2000),
+        reservationId: z.string().uuid().nullable().optional(),
+        ctoId: z.string().trim().min(1).max(120).nullable().optional(),
+        signalDbm: z.number().min(-40).max(0).nullable().optional(),
+        photoIds: z.array(z.string().uuid()).max(6).optional(),
+      }),
+    );
+    const created = await createTicket(db, ticketEnv(), c.get("user"), body, { ip: clientIp(c) });
+    return c.json({ ticket: await getTicket(db, ticketEnv(), c.get("user"), created.id) }, 201);
+  });
+
+  app.get("/tickets/:id", requireUser, async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ ticket: await getTicket(db, ticketEnv(), c.get("user"), id) });
+  });
+
+  app.post("/tickets/:id/messages", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(c, z.object({ text: z.string().trim().min(2).max(2000) }));
+    return c.json({ ticket: await addTicketMessage(db, ticketEnv(), c.get("user"), id, body.text, { ip: clientIp(c) }) });
+  });
+
+  app.post("/tickets/:id/retry", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ ticket: await retryTicket(db, ticketEnv(), c.get("user"), id) });
+  });
+
   // ── Planos ────────────────────────────────────────────────────────────────
   app.get("/plans", requireUser, async (c) => {
     const rows = await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.speedMbps);
@@ -734,6 +773,14 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const body = await parseBody(c, z.object({ speedPriceCents: z.number().int().min(100).max(1_000_000) }));
     await setSpeedPrice(db, c.get("user"), id, body.speedPriceCents, clientIp(c));
     return c.json({ plans: await db.select().from(plans).orderBy(plans.speedMbps) });
+  });
+
+  /** Prazo de atendimento por tipo de chamado, em horas (a diretoria ainda define os valores). */
+  admin.get("/settings/sla", async (c) => c.json({ sla: await getSla(db), padrao: DEFAULT_SLA_HOURS }));
+
+  admin.put("/settings/sla", async (c) => {
+    const body = await parseBody(c, z.object({ type: z.enum(TICKET_TYPES), hours: z.number().int().min(1).max(720) }));
+    return c.json({ sla: await setSla(db, c.get("user"), body.type, body.hours, clientIp(c)), padrao: DEFAULT_SLA_HOURS });
   });
 
   /** Celular perdido: apaga o segundo fator do usuário. Na próxima entrada ele configura de novo. */

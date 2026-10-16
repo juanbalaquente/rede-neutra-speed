@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { partnerPrices, payments, plans, portReservations } from "../db/schema.js";
+import { partnerPrices, payments, plans, portReservations, tickets } from "../db/schema.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 
@@ -188,6 +188,9 @@ export async function getDashboard(db: Db, user: SessionUser, now = new Date()) 
   const dayStart = new Date(`${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, "0")}-${String(local.getUTCDate()).padStart(2, "0")}T00:00:00${TZ}`);
   const dayEnd = new Date(dayStart.getTime() + 24 * 3600_000);
 
+  const openTickets = await db.select({ state: tickets.state, dueAt: tickets.dueAt }).from(tickets).where(eq(tickets.partnerId, partnerId));
+  const stillOpen = openTickets.filter((t) => t.state !== "resolvido" && t.state !== "cancelado");
+
   const open = (x: (typeof rows)[number]) => !x.r.osClosedAt;
   const closedAt = rows.filter((x) => x.r.osClosedAt && x.r.status === "convertida").map((x) => x.r.osClosedAt!);
 
@@ -208,6 +211,8 @@ export async function getDashboard(db: Db, user: SessionUser, now = new Date()) 
     osPendentes: rows.filter((x) => x.r.status === "convertida" && open(x)).length,
     instalacoesNoMes: closedAt.filter((t) => t >= today.start && t < today.end).length,
     visitasHoje: rows.filter((x) => open(x) && x.r.visitAt && x.r.visitAt >= dayStart && x.r.visitAt < dayEnd).length,
+    chamadosAbertos: stillOpen.length,
+    chamadosAtrasados: stillOpen.filter((t) => t.dueAt < now).length,
     visitasAtrasadas: rows.filter((x) => open(x) && x.r.visitAt && x.r.visitAt < dayStart).length,
     serie,
     planos: [...planos.entries()].map(([plano, qtd]) => ({ plano, qtd })).sort((a, b) => b.qtd - a.qtd),

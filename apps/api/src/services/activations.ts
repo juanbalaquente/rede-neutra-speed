@@ -15,6 +15,7 @@ import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 import { clienteIncomplete } from "./installations.js";
 import { hasKind } from "./photos.js";
+import { openSignalTicket, type TicketEnv } from "./tickets.js";
 
 export const SIGNAL_LIMIT_KEY = "sinal.limite_db";
 export const DEFAULT_SIGNAL_LIMIT_DB = 1.5;
@@ -203,7 +204,7 @@ export async function getActivation(db: Db, svc: ActivationService, user: Sessio
   return applySnapshot(db, row, snap, user.id);
 }
 
-export async function decideActivation(db: Db, svc: ActivationService, user: SessionUser, id: string, decision: ActivationDecision, opts: { ip?: string | null } = {}) {
+export async function decideActivation(db: Db, svc: ActivationService, user: SessionUser, id: string, decision: ActivationDecision, opts: { ip?: string | null; tickets?: TicketEnv } = {}) {
   const row = await ownActivation(db, requirePartner(user), id);
   if (row.state !== "aguardando_decisao" || !row.wikiActivationId) {
     throw new AppError(409, "sem_decisao_pendente", "Essa ativação não está esperando decisão.");
@@ -221,6 +222,8 @@ export async function decideActivation(db: Db, svc: ActivationService, user: Ses
     ip: opts.ip,
     data: { acao: decision.acao, justificativa: decision.acao === "prosseguir" ? decision.justificativa : undefined, sinal: (row.snapshot as ActivationSnapshot | null)?.sinal ?? null },
   });
+  // Prosseguir com a trava de sinal abre o chamado da Infra (aparece na lista do parceiro, marcado como automático).
+  if (decision.acao === "prosseguir" && opts.tickets) await openSignalTicket(db, opts.tickets, user, row, decision.justificativa.trim());
   return applySnapshot(db, row, snap, user.id);
 }
 

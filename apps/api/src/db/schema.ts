@@ -263,6 +263,62 @@ export const customerOperations = pgTable(
   ],
 );
 
+/** Motivos de chamado de infraestrutura (planejamento) mais o automático da trava de sinal. */
+export const TICKET_TYPES = ["cto_com_problema", "porta_off", "conferencia_porta", "sinal_fora_padrao_cto", "rompimento_regional", "trava_sinal"] as const;
+export type TicketType = (typeof TICKET_TYPES)[number];
+export const TICKET_STATES = ["recebido", "aberto", "em_atendimento", "aguardando_parceiro", "resolvido", "cancelado"] as const;
+export type TicketState = (typeof TICKET_STATES)[number];
+
+/**
+ * Chamado de infraestrutura. Nasce no portal e a Wiki (fila da Infra) o atende (contrato v3).
+ * "recebido" = guardado no portal, ainda não entregue à Wiki (integração desligada ou fora do ar).
+ */
+export const tickets = pgTable(
+  "tickets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").notNull().references(() => partners.id),
+    userId: uuid("user_id").references(() => users.id),
+    /** parceiro | sistema (trava de sinal). */
+    origin: text("origin").notNull().default("parceiro"),
+    type: text("type").notNull(),
+    reservationId: uuid("reservation_id").references(() => portReservations.id),
+    ctoId: text("cto_id"),
+    ctoName: text("cto_name"),
+    login: text("login"),
+    description: text("description").notNull(),
+    signalDbm: doublePrecision("signal_dbm"),
+    /** Prazo de atendimento, vindo da configuração de SLA do tipo no momento da abertura. */
+    slaHours: integer("sla_hours").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    state: text("state").notNull().default("recebido"),
+    wikiTicketId: text("wiki_ticket_id"),
+    idempotencyKey: uuid("idempotency_key").notNull().unique(),
+    /** Ids das fotos anexadas (o portal gera os links assinados na hora do envio). */
+    photoIds: jsonb("photo_ids"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("tickets_partner_idx").on(t.partnerId, t.createdAt), index("tickets_state_idx").on(t.state)],
+);
+
+/** Histórico do chamado. As mensagens da Infra vêm da Wiki; dedupe pela chave de origem. */
+export const ticketMessages = pgTable(
+  "ticket_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ticketId: uuid("ticket_id").notNull().references(() => tickets.id, { onDelete: "cascade" }),
+    /** parceiro | infra | sistema. */
+    author: text("author").notNull(),
+    body: text("body").notNull(),
+    /** Chave de dedupe (hash de em|autor|texto) para mensagens que vêm da Wiki; nula para as locais. */
+    sourceKey: text("source_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("ticket_messages_ticket_idx").on(t.ticketId, t.createdAt), uniqueIndex("ticket_messages_source_idx").on(t.ticketId, t.sourceKey)],
+);
+
 /** Parâmetros da Speed editáveis em tela (ex.: limite da trava de sinal). Cada mudança vai para a auditoria. */
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),

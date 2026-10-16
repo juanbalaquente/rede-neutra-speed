@@ -195,10 +195,46 @@ export interface CustomerActions {
   get(operacaoId: string, partnerCode: string): Promise<OperationSnapshot | null>;
 }
 
+export interface TicketRequest {
+  idempotencyKey: string;
+  tipo: string;
+  origem: "parceiro" | "sistema";
+  parceiro: { codigo: string; nome: string };
+  ctoId: string | null;
+  login: string | null;
+  descricao: string;
+  sinalMedidoDbm: number | null;
+  slaHoras: number;
+  /** Links assinados (48 h) das fotos anexadas; a Wiki baixa na criação. */
+  fotos: { tipo: string; url: string }[];
+}
+
+export type TicketRemoteState = "aberto" | "em_atendimento" | "aguardando_parceiro" | "resolvido" | "cancelado";
+
+export interface TicketSnapshot {
+  chamadoId: string;
+  estado: TicketRemoteState;
+  atualizadoEm: string;
+  historico: { em: string; autor: "parceiro" | "infra" | "sistema"; texto: string }[];
+  resolucao: string | null;
+}
+
+/**
+ * Chamados de infraestrutura na Wiki (contrato v3, seção D). É ESCRITA em produção:
+ * só liga com AUTOMATION_MODE e validação do Juan. Desligado por padrão.
+ */
+export interface TicketService {
+  create(req: TicketRequest): Promise<{ chamadoId: string; estado: TicketRemoteState }>;
+  get(chamadoId: string, partnerCode: string): Promise<TicketSnapshot | null>;
+  addMessage(chamadoId: string, partnerCode: string, input: { idempotencyKey: string; texto: string }): Promise<void>;
+}
+
 export interface Integrations {
   network: NetworkMap;
   /** Ausente = ACTIVATION_MODE=off: as rotas de ativação respondem 503. */
   activation?: ActivationService;
   /** Ausente = AUTOMATION_MODE=off: as automações do cliente respondem 503. */
   actions?: CustomerActions;
+  /** Ausente = AUTOMATION_MODE=off: o chamado fica guardado no portal ("recebido") até a integração ligar. */
+  tickets?: TicketService;
 }

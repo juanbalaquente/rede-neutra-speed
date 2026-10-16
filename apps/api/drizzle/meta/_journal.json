@@ -64,6 +64,13 @@
       "when": 1792153950375,
       "tag": "0008_operacoes_do_cliente",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792154688755,
+      "tag": "0009_chamados",
+      "breakpoints": true
     }
   ]
 }
