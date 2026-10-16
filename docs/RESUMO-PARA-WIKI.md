@@ -53,8 +53,8 @@ Nenhuma credencial está aqui.
 
 São as perguntas que o que a Wiki já fez com o OLTCloud pode fechar:
 
-1. **Sinal na janela "Inativo":** depois de autorizar e antes de provisionar, o sinal da ONU aparece? Quanto tempo leva? Hoje a v2 responde `leitura_de_sinal_pendente` por isso. É o que libera a trava de sinal.
-2. **Primeiro teste real da v2** com uma ONU da Speed (autorizar, medir, provisionar, online) e a chave de escrita. Depois o Juan valida e liga `ACTIVATION_MODE=wiki`.
+1. ~~Sinal na janela "Inativo"~~ **resolvido em 16 out:** a Wiki testou ponta a ponta numa ONU da Speed (cerca de 70 s) e o sinal aparece logo depois de autorizar, por leitura forçada na OLT (3 leituras, mediana; até 2 min de tentativa, depois `sem_leitura_de_sinal`).
+2. **Ligar a ativação com o primeiro cliente real do piloto**: depende do contrato no Voalle com login `<contrato>-JHV`. As rotas de leitura da v2 já estão ativas; `POST /ativacoes` e `/decisao` seguem em 503 `ativacao_desligada`. Depois o Juan valida e liga `ACTIVATION_MODE=wiki`.
 3. **Sincronização Voalle → OLTCloud:** quanto tempo o contrato novo leva para aparecer no OLTCloud (nunca medido)? Se demorar, `POST /api/v2/client/create` resolve? Isso decide a ordem contrato → autorização.
 4. **Qual é a VLAN de gerência e qual a de serviço** nas ONUs com duas VLANs? Dá para devolver `vlans: [{ tipo, id }]`?
 5. **Rota oficial de autorização:** vale cobrar o suporte do OLTCloud de novo, ou a Wiki já tem a rota do painel estável o bastante para o piloto?

@@ -63,9 +63,17 @@ function Decision({ activation, onChange }: { activation: Activation; onChange: 
     }
   }
 
+  // A Wiki tenta ler o sinal por até 2 min depois de autorizar; sem leitura ela devolve a decisão com este motivo, sem medição.
+  const noReading = !sinal && activation.snapshot?.motivo === "sem_leitura_de_sinal";
   return (
     <div className="atv-trava">
-      <b>Sinal fora do limite</b>
+      <b>{noReading ? "Não foi possível ler o sinal da ONU" : "Sinal fora do limite"}</b>
+      {noReading && (
+        <p>
+          A ONU foi autorizada, mas o sistema não conseguiu medir o sinal dela em 2 minutos. Confira se a ONU está ligada e com a fibra conectada e <b>meça de novo</b>.
+          Se não for possível medir, você pode prosseguir com justificativa (abre chamado para a Infra) ou cancelar a ativação.
+        </p>
+      )}
       {sinal && (
         <p>
           Na CTO você mediu <span className="mono">{fmtDb(sinal.ctoDbm)} dBm</span>; na ONU deu <span className="mono">{fmtDb(sinal.onuDbm)} dBm</span>.

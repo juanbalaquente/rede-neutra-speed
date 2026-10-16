@@ -131,3 +131,50 @@ describe("portal diante da Wiki com a v2 ainda desligada", () => {
     expect(await mock.listPendingOnus("x", "JHV")).toBeInstanceOf(Array);
   });
 });
+
+describe("sem leitura de sinal (a Wiki tenta por 2 min e devolve a decisão sem medição)", () => {
+  it("o técnico decide sem sinal: prosseguir exige justificativa e abre o chamado automático sem inventar medição", async () => {
+    const { MockTicketService } = await import("../src/integrations/mock-tickets.js");
+    const tickets = new MockTicketService();
+    const snap = (estado: string) => ({
+      ativacaoId: "a1",
+      estado,
+      serial: "ZTEGC0000001",
+      sinal: null,
+      vlan: null,
+      prazoDecisaoAte: new Date(Date.now() + 30 * 60_000).toISOString(),
+      motivo: estado === "aguardando_decisao" ? "sem_leitura_de_sinal" : null,
+      atualizadoEm: new Date().toISOString(),
+    });
+    const svc: ActivationService = {
+      listPendingOnus: async () => [],
+      start: async () => ({ ativacaoId: "a1", estado: "recebida" as const }),
+      get: async () => snap("aguardando_decisao") as never,
+      decide: async () => snap("provisionando") as never,
+    };
+    const ctx = await setup(new MockNetworkMap(), svc, {}, undefined, tickets);
+    try {
+      const a = await ctx.createPartner("JHV Telecom", "11111111000111", { code: "JHV", maxCtoOccupancyPct: 100, maxActiveReservations: 50 });
+      const cookie = await ctx.login(a.atendente);
+      await ctx.call(cookie, "POST", "/viability", { address: "Rua dos Testes, 100, Belo Horizonte" });
+      const { reservation } = await (await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: "Rua dos Testes, 100, Belo Horizonte" })).json();
+      await ctx.setCliente(cookie, reservation.id);
+      await ctx.upload(cookie, reservation.id, { kind: "medicao" });
+      const { activation } = await (await ctx.call(cookie, "POST", "/activations", { reservationId: reservation.id, serial: "ZTEGC0000001", contrato: "12345", sinalCtoDbm: -20 })).json();
+      const read = (await (await ctx.call(cookie, "GET", `/activations/${activation.id}`)).json()).activation;
+      expect(read).toMatchObject({ state: "aguardando_decisao" });
+      expect(read.snapshot).toMatchObject({ sinal: null, motivo: "sem_leitura_de_sinal" });
+
+      expect((await ctx.call(cookie, "POST", `/activations/${activation.id}/decision`, { acao: "prosseguir", justificativa: "curta" })).status).toBe(422);
+      const ok = await ctx.call(cookie, "POST", `/activations/${activation.id}/decision`, { acao: "prosseguir", justificativa: "ONU ligada e fibra conectada, sem leitura na OLT." });
+      expect(ok.status).toBe(200);
+      const list = (await (await ctx.call(cookie, "GET", "/tickets")).json()).tickets;
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({ type: "trava_sinal", origin: "sistema" });
+      expect(list[0].description).not.toMatch(/perda de/); // sem medição, sem números inventados
+      expect(list[0].description).toContain("ONU ligada e fibra conectada");
+    } finally {
+      await ctx.close();
+    }
+  });
+});
