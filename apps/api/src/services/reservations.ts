@@ -1,7 +1,7 @@
 import { and, count, desc, eq, gte, inArray, lt, notExists, notInArray, sql } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { activations, partners, portReservations, viabilityQueries } from "../db/schema.js";
+import { activations, contractRequests, partners, portReservations, viabilityQueries } from "../db/schema.js";
 import { IntegrationError, type NetworkMap } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
@@ -19,10 +19,16 @@ export async function expireOverdueReservations(db: Db, now = new Date()): Promi
     .select({ one: sql`1` })
     .from(activations)
     .where(and(eq(activations.reservationId, portReservations.id), notInArray(activations.state, ["cancelada", "falhou"])));
+  // Planejamento, etapa 2: ao criar o contrato a reserva deixa de ter prazo. Expirar uma reserva com contrato já criado
+  // no Voalle deixaria um contrato órfão (e a vaga seria vendida de novo).
+  const withContract = db
+    .select({ one: sql`1` })
+    .from(contractRequests)
+    .where(and(eq(contractRequests.reservationId, portReservations.id), sql`${contractRequests.state} <> 'falhou'`));
   const expired = await db
     .update(portReservations)
     .set({ status: "expirada", updatedAt: now })
-    .where(and(eq(portReservations.status, "ativa"), lt(portReservations.expiresAt, now), notExists(inProgress)))
+    .where(and(eq(portReservations.status, "ativa"), lt(portReservations.expiresAt, now), notExists(inProgress), notExists(withContract)))
     .returning({ id: portReservations.id, partnerId: portReservations.partnerId });
   for (const r of expired) {
     await recordAudit(db, {
@@ -203,6 +209,17 @@ export async function cancelReservation(
   const scope = isAdmin
     ? eq(portReservations.id, id)
     : and(eq(portReservations.id, id), eq(portReservations.partnerId, user.partnerId!));
+  // Contrato já pedido ou criado no Voalle: cancelar a reserva o deixaria órfão. Enquanto a Wiki não tiver a rota de
+  // cancelamento de contrato não aprovado, a Speed resolve (a trava só existe com CONTRACT_MODE ligado, pois só então há contrato).
+  const [existing] = await db.select({ partnerId: portReservations.partnerId }).from(portReservations).where(and(scope, eq(portReservations.status, "ativa")));
+  if (existing) {
+    const [contract] = await db
+      .select({ id: contractRequests.id })
+      .from(contractRequests)
+      .where(and(eq(contractRequests.reservationId, id), sql`${contractRequests.state} <> 'falhou'`))
+      .limit(1);
+    if (contract) throw new AppError(409, "contrato_criado", "Esse cliente já tem contrato criado no sistema da Speed. Fale com a Speed para cancelar.");
+  }
   const [updated] = await db
     .update(portReservations)
     .set({ status: "cancelada", cancelReason: reason, cancelledBy: user.id, updatedAt: now })

@@ -222,3 +222,38 @@ describe("WikiContractService (contrato v3, seção H)", () => {
     await expect(build(() => json({ error: "boom" }, 503)).svc.create(REQ)).rejects.toMatchObject({ status: 503 });
   });
 });
+
+describe("contrato criado trava expiração e cancelamento da reserva", () => {
+  it("reserva com contrato não expira; sem contrato (ou com pedido que falhou), expira", async () => {
+    const { expireOverdueReservations } = await import("../src/services/reservations.js");
+    const { ate } = await partner();
+    const withContract = await reserved(ate);
+    await create(ate, withContract);
+    const without = await reserved(ate);
+    await ctx.db.update(portReservations).set({ expiresAt: new Date(Date.now() - 3600_000) });
+    await expireOverdueReservations(ctx.db);
+    const status = async (id: string) => (await ctx.db.select().from(portReservations).where(eq(portReservations.id, id)))[0]!.status;
+    expect(await status(withContract)).toBe("ativa");
+    expect(await status(without)).toBe("expirada");
+
+    // Pedido recusado não segura a vaga: depois de falhar, a reserva volta a expirar.
+    const refused = await reserved(ate);
+    await create(ate, refused, { endereco: { ...ENDERECO, cep: "00000000" } });
+    await ctx.db.update(portReservations).set({ expiresAt: new Date(Date.now() - 3600_000) });
+    await expireOverdueReservations(ctx.db);
+    expect(await status(refused)).toBe("expirada");
+  });
+
+  it("não deixa cancelar a reserva (nem a Speed) depois que o contrato foi pedido; sem contrato cancela normal", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    await create(ate, id);
+    const blocked = await ctx.call(ate, "POST", `/reservations/${id}/cancel`, { reason: "desistiu" });
+    expect(blocked.status).toBe(409);
+    expect((await blocked.json()).error).toBe("contrato_criado");
+    const adm = await ctx.login("admin@speed.test");
+    expect((await ctx.call(adm, "POST", `/reservations/${id}/cancel`, { reason: "teste" })).status).toBe(409);
+    const plain = await reserved(ate);
+    expect((await ctx.call(ate, "POST", `/reservations/${plain}/cancel`, { reason: "desistiu" })).status).toBe(200);
+  });
+});
