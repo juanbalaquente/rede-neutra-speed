@@ -17,10 +17,11 @@ import { ReservationsPage } from "./pages/ReservationsPage";
 import { TicketsPage } from "./pages/TicketsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
 import { CommandPalette, type Command } from "./ui/CommandPalette";
-import { ChartIcon, ClockIcon, ListIcon, MoonIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon, SunIcon } from "./ui/Icons";
+import { ChartIcon, ClockIcon, ListIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon } from "./ui/Icons";
 import { Bell, type Notice } from "./ui/Bell";
 import { ToastProvider, useToast } from "./ui/Toast";
-import { useTheme } from "./ui/theme";
+import { THEMES, useTheme } from "./ui/theme";
+import { THEME_ICON, ThemeMenu } from "./ui/ThemeMenu";
 
 type Tab = "inicio" | "financeiro" | "viabilidade" | "reservas" | "instalacoes" | "agenda" | "chamados" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
 
@@ -87,7 +88,7 @@ function Portal() {
 }
 
 function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const { theme, toggle } = useTheme();
+  const { theme, choose } = useTheme();
   // O administrador Speed começa pela gestão; o parceiro, pela venda.
   const [tab, setTab] = useState<Tab>(user.role === "admin_speed" ? "painel" : "inicio");
   const [partner, setPartner] = useState<Partner | null>(null);
@@ -206,10 +207,13 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
       { id: "go-agenda", group: "Ir para", title: "Agenda", icon: <ClockIcon />, run: () => setTab("agenda") },
       { id: "go-chamados", group: "Ir para", title: "Chamados", icon: <ListIcon />, run: () => setTab("chamados") },
       { id: "go-resv", group: "Ir para", title: "Reservas", hint: `${activeCount} abertas`, icon: <ClockIcon />, run: () => setTab("reservas") },
-      { id: "theme", group: "Preferências", title: theme === "dark" ? "Usar tema claro" : "Usar tema escuro", icon: theme === "dark" ? <SunIcon /> : <MoonIcon />, run: toggle },
+      ...THEMES.filter((t) => t.id !== theme).map((t) => {
+        const Ico = THEME_ICON[t.id];
+        return { id: `theme-${t.id}`, group: "Preferências", title: `Usar tema ${t.label.toLowerCase()}`, icon: <Ico />, run: () => choose(t.id) };
+      }),
       { id: "out", group: "Preferências", title: "Sair", icon: <OutIcon />, run: () => void logout() },
     ],
-    [activeCount, theme, toggle, logout, user.role],
+    [activeCount, theme, choose, logout, user.role],
   );
 
   const notices = useMemo<Notice[]>(() => {
@@ -329,9 +333,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <kbd>Ctrl K</kbd>
           </button>
           <Bell notices={notices} />
-          <button className="ibtn" onClick={toggle} aria-label="Trocar tema claro ou escuro">
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          </button>
+          <ThemeMenu theme={theme} onChoose={choose} />
           <button className="ibtn mobile-out" onClick={() => void logout()} aria-label="Sair">
             <OutIcon />
           </button>

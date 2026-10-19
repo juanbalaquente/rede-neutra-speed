@@ -35,6 +35,18 @@
   --side: #0d1015; --hover: #171b23; --shadow: 0 1px 2px #0006, 0 8px 24px #0005;
   color-scheme: dark;
 }
+/* Azul Speed: azul-marinho da marca, com o laranja na ação principal. Só por escolha. */
+:root[data-theme="blue"] {
+  --bg: #091733; --surf: #0e2048; --surf2: #112653; --line: #1b3366; --line2: #27447f;
+  --ink: #eef3ff; --ink2: #c5d1ec; --mute: #8fa3cc; --dim: #5d73a3;
+  --act: #ff5a1f; --act-ink: #ffffff;
+  --data: #7fb0ff; --data-soft: #162f66;
+  --ok: #43c983; --ok-soft: #0f2f2c; --warn: #f0a94a; --warn-soft: #2c2a2c; --bad: #ff6b6b; --bad-soft: #321f3a;
+  --c-ok: #1a8549; --c-warn: #b98826; --c-bad: #e04e6c;
+  --side: #071229; --hover: #15295a; --shadow: 0 1px 2px #02081a66, 0 8px 24px #02081a55;
+  color-scheme: dark;
+}
+:root[data-theme="blue"] .toast { background: var(--ink); color: var(--bg); }
 /* No celular, a fonte do sistema deixa o portal com cara de app nativo. */
 @media (max-width: 900px) {
   :root { --font: -apple-system, "SF Pro Text", Roboto, "Segoe UI", Arial, sans-serif; }
@@ -276,11 +288,12 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
     --viz-none: #383835; --viz-grid: #1d222b; --viz-axis: #383835;
   }
 }
-:root[data-theme="dark"] {
+:root[data-theme="dark"], :root[data-theme="blue"] {
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
   --seq-1: #0d366b; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #86b6ef; --seq-5: #cde2fb;
   --viz-none: #383835; --viz-grid: #1d222b; --viz-axis: #383835;
 }
+:root[data-theme="blue"] { --viz-none: #22396b; --viz-grid: #1a3163; --viz-axis: #33508a; }
 .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
 .filters .fld { width: min(240px, 100%); }
 .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
@@ -425,6 +438,18 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .hist th.num, .hist td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Sino de avisos e faixa da rede */
+.tmenu { position: relative; }
+.tmenu-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 190px; z-index: 30; padding: 4px; display: grid; }
+.tmenu-pop button { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; background: none; border-radius: 8px; color: var(--ink); font-size: 13.5px; text-align: left; }
+.tmenu-pop button span { flex: 1; }
+.tmenu-pop button svg { color: var(--mute); }
+.tmenu-pop button:hover { background: var(--hover); }
+.tmenu-pop button.on { background: var(--data-soft); }
+.tmenu-pop button.on svg { color: var(--data); }
+.tmenu-pop .sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line2); flex: none; }
+.tmenu-pop .sw-light { background: #f6f7f9; }
+.tmenu-pop .sw-dark { background: #11141a; }
+.tmenu-pop .sw-blue { background: linear-gradient(135deg, #0e2048 60%, #ff5a1f 60%); }
 .bell { position: relative; }
 .bell .ibtn { position: relative; }
 .bell-n { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--bad); color: #fff; font: 600 10.5px/16px var(--font); text-align: center; }

@@ -1,7 +1,13 @@
 import { useCallback, useState } from "react";
 
 const KEY = "rn-theme";
-export type Theme = "light" | "dark";
+export type Theme = "light" | "dark" | "blue";
+
+export const THEMES: { id: Theme; label: string }[] = [
+  { id: "light", label: "Claro" },
+  { id: "dark", label: "Escuro" },
+  { id: "blue", label: "Azul Speed" },
+];
 
 function systemTheme(): Theme {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -10,17 +16,16 @@ function systemTheme(): Theme {
 function readStored(): Theme | null {
   try {
     const v = localStorage.getItem(KEY);
-    return v === "light" || v === "dark" ? v : null;
+    return v === "light" || v === "dark" || v === "blue" ? v : null;
   } catch {
     return null;
   }
 }
 
-/** Claro/escuro: segue o sistema até o usuário escolher; a escolha fica salva neste navegador. */
+/** Claro, escuro ou azul Speed: segue o sistema (claro/escuro) até o usuário escolher; a escolha fica salva neste navegador. */
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => readStored() ?? systemTheme());
-  const toggle = useCallback(() => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
+  const choose = useCallback((next: Theme) => {
     document.documentElement.dataset.theme = next;
     try {
       localStorage.setItem(KEY, next);
@@ -28,6 +33,6 @@ export function useTheme() {
       /* sem armazenamento: vale só nesta sessão */
     }
     setTheme(next);
-  }, [theme]);
-  return { theme, toggle };
+  }, []);
+  return { theme, choose };
 }

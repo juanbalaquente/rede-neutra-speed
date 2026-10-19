@@ -37,6 +37,11 @@ export const SunIcon = () => (
     <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
   </Icon>
 );
+export const DropIcon = () => (
+  <Icon>
+    <path d="M12 3s6 6.3 6 11a6 6 0 0 1-12 0c0-4.7 6-11 6-11Z" />
+  </Icon>
+);
 export const OutIcon = () => (
   <Icon>
     <path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9" />
