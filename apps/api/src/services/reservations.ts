@@ -226,7 +226,7 @@ export async function cancelReservation(
   }
   const [updated] = await db
     .update(portReservations)
-    .set({ status: "cancelada", cancelReason: reason, cancelledBy: user.id, updatedAt: now })
+    .set({ status: "cancelada", cancelReason: reason, cancelledBy: user.id, cancelledAt: now, updatedAt: now })
     .where(and(scope, eq(portReservations.status, "ativa")))
     .returning();
   if (!updated) {

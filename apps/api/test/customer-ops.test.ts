@@ -156,8 +156,12 @@ describe("cancelar o cliente e devolver a vaga", () => {
     expect(r).toMatchObject({ status: "cancelada", customerStatus: "cancelado", cancelReason: "pedido do cliente" });
     expect(await vagas(ate)).toBe(during + 1); // a vaga voltou
     expect((await (await ctx.call(ate, "GET", "/dashboard")).json()).portasAtivas).toBe(0);
-    const month = new Date().toISOString().slice(0, 7);
-    expect((await (await ctx.call(sup, "GET", `/finance?month=${month}`)).json()).resumo.portasAtivas).toBe(0);
+    // A cobrança é do portal: o mês do cancelamento ainda é cobrado (mês cheio); o seguinte, não.
+    const { monthBounds, monthOf } = await import("../src/services/finance.js");
+    const month = monthOf(new Date());
+    expect((await (await ctx.call(sup, "GET", `/finance?month=${month}`)).json()).resumo.portasAtivas).toBe(1);
+    const next = monthOf(new Date(monthBounds(month).end.getTime() + 24 * 3600_000));
+    expect((await (await ctx.call(sup, "GET", `/finance?month=${next}`)).json()).resumo.portasAtivas).toBe(0);
     // Cancelado continua na lista como histórico (fotos e O.S.), mas uma reserva cancelada antes de instalar não.
     const listed = (await (await ctx.call(sup, "GET", "/installations")).json()).installations as { id: string; customerStatus: string }[];
     expect(listed.find((i) => i.id === id)?.customerStatus).toBe("cancelado");

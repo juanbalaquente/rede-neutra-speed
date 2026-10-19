@@ -89,7 +89,7 @@ export async function startContract(db: Db, svc: ContractService, user: SessionU
     row = same;
   }
   if (row.wikiOperationId) return contractView(row);
-  return contractView(await send(db, svc, row, { code: partner.code, cnpj: partner.cnpj }, { speedMbps: plan.speedMbps, priceCents: plan.speedPriceCents }, reservation, endereco));
+  return contractView(await send(db, svc, row, { code: partner.code, cnpj: partner.cnpj }, { speedMbps: plan.speedMbps }, reservation, endereco));
 }
 
 async function send(
@@ -97,7 +97,7 @@ async function send(
   svc: ContractService,
   row: Row,
   partner: { code: string; cnpj: string },
-  plan: { speedMbps: number; priceCents: number },
+  plan: { speedMbps: number },
   reservation: typeof portReservations.$inferSelect,
   endereco: ContractAddress,
 ): Promise<Row> {
@@ -107,8 +107,9 @@ async function send(
       reservaId: reservation.id,
       parceiroCnpj: partner.cnpj,
       partnerCode: partner.code,
-      // O valor mensal é o que a Speed cobra do parceiro por esse plano (o preço de venda ao assinante é do parceiro).
-      plano: { velocidadeMbps: plan.speedMbps, valorMensal: plan.priceCents / 100 },
+      // Contrato SEM VALOR: no Voalle ele só identifica o cliente e gera o PPPoE (a velocidade escolhe o perfil no RADIUS).
+      // O parceiro paga a Speed por fora do ERP, pelo fechamento do portal (portas ativas × valor fixo do plano).
+      plano: { velocidadeMbps: plan.speedMbps, valorMensal: 0 },
       ctoId: reservation.ctoId,
       endereco,
       location: reservation.lat !== null && reservation.lng !== null ? { lat: reservation.lat, lng: reservation.lng } : null,
@@ -182,7 +183,7 @@ export async function retryContract(db: Db, svc: ContractService, user: SessionU
   const [plan] = await db.select().from(plans).where(eq(plans.id, reservation.planId!));
   if (!partner?.code || !plan) throw new AppError(422, "dados_cliente_obrigatorios", "Faltam dados do parceiro ou do plano.");
   await recordAudit(db, { partnerId: row.partnerId, userId: user.id, action: "contrato.repetido", entity: "contract_request", entityId: row.id, ip: opts.ip });
-  return contractView(await send(db, svc, row, { code: partner.code, cnpj: partner.cnpj }, { speedMbps: plan.speedMbps, priceCents: plan.speedPriceCents }, reservation, endereco));
+  return contractView(await send(db, svc, row, { code: partner.code, cnpj: partner.cnpj }, { speedMbps: plan.speedMbps }, reservation, endereco));
 }
 
 /** Contrato já criado pela Wiki para a reserva, ou null. A ativação usa este número em vez de um digitado. */
@@ -255,7 +256,7 @@ export async function abandonContract(db: Db, admin: SessionUser, reservationId:
   const [updated] = await db.update(contractRequests).set({ state: "abandonada", reason: reason.trim(), updatedAt: now }).where(eq(contractRequests.id, row.id)).returning();
   await db
     .update(portReservations)
-    .set({ status: "cancelada", cancelReason: `Contrato abandonado pela Speed: ${reason.trim()}`, cancelledBy: admin.id, updatedAt: now })
+    .set({ status: "cancelada", cancelReason: `Contrato abandonado pela Speed: ${reason.trim()}`, cancelledBy: admin.id, cancelledAt: now, updatedAt: now })
     .where(and(eq(portReservations.id, reservation.id), eq(portReservations.status, "ativa")));
   await recordAudit(db, {
     partnerId: row.partnerId,

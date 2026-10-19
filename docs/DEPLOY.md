@@ -106,7 +106,7 @@ Durante os testes o servidor pode estar com `MFA_REQUIRED=false`, `INTEGRATIONS_
 
 ## Migrations desta fase
 
-`0012_contrato_abandonado` troca o índice de contratos (um pedido vivo por reserva, salvo `falhou` e `abandonada`). Roda sozinha na subida da API; faça o backup antes, como sempre.
+`0013_data_do_cancelamento` guarda quando cada reserva foi cancelada (os cancelamentos antigos recebem a data da última atualização), para o fechamento cobrar a porta no mês certo. `0012_contrato_abandonado` troca o índice de contratos (um pedido vivo por reserva, salvo `falhou` e `abandonada`). Roda sozinha na subida da API; faça o backup antes, como sempre.
 
 ## 7. Depois (modelo da Wiki, quando valer a pena)
 

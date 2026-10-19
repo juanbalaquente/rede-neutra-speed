@@ -232,3 +232,67 @@ describe("filtros dos relatórios", () => {
     expect(text).not.toContain("10003");
   });
 });
+
+describe("cobrança pelo portal: cliente cancelado", () => {
+  it("é cobrado no mês do cancelamento, sai dos meses seguintes e não muda o fechamento dos meses passados", async () => {
+    const { sup, ate } = await partner();
+    const p600 = await planByMbps(600);
+    const a = await installed(ate, 600, "10001");
+    const b = await installed(ate, 600, "10002");
+    const { portReservations } = await import("../src/db/schema.js");
+    // Os dois foram ativados no mês passado.
+    const lastStart = monthBounds(LAST_MONTH).start;
+    await ctx.db.update(portReservations).set({ osClosedAt: new Date(lastStart.getTime() + 2 * 24 * 3600_000) });
+    // b foi cancelado neste mês.
+    await ctx.db.update(portReservations).set({ status: "cancelada", customerStatus: "cancelado", cancelledAt: new Date() }).where(eq(portReservations.id, b));
+    const fin = async (month: string) => (await (await ctx.call(sup, "GET", `/finance?month=${month}`)).json());
+    const last = await fin(LAST_MONTH);
+    expect(last.resumo).toMatchObject({ portasAtivas: 2, custoCents: p600.speedPriceCents * 2 }); // o passado não muda
+    const now = await fin(THIS_MONTH);
+    expect(now.resumo.portasAtivas).toBe(2); // cobrado no mês do cancelamento (mês cheio)
+    const cancelled = now.clientes.find((c: { id: string }) => c.id === b);
+    expect(cancelled.cancelledAt).toBeTruthy();
+    expect(now.clientes.find((c: { id: string }) => c.id === a).cancelledAt).toBeNull();
+    // No mês seguinte ao cancelamento, já não cobra.
+    const next = monthOf(new Date(monthBounds(THIS_MONTH).end.getTime() + 24 * 3600_000));
+    expect((await fin(next)).resumo.portasAtivas).toBe(1);
+    // O painel conta a instalação do cliente cancelado na história.
+    const dash = await (await ctx.call(sup, "GET", "/dashboard")).json();
+    const lastSerie = dash.serie.find((s: { month: string }) => s.month === LAST_MONTH);
+    expect(lastSerie).toMatchObject({ instalacoes: 2, ativasNoFim: 2 });
+  });
+});
+
+describe("cobrança da Speed por parceiro (o parceiro paga por fora do ERP)", () => {
+  it("soma por parceiro as portas cobradas no mês × valor fixo, e o demonstrativo lista contrato e login", async () => {
+    const a = await partner();
+    const b = await partner("22222222000122", "OUT");
+    const p600 = await planByMbps(600);
+    const p1g = await planByMbps(1000);
+    await installed(a.ate, 600, "10001");
+    await installed(a.ate, 1000, "10002");
+    await installed(b.ate, 600, "20001");
+    const adm = await ctx.login("admin@speed.test");
+    const res = await ctx.call(adm, "GET", `/admin/cobranca?month=${THIS_MONTH}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const jhv = body.parceiros.find((p: { code: string }) => p.code === "JHV");
+    const out = body.parceiros.find((p: { code: string }) => p.code === "OUT");
+    expect(jhv).toMatchObject({ portas: 2, valorCents: p600.speedPriceCents + p1g.speedPriceCents, canceladasNoMes: 0 });
+    expect(out).toMatchObject({ portas: 1, valorCents: p600.speedPriceCents });
+    expect(body).toMatchObject({ totalPortas: 3, totalCents: 2 * p600.speedPriceCents + p1g.speedPriceCents });
+
+    const csvRes = await ctx.call(adm, "GET", `/admin/cobranca/${jhv.partnerId}/export?month=${THIS_MONTH}`);
+    expect(csvRes.headers.get("content-disposition")).toContain(`cobranca-JHV-${THIS_MONTH}.csv`);
+    const text = new TextDecoder().decode(await csvRes.arrayBuffer());
+    expect(text).toContain("Contrato;Login PPPoE;Plano;CTO;Ativado em;Cancelado em;Valor (R$)");
+    expect(text).toContain("10001;10001-JHV");
+    expect(text).toContain("TOTAL");
+    expect(text).not.toContain("20001"); // só o parceiro pedido
+  });
+
+  it("só a Speed vê a cobrança", async () => {
+    const a = await partner();
+    expect((await ctx.call(a.sup, "GET", `/admin/cobranca?month=${THIS_MONTH}`)).status).toBe(403);
+  });
+});

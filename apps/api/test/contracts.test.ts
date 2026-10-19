@@ -55,6 +55,8 @@ describe("criação do contrato", () => {
     const sent = wiki.created[0]!;
     expect(sent).toMatchObject({ reservaId: id, parceiroCnpj: "11111111000111", partnerCode: "JHV", ctoId: "CTO-TESTE-01", endereco: { cep: "34505000", uf: "MG" } });
     expect(sent.plano.velocidadeMbps).toBeGreaterThan(0);
+    // Contrato sem valor no Voalle: a cobrança do parceiro é por fora do ERP.
+    expect(sent.plano.valorMensal).toBe(0);
     expect(JSON.stringify(sent)).not.toMatch(/Cliente|nickname/i);
 
     const done = await settle(ate, id);
@@ -191,7 +193,7 @@ describe("WikiContractService (contrato v3, seção H)", () => {
     reservaId: "r1",
     parceiroCnpj: "11111111000111",
     partnerCode: "JHV",
-    plano: { velocidadeMbps: 600, valorMensal: 40 },
+    plano: { velocidadeMbps: 600, valorMensal: 0 as const },
     ctoId: "24109",
     endereco: { cep: "34505000", rua: "Rua A", numero: "10", complemento: "", bairro: "B", cidade: "Sabará", uf: "MG" },
     location: { lat: -19.89, lng: -43.86 },

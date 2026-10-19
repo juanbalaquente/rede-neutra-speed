@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { partnerPrices, payments, plans, portReservations, tickets } from "../db/schema.js";
+import { partnerPrices, payments, plans, portReservations, tickets, partners } from "../db/schema.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 
@@ -65,6 +65,8 @@ export interface FinanceClient {
   /** CTO onde a porta está e situação do contrato do assinante (ativo | bloqueado). */
   ctoName: string;
   customerStatus: string;
+  /** Cancelado neste mês (ainda cobrado nele) ou null. */
+  cancelledAt: Date | null;
   /** null = ainda não marcado neste mês. */
   paid: boolean | null;
 }
@@ -80,18 +82,24 @@ export interface FinanceFilters {
 
 /** Porta ativa no mês: reserva convertida com a O.S. fechada até o fim do mês. */
 export async function getFinance(db: Db, user: SessionUser, month: string, filters: FinanceFilters = {}) {
-  const partnerId = requirePartner(user);
-  const { end } = monthBounds(month);
+  return financeForPartner(db, requirePartner(user), month, filters);
+}
+
+/** Fechamento de um parceiro no mês. A mesma regra serve ao parceiro (financeiro) e à Speed (cobrança). */
+export async function financeForPartner(db: Db, partnerId: string, month: string, filters: FinanceFilters = {}) {
+  const { start, end } = monthBounds(month);
   const rows = await db
     .select({ r: portReservations, plan: plans })
     .from(portReservations)
     // leftJoin: instalação anterior à exigência de plano não some do financeiro, vira "Sem plano" e sem custo.
     .leftJoin(plans, eq(plans.id, portReservations.planId))
-    .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.status, "convertida"), isNotNull(portReservations.osClosedAt)));
+    .where(and(eq(portReservations.partnerId, partnerId), inArray(portReservations.status, ["convertida", "cancelada"]), isNotNull(portReservations.osClosedAt)));
   const NO_PLAN = { id: "sem-plano", name: "Sem plano", speedMbps: 0, speedPriceCents: 0 };
   const cto = filters.cto?.trim().toLowerCase();
+  // Porta cobrada no mês: ativada até o fim dele e não cancelada antes do começo. Mês cheio na ativação e no cancelamento
+  // (padrão até a decisão sobre proporcional). O fechamento de um mês passado não muda com cancelamentos posteriores.
   const active = rows
-    .filter((x) => x.r.osClosedAt! < end)
+    .filter((x) => x.r.osClosedAt! < end && (x.r.status !== "cancelada" || (x.r.cancelledAt !== null && x.r.cancelledAt >= start)))
     .map((x) => ({ r: x.r, plan: x.plan ?? NO_PLAN }))
     .filter(({ r, plan }) => (!filters.planId || plan.id === filters.planId) && (!cto || r.ctoId.toLowerCase() === cto || r.ctoName.toLowerCase().includes(cto)))
     .filter(({ r }) => filters.status !== "ativo" && filters.status !== "bloqueado" ? true : r.customerStatus === filters.status);
@@ -113,6 +121,7 @@ export async function getFinance(db: Db, user: SessionUser, month: string, filte
       activatedAt: r.osClosedAt!,
       ctoName: r.ctoName,
       customerStatus: r.customerStatus,
+      cancelledAt: r.status === "cancelada" ? r.cancelledAt : null,
       paid: paid.get(r.id) ?? null,
     }))
     .filter((c) => (filters.status === "pago" ? c.paid === true : filters.status === "em_aberto" ? c.paid !== true : true))
@@ -214,13 +223,22 @@ export async function getDashboard(db: Db, user: SessionUser, now = new Date()) 
 
   const open = (x: (typeof rows)[number]) => !x.r.osClosedAt;
   const closedAt = rows.filter((x) => x.r.osClosedAt && x.r.status === "convertida").map((x) => x.r.osClosedAt!);
+  // Clientes instalados e depois cancelados: entram na história (instalações do mês e portas ativas no fim de cada mês).
+  const gone = await db
+    .select({ closedAt: portReservations.osClosedAt, cancelledAt: portReservations.cancelledAt })
+    .from(portReservations)
+    .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.status, "cancelada"), isNotNull(portReservations.osClosedAt)));
 
   // Últimos 6 meses: instalações fechadas em cada um e portas ativas no fim dele.
   const serie = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - (5 - i), 1));
     const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     const { start, end } = monthBounds(month);
-    return { month, instalacoes: closedAt.filter((t) => t >= start && t < end).length, ativasNoFim: closedAt.filter((t) => t < end).length };
+    return {
+      month,
+      instalacoes: closedAt.filter((t) => t >= start && t < end).length + gone.filter((g) => g.closedAt! >= start && g.closedAt! < end).length,
+      ativasNoFim: closedAt.filter((t) => t < end).length + gone.filter((g) => g.closedAt! < end && g.cancelledAt !== null && g.cancelledAt >= end).length,
+    };
   });
 
   const planos = new Map<string, number>();
@@ -247,4 +265,53 @@ export async function setSpeedPrice(db: Db, user: SessionUser, planId: string, s
   if (!before) throw new AppError(404, "plano_nao_encontrado", "Plano não encontrado.");
   await db.update(plans).set({ speedPriceCents }).where(eq(plans.id, planId));
   await recordAudit(db, { partnerId: null, userId: user.id, action: "plano.preco_speed", entity: "plan", entityId: planId, ip, data: { plano: before.name, before: before.p, after: speedPriceCents } });
+}
+
+// ── Cobrança da Speed (o contrato no Voalle não tem valor: o parceiro paga direto à Speed, por este fechamento) ──
+
+export interface PartnerBilling {
+  partnerId: string;
+  name: string;
+  code: string | null;
+  cnpj: string;
+  status: string;
+  portas: number;
+  canceladasNoMes: number;
+  valorCents: number;
+}
+
+/** Quanto cada parceiro deve à Speed no mês: portas ativas em algum momento do mês × valor fixo do plano. */
+export async function speedBilling(db: Db, month: string): Promise<{ month: string; parceiros: PartnerBilling[]; totalCents: number; totalPortas: number }> {
+  const all = await db.select().from(partners).orderBy(partners.name);
+  const parceiros: PartnerBilling[] = [];
+  for (const p of all) {
+    const f = await financeForPartner(db, p.id, month);
+    parceiros.push({
+      partnerId: p.id,
+      name: p.name,
+      code: p.code,
+      cnpj: p.cnpj,
+      status: p.status,
+      portas: f.resumo.portasAtivas,
+      canceladasNoMes: f.clientes.filter((c) => c.cancelledAt !== null).length,
+      valorCents: f.resumo.custoCents,
+    });
+  }
+  return { month, parceiros, totalCents: parceiros.reduce((s, p) => s + p.valorCents, 0), totalPortas: parceiros.reduce((s, p) => s + p.portas, 0) };
+}
+
+/** Demonstrativo de cobrança de um parceiro: uma linha por porta cobrada no mês, para mandar junto da cobrança. */
+export function cobrancaCsv(partner: { name: string; code: string | null; cnpj: string }, f: Awaited<ReturnType<typeof financeForPartner>>): string {
+  const rows: unknown[][] = f.clientes.map((c) => [
+    c.contract,
+    c.contract && partner.code ? `${c.contract}-${partner.code}` : "",
+    c.plan,
+    c.ctoName,
+    c.activatedAt.toISOString().slice(0, 10),
+    c.cancelledAt ? c.cancelledAt.toISOString().slice(0, 10) : "",
+    brl(c.costCents),
+  ]);
+  rows.push([], ["TOTAL", "", "", "", "", `${f.resumo.portasAtivas} porta(s)`, brl(f.resumo.custoCents)]);
+  rows.push([], [`Parceiro: ${partner.name} (CNPJ ${partner.cnpj})`], [`Mês: ${f.month}`], ["Regra: porta ativa em algum momento do mês, mês cheio; valor fixo por plano. O contrato no Voalle não tem valor."]);
+  return csv(["Contrato", "Login PPPoE", "Plano", "CTO", "Ativado em", "Cancelado em", "Valor (R$)"], rows);
 }

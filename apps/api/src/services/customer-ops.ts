@@ -148,7 +148,7 @@ async function applyOutcome(db: Db, row: Row) {
     // A vaga volta: a contagem de reservas vivas só considera ativa e convertida.
     await db
       .update(portReservations)
-      .set({ status: "cancelada", customerStatus: "cancelado", cancelReason: row.reason, cancelledBy: row.userId, updatedAt: now })
+      .set({ status: "cancelada", customerStatus: "cancelado", cancelReason: row.reason, cancelledBy: row.userId, cancelledAt: now, updatedAt: now })
       .where(and(eq(portReservations.id, row.reservationId), eq(portReservations.status, "convertida")));
   }
 }

@@ -1,5 +1,7 @@
 # Rede Neutra Speed: briefing do analista (Voalle, contratos e faturamento)
 
+> **Atualização (18 out 2026):** o contrato da rede neutra no Voalle **não tem valor**. Ele só identifica o cliente e gera o PPPoE; o parceiro paga a Speed por fora do ERP. **As tarefas de faturamento deste briefing (fatura consolidada por CNPJ, boletos, títulos em aberto) não são mais necessárias.** Continuam valendo as perguntas sobre criação do contrato, conexão PPPoE, ponto de acesso, aprovação (se o Voalle exige contrato aprovado para autenticar) e suspensão (se corta o PPPoE).
+
 Atualizado em 7 de outubro de 2026. Este documento é autocontido: tudo o que você (e o Claude que te ajuda) precisa está aqui.
 
 ---

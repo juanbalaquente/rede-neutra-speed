@@ -158,6 +158,8 @@ export const portReservations = pgTable(
     installAddress: jsonb("install_address"),
     cancelReason: text("cancel_reason"),
     cancelledBy: uuid("cancelled_by").references(() => users.id),
+    /** Quando foi cancelada: o fechamento do mês cobra a porta em todo mês em que ela esteve ativa (a cobrança é do portal, não do ERP). */
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

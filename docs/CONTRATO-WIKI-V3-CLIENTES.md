@@ -106,7 +106,7 @@ O planejamento pede alarme no dashboard quando um cliente entra em `loss` e avis
 
 - **Como bloquear:** o planejamento prefere o **bloqueio administrativo do contrato no Voalle** (reversível, mantém histórico). A troca de PPPoE fica como recurso secundário.
 - **[DECIDIR / depende do analista]** a rota do Voalle para bloqueio administrativo ainda **não é conhecida** (só o desbloqueio por confiança, `contracts/unlock`, aparece na API de terceiros, e ele tem outro significado). O resultado da Tarefa 2 do briefing do analista define o desenho. Se não houver API, o bloqueio fica **semi-manual**: a operação vira `aguardando_equipe` e abre card no Kanban da Speed.
-- O cliente bloqueado **continua ocupando a porta e sendo faturado** (regra comercial do planejamento); o bloqueio não mexe no OLTCloud nem na vaga.
+- O cliente bloqueado **continua ocupando a porta e sendo faturado** (regra comercial do planejamento); o bloqueio não mexe no OLTCloud nem na vaga. **Atualização (18 out):** como o contrato no Voalle não tem valor, "continuar faturado" é responsabilidade do **portal** (a porta bloqueada segue no fechamento). A **suspensão** do Voalle (`Contract/Suspend`) deixa de ter o problema de parar a cobrança e passa a ser o caminho recomendado para o bloqueio automático, se ela cortar o PPPoE (confirmar).
 
 ### `POST /clientes/{login}/reinicio`
 ```json
@@ -131,7 +131,7 @@ Encerra o contrato, remove a ONU e **devolve a porta**. Três etapas, cada uma c
 | `porta_devolvida` | Codemaps (libera a ocupação) |
 
 - Falha no meio: a operação fica `parcial` com o estado de cada etapa, e **repetir a mesma `idempotencyKey` continua de onde parou**, sem refazer as etapas concluídas.
-- **[DECIDIR]** o planejamento pede **impedir o cancelamento com fatura em aberto**, conforme regra comercial. A Wiki consegue consultar títulos em aberto no Voalle (API de terceiros)? Se sim, `409 fatura_em_aberto` antes de qualquer etapa. Caso contrário, a regra fica só no portal, por confirmação explícita do parceiro.
+- ~~**[DECIDIR]** impedir o cancelamento com fatura em aberto~~ **(sem efeito, 18 out):** não há fatura no Voalle para esses contratos. A inadimplência do parceiro com a Speed é tratada pela Speed fora do ERP (e, no portal, pelo bloqueio do parceiro). O portal não manda nem espera `409 fatura_em_aberto`.
 - Ao `concluida`, o portal marca a reserva como cancelada e **libera a vaga** na contagem.
 
 ### `GET /operacoes/{id}`
@@ -227,7 +227,7 @@ A Wiki já tem a criação de contrato no Voalle construída e desligada: `contr
   "idempotencyKey": "uuid",
   "reservaId": "id da reserva no portal (vai na observação do contrato)",
   "parceiroCnpj": "00000000000000",
-  "plano": { "velocidadeMbps": 600, "valorMensal": 40.00 },
+  "plano": { "velocidadeMbps": 600, "valorMensal": 0 },
   "ctoId": "24109",
   "endereco": { "cep": "34505000", "rua": "Rua ...", "numero": "10", "complemento": "", "bairro": "...", "cidade": "Sabará", "uf": "MG" },
   "location": { "lat": -19.89, "lng": -43.86 }
@@ -236,7 +236,7 @@ A Wiki já tem a criação de contrato no Voalle construída e desligada: `contr
 - `422 parceiro_sem_cadastro`: o parceiro precisa estar no Voalle com esse CNPJ e endereço completo. `422 plano_nao_configurado`: a velocidade não tem serviço mapeado na Wiki.
 - Nenhum nome de assinante. O endereço e a coordenada são da instalação e só vão para a conexão.
 - `202 { "operacaoId": "..." }`; `GET /v3/operacoes/{id}` com `tipo: "contrato"`, etapas `contrato_criado`, `conexao_ajustada` e `endereco_gravado`, e, ao concluir, `resultado: { "contrato": "33431", "login": "33431-JHV" }`.
-- O contrato nasce **sem aprovação, logo não fatura**. Proposta da Wiki: aprovar quando a ativação da ONU (v2) chega a `online`, para a cobrança começar na porta ativada. Reserva cancelada antes da ativação: o contrato não aprovado é cancelado. **[DECIDIR - Juan]** confirmar o gatilho e a proporcionalidade do primeiro mês.
+- **Contrato sem valor (Juan, 18 out 2026):** o contrato no Voalle **não cobra nada**. Ele existe só para **identificar o cliente** (o número do contrato é a chave) e **gerar a conexão PPPoE** (login `<contrato>-<CÓDIGO>`, ponto de acesso, perfil de velocidade no RADIUS). O parceiro **paga direto ao dono da Speed, fora do ERP**, pelo fechamento do portal (portas ativas × valor fixo por plano). O portal manda sempre `valorMensal: 0`; a velocidade só escolhe o serviço/perfil. **Por isso a aprovação deixa de ser decisão de cobrança:** se o Voalle exigir contrato aprovado para a conexão autenticar, a Wiki pode aprovar já na criação. ~~Proposta da Wiki: aprovar quando a ONU chega a `online`, para a cobrança começar na porta ativada~~ (superada). Reserva cancelada antes da ativação: o contrato é cancelado (rota de cancelamento abaixo).
 
 **Estados e repetição (como o portal trata):** `recebida`, `executando`, `concluida`, `parcial`, `aguardando_equipe` e `falhou`. Em `parcial` o portal repete o `POST` com a **mesma `idempotencyKey`** e a Wiki deve continuar de onde parou, sem criar outro contrato. Em `falhou` **depois de uma etapa concluída** (`contrato_criado`, por exemplo) o portal **não permite novo pedido**, porque uma chave nova criaria um segundo contrato e deixaria o primeiro órfão: a Speed conclui ou cancela no Voalle e marca como abandonado no portal. Em `falhou` sem etapa concluída (recusa na entrada: `parceiro_sem_cadastro`, `plano_nao_configurado`) o parceiro pode pedir de novo. `aguardando_equipe` vale para etapa manual. O fluxo inteiro está em [`FLUXO-CONTRATO-E-CONEXAO.md`](FLUXO-CONTRATO-E-CONEXAO.md).
 

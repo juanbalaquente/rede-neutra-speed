@@ -75,10 +75,10 @@ Configurar o tipo de contrato com "Integração" e a campanha; responder sobre c
 
 ### 4.4 Decisões do Juan
 
-1. Gatilho de aprovação do contrato e primeiro mês proporcional.
-2. Bloqueio por suspensão (para a cobrança) ou manual (mantém a cobrança).
-3. Regra de fatura em aberto no cancelamento (hoje o devedor é o parceiro).
-4. Board e colunas do Kanban dos chamados.
+**Mudança de 18 out: o contrato no Voalle não tem valor** (só identifica e gera o PPPoE; o parceiro paga a Speed por fora do ERP, pelo fechamento do portal). Com isso, gatilho de aprovação, bloqueio por suspensão e fatura em aberto deixaram de ser decisões de cobrança. Ficam:
+
+1. Regra de cobrança no fechamento do portal: mês cheio ou proporcional, na ativação e no cancelamento.
+2. Board e colunas do Kanban dos chamados.
 
 ### 4.5 Diretoria
 

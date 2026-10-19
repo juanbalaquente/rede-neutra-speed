@@ -228,7 +228,8 @@ export interface ContractRequest {
   reservaId: string;
   parceiroCnpj: string;
   partnerCode: string;
-  plano: { velocidadeMbps: number; valorMensal: number };
+  /** valorMensal é sempre 0: o contrato no Voalle não cobra; serve para identificar o cliente e gerar o PPPoE. */
+  plano: { velocidadeMbps: number; valorMensal: 0 };
   ctoId: string;
   endereco: ContractAddress;
   location: { lat: number; lng: number } | null;
