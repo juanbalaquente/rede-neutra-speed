@@ -12,7 +12,8 @@
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:seed": "tsx src/scripts/seed.ts",
     "validate:integrations": "tsx src/scripts/validate-integrations.ts",
-    "user:reset-2fa": "tsx src/scripts/reset-2fa.ts"
+    "user:reset-2fa": "tsx src/scripts/reset-2fa.ts",
+    "demo:eustaquio": "tsx src/scripts/demo-eustaquio.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
