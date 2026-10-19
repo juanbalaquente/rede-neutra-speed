@@ -7,6 +7,8 @@ interface Entry {
   estado: OperationState;
   etapas: OperationStep[];
   contrato: string;
+  /** Operação de cancelamento (não devolve contrato). */
+  cancel?: boolean;
 }
 
 const STEPS = ["contrato_criado", "conexao_ajustada", "endereco_gravado"];
@@ -59,9 +61,37 @@ export class MockContractService implements ContractService {
     return { operacaoId: id, estado: "recebida" as const };
   }
 
+  readonly cancels: { operacaoId: string; motivo: string }[] = [];
+
+  /** Como a Wiki: o Voalle não tem endpoint de cancelar, então contrato_cancelado espera a equipe; conexao_removida vem junto. */
+  async cancel(operacaoId: string, _partnerCode: string, input: { idempotencyKey: string; motivo: string }) {
+    if (this.failNext) {
+      this.failNext = false;
+      throw new IntegrationError("wiki", "POST /contratos/:id/cancelamento 503", 503);
+    }
+    const original = this.byId.get(operacaoId);
+    if (!original) throw new OperationRefused("contrato_desconhecido", 404 as never);
+    const known = this.byKey.get(input.idempotencyKey);
+    if (known) return { operacaoId: known, estado: this.byId.get(known)!.estado };
+    const id = randomUUID();
+    this.byId.set(id, { req: original.req, estado: "aguardando_equipe", etapas: [{ nome: "contrato_cancelado", estado: "pendente" }, { nome: "conexao_removida", estado: "pendente" }], contrato: original.contrato, cancel: true });
+    this.byKey.set(input.idempotencyKey, id);
+    this.cancels.push({ operacaoId, motivo: input.motivo });
+    return { operacaoId: id, estado: "aguardando_equipe" as const };
+  }
+
+  /** Teste: a equipe da Speed cancelou no Voalle (e a conexão foi apagada junto). */
+  finishCancel(id: string) {
+    const e = this.byId.get(id);
+    if (!e?.cancel) return;
+    e.estado = "concluida";
+    for (const s of e.etapas) s.estado = "concluida";
+  }
+
   async get(id: string, _partnerCode: string): Promise<ContractSnapshot | null> {
     const e = this.byId.get(id);
     if (!e) return null;
+    if (e.cancel) return { operacaoId: id, estado: e.estado, etapas: e.etapas.map((s) => ({ ...s })), resultado: null, atualizadoEm: new Date().toISOString() };
     if (e.estado === "recebida") e.estado = "executando";
     else if (e.estado === "executando") {
       const next = e.etapas.find((s) => s.estado === "pendente");

@@ -6,6 +6,24 @@ Atualizado em 18 out 2026. Une o que o planejamento pede (etapa 3), o que a Wiki
 
 O que o parceiro pede é **uma ação só** ("Criar contrato"). Por baixo, três coisas acontecem em três sistemas, em ordem.
 
+## Respostas da Wiki (18 out 2026)
+
+O `POST /v3/contratos` **ainda não existe** na Wiki: o módulo de criação está pronto e testado sem gravar, e a rota sai quando o Voalle estiver configurado (tipo "Integração" e a campanha). As respostas valem para quando ela sair; "medido" é leitura real no Voalle e no NE40 em 18 out.
+
+| Tema | Resposta | Efeito no portal |
+|---|---|---|
+| Contrato sem valor | **Medido:** 510 contratos ativos com valor zero autenticam PPPoE normalmente. Um serviço por velocidade, item do contrato em zero, tipo "Integração". Falta confirmar no staging que a API aceita zero nesse tipo. | Nenhum: o portal já manda `valorMensal: 0`. |
+| Aprovação e PPPoE | **Medido no NE40:** aprovados 10 de 10 autenticam; "Em Aprovação" 1 de 20; "Rejeitado" 0 de 10. **A Wiki aprova na criação** (a rota existe e o módulo já chama). | `pendente_aprovacao` deve durar segundos. |
+| Suspensão | Sem resposta segura: 2 de 7 suspensos e 2 de 10 em bloqueio financeiro seguem com sessão (pode ser o pool de bloqueio). Vão testar no staging. **Não tratar a suspensão como bloqueio automático ainda.** | Bloqueio segue como está (aguarda o teste). |
+| Cancelar contrato antes da instalação | De acordo com `POST /v3/contratos/{operacaoId}/cancelamento`. O Voalle não tem endpoint de cancelar: `contrato_cancelado` vira `aguardando_equipe` (tarefa da Speed); `conexao_removida` sai junto. | **Feito:** abandonar um contrato pede o cancelamento; o painel mostra "Cancelamento no Voalle pendente" até concluir, com reenviar e "Já cancelei no Voalle". |
+| Estado do contrato recém-criado | **Medido:** `v_status` vem "Normal" antes de aprovar; a aprovação é outro campo. A Wiki combina e devolve `pendente_aprovacao`, `rejeitado` (novo), `ativo`, `bloqueado`, `suspenso`, `cancelado`. | **Feito:** `rejeitado` aparece como "Rejeitado". |
+| Repetir `parcial` com a mesma chave | Seguro: o número do contrato é gravado antes de seguir; `conexao_ajustada`, `endereco_gravado` e a aprovação podem se repetir. | Confirma o que o portal faz. |
+| Conexão ao cancelar | **Medido:** o Voalle apaga a conexão (login e senha) do cadastro e do RADIUS; o login fica só no histórico; o número de contrato não é reaproveitado. | Nada a fazer no portal. |
+| Tempo até aparecer no OLTCloud | Não medido. A ativação espera **até 2 h** pela sincronização. `client/create` fora do fluxo por enquanto. | **Feito:** a tela avisa que pode levar até 2 h e que não é para refazer o pedido. |
+| Limite de contratos por CNPJ | **Medido:** o maior cliente tem 107 contratos, sem problema. Sem limite documentado; reavaliar se passar de algumas centenas. | Nenhum. |
+
+Próximo passo da Wiki: com o Voalle configurado, criar um contrato de teste no staging (valor zero, aprovado na criação), medir a suspensão, construir o `POST /v3/contratos` e seguir para o primeiro cliente real do JHV.
+
 ## 1. Sequência
 
 ```
@@ -29,7 +47,8 @@ técnico chega, liga a ONU
 "Liberar ONU"          ─▶  POST /v2/ativacoes  ─▶  autoriza a ONU no OLTCloud ─▶  o cliente já precisa existir no OLTCloud
                            (login do contrato)      mede o sinal, provisiona
                                                     confirma online + PPPoE
-ONU online             ◀─                          [se o Voalle exigir] aprova    ─▶  a conexão fica ativa; NADA é cobrado no ERP
+                                                    aprova JÁ NA CRIAÇÃO (medido: contrato não aprovado não autentica)
+ONU online             ◀─                          (nada a aprovar aqui)          ─▶  a conexão já está ativa; NADA é cobrado no ERP
 
 porta ativa conta no fechamento do PORTAL ─▶ o dono da Speed cobra o parceiro por fora do ERP
 ```
@@ -113,7 +132,8 @@ Reversão geral: voltar os modos para `off`. Contratos criados continuam no banc
 ## 7. Pendências deste fluxo
 
 **Wiki / Voalle**
-- Rota de **cancelar contrato não aprovado** (hoje a Speed cancela à mão no Voalle depois de abandonar no portal). Sem ela não há como limpar contrato órfão por API.
+- ~~Rota de cancelar contrato~~ **combinada** (`POST /v3/contratos/{operacaoId}/cancelamento`); o portal já chama ao abandonar. No Voalle o cancelamento é tarefa da equipe (`aguardando_equipe`).
+- **Suspensão:** a Wiki ainda vai testar se corta o PPPoE. Até lá o bloqueio automático não usa a suspensão.
 - `contrato.estado` que o Voalle mostra para contrato recém-criado e não aprovado (o portal assume `pendente_aprovacao`; confirmar o texto).
 - Confirmar o mapeamento velocidade → serviço do Voalle (600, 700, 800, 1000), com **serviço de valor zero** (ou item zerado no contrato), e que `plano_nao_configurado` cobre os demais.
 - O Voalle exige **contrato aprovado** para a conexão PPPoE autenticar? Se sim, a Wiki aprova na criação.

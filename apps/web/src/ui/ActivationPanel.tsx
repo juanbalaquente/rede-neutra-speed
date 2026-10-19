@@ -18,7 +18,7 @@ const STEPS: { state: ActivationState; label: string }[] = [
 
 const STATE_NOTE: Partial<Record<ActivationState, string>> = {
   recebida: "Pedido na fila.",
-  aguardando_cliente: "O contrato ainda não chegou ao sistema de rede. Aguarde alguns minutos.",
+  aguardando_cliente: "O contrato ainda não chegou ao sistema de rede. A liberação continua sozinha quando ele chegar (pode levar até 2 horas); não refaça o pedido.",
   falha_provisionamento: "A ONU foi autorizada, mas a configuração falhou. A Speed foi avisada; não refaça a instalação.",
   cancelada: "Ativação cancelada. A reserva continua ativa e você pode tentar de novo.",
   falhou: "A ativação não pôde ser feita.",

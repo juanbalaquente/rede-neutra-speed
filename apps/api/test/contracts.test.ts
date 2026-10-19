@@ -375,3 +375,60 @@ describe("contratos com problema e abandono (Speed)", () => {
     expect((await settle(ate, next)).contract).toBe("90002");
   });
 });
+
+describe("cancelamento do contrato abandonado (rota combinada com a Wiki em 18 out)", () => {
+  const admin = () => ctx.login("admin@speed.test");
+  const abandon = async (id: string) => ctx.call(await admin(), "POST", `/admin/contracts/${id}/abandon`, { reason: "Cliente desistiu da instalação" });
+  const issueOf = async (id: string) =>
+    ((await (await ctx.call(await admin(), "GET", "/admin/contracts/issues")).json()).issues as { reservationId: string; kind: string; cancelState: string | null }[]).find((i) => i.reservationId === id);
+
+  it("abandonar um contrato criado pede o cancelamento à Wiki; fica pendente até a equipe cancelar no Voalle", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    await create(ate, id);
+    await settle(ate, id);
+    const res = await abandon(id);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract).toMatchObject({ state: "abandonada", cancelState: "aguardando_equipe" });
+    expect(wiki.cancels).toEqual([{ operacaoId: expect.any(String), motivo: "Cliente desistiu da instalação" }]);
+    expect(await issueOf(id)).toMatchObject({ kind: "cancelamento_pendente", cancelState: "aguardando_equipe" });
+    // A equipe cancelou no Voalle (a conexão some junto): a leitura seguinte tira o alerta.
+    const { contractRequests } = await import("../src/db/schema.js");
+    const [row] = await ctx.db.select().from(contractRequests).where(eq(contractRequests.reservationId, id));
+    wiki.finishCancel(row!.cancelOperationId!);
+    expect(await issueOf(id)).toBeUndefined();
+    expect((await ctx.db.select().from(auditLog)).map((l) => l.action)).toContain("contrato.cancelamento_concluida");
+  });
+
+  it("pedido que nunca chegou à Wiki: nada a cancelar no Voalle", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    wiki.failNext = true;
+    await create(ate, id); // fica "recebida", sem id da Wiki
+    const res = await abandon(id);
+    expect((await res.json()).contract).toMatchObject({ state: "abandonada", cancelState: null });
+    expect(wiki.cancels).toHaveLength(0);
+    expect(await issueOf(id)).toBeUndefined();
+  });
+
+  it("Wiki fora do ar no cancelamento: fica pendente de envio, reenviar funciona com a mesma chave; e a Speed pode confirmar à mão", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    await create(ate, id);
+    await settle(ate, id);
+    wiki.failNext = true;
+    expect((await (await abandon(id)).json()).contract.cancelState).toBe("pendente_envio");
+    expect(await issueOf(id)).toMatchObject({ kind: "cancelamento_pendente", cancelState: "pendente_envio" });
+    const adm = await admin();
+    const retry = await ctx.call(adm, "POST", `/admin/contracts/${id}/cancel/retry`);
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).contract.cancelState).toBe("aguardando_equipe");
+    expect(wiki.cancels).toHaveLength(1);
+    expect((await ctx.call(adm, "POST", `/admin/contracts/${id}/cancel/retry`)).status).toBe(409); // já chegou
+    const done = await ctx.call(adm, "POST", `/admin/contracts/${id}/cancel/done`);
+    expect(done.status).toBe(200);
+    expect((await done.json()).contract.cancelState).toBe("manual");
+    expect(await issueOf(id)).toBeUndefined();
+    expect((await ctx.db.select().from(auditLog)).map((l) => l.action)).toContain("contrato.cancelado_no_voalle");
+  });
+});

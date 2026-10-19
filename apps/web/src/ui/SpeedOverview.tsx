@@ -16,7 +16,8 @@ export interface ContractIssue {
   partnerName: string;
   contract: string | null;
   login: string | null;
-  kind: "nao_enviado" | "parado" | "parcial" | "aguardando_equipe" | "falhou_no_meio" | "sem_ativacao";
+  kind: "nao_enviado" | "parado" | "parcial" | "aguardando_equipe" | "falhou_no_meio" | "sem_ativacao" | "cancelamento_pendente";
+  cancelState?: string | null;
   state: string;
   steps: { nome: string; estado: string; motivo?: string | null }[];
   ageMinutes: number;
@@ -28,7 +29,8 @@ const ISSUE_LABEL: Record<ContractIssue["kind"], { label: string; hint: string }
   parcial: { label: "Parou no meio", hint: "O parceiro pode repetir; a Wiki continua de onde parou." },
   aguardando_equipe: { label: "Etapa manual", hint: "Uma etapa espera a equipe da Speed." },
   falhou_no_meio: { label: "Falhou depois de criar", hint: "Há contrato (ou parte dele) no Voalle. Conclua ou cancele lá; depois abandone aqui." },
-  sem_ativacao: { label: "Sem instalação há dias", hint: "Contrato criado e a ONU nunca foi liberada. Cancele no Voalle e abandone aqui." },
+  sem_ativacao: { label: "Sem instalação há dias", hint: "Contrato criado e a ONU nunca foi liberada. Abandone aqui: o portal pede o cancelamento à Wiki." },
+  cancelamento_pendente: { label: "Cancelamento no Voalle pendente", hint: "Contrato abandonado. O Voalle não cancela por API: a equipe cancela lá (a conexão some junto) e confirma aqui." },
 };
 
 export const loadOverview = () => request<Overview>("GET", "/admin/painel/parceiros");
@@ -49,10 +51,20 @@ export function SpeedOverview() {
     void load();
   }, []);
 
+  async function act(path: string, ok: string) {
+    try {
+      await request("POST", path);
+      say(ok);
+      void load();
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Não foi possível concluir.", "bad");
+    }
+  }
+
   async function abandon(id: string) {
     try {
       await request("POST", `/admin/contracts/${id}/abandon`, { reason: why.trim() });
-      say("Contrato abandonado. Cancele-o no Voalle.");
+      say("Contrato abandonado. O cancelamento no Voalle fica no painel até concluir.");
       setAbandoning(null);
       setWhy("");
       void load();
@@ -113,7 +125,13 @@ export function SpeedOverview() {
                 </div>
                 <small className="muted">{ISSUE_LABEL[c.kind].hint}</small>
                 {c.steps.length > 0 && <small className="muted">{c.steps.map((s) => `${s.nome.replace("_", " ")}: ${s.estado}${s.motivo ? ` (${s.motivo})` : ""}`).join(" · ")}</small>}
-                {abandoning === c.reservationId ? (
+                {c.kind === "cancelamento_pendente" ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <small className="muted">Estado: {c.cancelState === "pendente_envio" ? "não chegou à Wiki" : c.cancelState === "aguardando_equipe" ? "tarefa da equipe da Speed" : c.cancelState}</small>
+                    {(c.cancelState === "pendente_envio" || c.cancelState === "falhou") && <button className="btn sec sm" onClick={() => void act(`/admin/contracts/${c.reservationId}/cancel/retry`, "Cancelamento reenviado")}>Reenviar à Wiki</button>}
+                    <button className="btn sm" onClick={() => void act(`/admin/contracts/${c.reservationId}/cancel/done`, "Cancelamento confirmado")}>Já cancelei no Voalle</button>
+                  </div>
+                ) : abandoning === c.reservationId ? (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Motivo do abandono (obrigatório)" maxLength={300} style={{ flex: 1, minWidth: 220, border: "1px solid var(--line2)", borderRadius: 9, padding: "8px 10px", background: "var(--surf)", color: "var(--ink)" }} />
                     <button className="btn sm" disabled={why.trim().length < 5} onClick={() => void abandon(c.reservationId)}>Abandonar e cancelar a reserva</button>

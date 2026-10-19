@@ -23,6 +23,7 @@ const PPP: Record<AutenticacaoEstado, { label: string; tone: Tone }> = {
 const CONTRATO: Record<ContratoEstado, { label: string; tone: Tone }> = {
   ativo: { label: "Ativo", tone: "ok" },
   pendente_aprovacao: { label: "Aguardando aprovação", tone: "mute" },
+  rejeitado: { label: "Rejeitado", tone: "bad" },
   bloqueado: { label: "Bloqueado", tone: "warn" },
   suspenso: { label: "Suspenso", tone: "warn" },
   cancelado: { label: "Cancelado", tone: "mute" },

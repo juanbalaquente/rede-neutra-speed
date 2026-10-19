@@ -38,6 +38,7 @@ export const contractView = (r: Row) => ({
   reason: r.reason,
   /** Falhou depois de criar algo no Voalle: não dá para pedir de novo, a Speed precisa concluir ou cancelar. */
   needsSpeed: r.state === "falhou" && hasDoneStep(r),
+  cancelState: r.cancelState,
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
 });
@@ -199,7 +200,7 @@ const STUCK_NOT_SENT_MIN = 5;
 const STUCK_RUNNING_MIN = 15;
 const STUCK_NO_ACTIVATION_DAYS = 7;
 
-export type ContractIssueKind = "nao_enviado" | "parado" | "parcial" | "aguardando_equipe" | "falhou_no_meio" | "sem_ativacao";
+export type ContractIssueKind = "nao_enviado" | "parado" | "parcial" | "aguardando_equipe" | "falhou_no_meio" | "sem_ativacao" | "cancelamento_pendente";
 
 export interface ContractIssue {
   reservationId: string;
@@ -211,6 +212,8 @@ export interface ContractIssue {
   steps: Step[];
   reason: string | null;
   ageMinutes: number;
+  /** Para cancelamento_pendente: em que pé está o cancelamento no Voalle. */
+  cancelState?: string | null;
 }
 
 /**
@@ -235,17 +238,80 @@ export async function contractIssues(db: Db, now = new Date()): Promise<Contract
     else if (c.state === "aguardando_equipe") kind = "aguardando_equipe";
     else if (c.state === "falhou" && hasDoneStep(c)) kind = "falhou_no_meio";
     else if (c.state === "concluida" && status === "ativa" && age >= STUCK_NO_ACTIVATION_DAYS * 24 * 60) kind = "sem_ativacao";
-    if (kind) out.push({ ...base, kind });
+    else if (c.state === "abandonada" && c.cancelState && !CANCEL_DONE.includes(c.cancelState)) kind = "cancelamento_pendente";
+    if (kind) out.push({ ...base, kind, cancelState: c.cancelState });
   }
   return out.sort((a, b) => b.ageMinutes - a.ageMinutes);
 }
 
+const CANCEL_DONE = ["concluida", "manual"];
+
+/** O pedido pode ter criado algo no Voalle: concluiu, tem etapa concluída ou a Wiki já estava trabalhando nele. */
+const mayExistInVoalle = (r: Row) => r.state === "concluida" || hasDoneStep(r) || (!!r.wikiOperationId && ["executando", "parcial", "aguardando_equipe"].includes(r.state));
+
+/** Manda (ou reenvia, com a mesma chave) o cancelamento à Wiki. Wiki fora do ar deixa "pendente_envio"; repetir é seguro. */
+async function sendCancel(db: Db, svc: ContractService, row: Row, motivo: string): Promise<Row> {
+  const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, row.partnerId));
+  try {
+    const started = await svc.cancel(row.wikiOperationId!, partner?.code ?? "", { idempotencyKey: row.cancelKey!, motivo });
+    const [updated] = await db.update(contractRequests).set({ cancelOperationId: started.operacaoId, cancelState: started.estado, updatedAt: new Date() }).where(eq(contractRequests.id, row.id)).returning();
+    return updated!;
+  } catch (e) {
+    if (e instanceof OperationRefused) {
+      const [updated] = await db.update(contractRequests).set({ cancelState: "falhou", updatedAt: new Date() }).where(eq(contractRequests.id, row.id)).returning();
+      await recordAudit(db, { partnerId: row.partnerId, userId: null, action: "contrato.cancelamento_recusado", entity: "contract_request", entityId: row.id, data: { motivo: e.code } });
+      return updated!;
+    }
+    console.error("[contrato] a Wiki não recebeu o cancelamento:", e instanceof Error ? e.message : e);
+    return row;
+  }
+}
+
+/** Atualiza os cancelamentos em andamento (a etapa no Voalle é manual: fica em aguardando_equipe até a equipe concluir). */
+export async function refreshCancels(db: Db, svc: ContractService | undefined) {
+  if (!svc) return;
+  const rows = await db.select().from(contractRequests).where(eq(contractRequests.state, "abandonada"));
+  for (const r of rows.filter((x) => x.cancelOperationId && x.cancelState && !["concluida", "manual", "falhou"].includes(x.cancelState))) {
+    const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, r.partnerId));
+    try {
+      const snap = await svc.get(r.cancelOperationId!, partner?.code ?? "");
+      if (!snap || snap.estado === r.cancelState) continue;
+      await db.update(contractRequests).set({ cancelState: snap.estado, updatedAt: new Date() }).where(eq(contractRequests.id, r.id));
+      await recordAudit(db, { partnerId: r.partnerId, userId: null, action: `contrato.cancelamento_${snap.estado}`, entity: "contract_request", entityId: r.id, data: { contrato: r.contract, de: r.cancelState } });
+    } catch (e) {
+      console.error("[contrato] leitura do cancelamento falhou:", e instanceof Error ? e.message : e);
+    }
+  }
+}
+
+/** Reenvia um cancelamento que não chegou à Wiki (ou que ela recusou), com a mesma chave. */
+export async function retryCancel(db: Db, svc: ContractService | undefined, admin: SessionUser, reservationId: string, ip?: string | null) {
+  if (!svc) throw new AppError(503, "contrato_desligado", "A integração de contratos está desligada: cancele no Voalle e confirme aqui.");
+  const row = await latest(db, (await ownReservation(db, admin, reservationId)).id);
+  if (!row || row.state !== "abandonada" || !row.cancelKey || !["pendente_envio", "falhou"].includes(row.cancelState ?? "")) {
+    throw new AppError(409, "sem_o_que_repetir", "Esse cancelamento não está esperando reenvio.");
+  }
+  await recordAudit(db, { partnerId: row.partnerId, userId: admin.id, action: "contrato.cancelamento_repetido", entity: "contract_request", entityId: row.id, ip });
+  return contractView(await sendCancel(db, svc, row, row.reason ?? "Contrato abandonado pela Speed"));
+}
+
+/** A Speed confirma que cancelou o contrato no Voalle (sem a rota da Wiki, ou depois de fazer a tarefa à mão). */
+export async function confirmCancelDone(db: Db, admin: SessionUser, reservationId: string, ip?: string | null) {
+  const row = await latest(db, (await ownReservation(db, admin, reservationId)).id);
+  if (!row || row.state !== "abandonada" || !row.cancelState || CANCEL_DONE.includes(row.cancelState)) {
+    throw new AppError(409, "sem_o_que_confirmar", "Esse contrato não tem cancelamento pendente.");
+  }
+  const [updated] = await db.update(contractRequests).set({ cancelState: "manual", updatedAt: new Date() }).where(eq(contractRequests.id, row.id)).returning();
+  await recordAudit(db, { partnerId: row.partnerId, userId: admin.id, action: "contrato.cancelado_no_voalle", entity: "contract_request", entityId: row.id, ip, data: { contrato: row.contract, login: row.login } });
+  return contractView(updated!);
+}
+
 /**
- * A Speed desiste de um contrato que não vai virar instalação: cancela a reserva (a vaga volta) e marca o pedido como
- * "abandonada". O contrato no Voalle precisa ser cancelado à mão pela equipe (o portal registra o número na auditoria
- * e o painel mostra "cancelar no Voalle") até a Wiki ter a rota de cancelar contrato não aprovado.
+ * A Speed desiste de um contrato que não vai virar instalação: cancela a reserva (a vaga volta), marca o pedido como
+ * "abandonada" e, se algo pode existir no Voalle, pede o cancelamento à Wiki (POST /v3/contratos/{id}/cancelamento).
+ * Sem a integração ligada, o cancelamento fica pendente até a Speed confirmar que fez à mão.
  */
-export async function abandonContract(db: Db, admin: SessionUser, reservationId: string, reason: string, ip?: string | null) {
+export async function abandonContract(db: Db, admin: SessionUser, reservationId: string, reason: string, ip?: string | null, svc?: ContractService) {
   const reservation = await ownReservation(db, admin, reservationId);
   if (reservation.status !== "ativa") {
     throw new AppError(409, "reserva_com_instalacao", "Esse cliente já tem ONU liberada ou foi encerrado: use o cancelamento do cliente.");
@@ -253,7 +319,12 @@ export async function abandonContract(db: Db, admin: SessionUser, reservationId:
   const row = await latest(db, reservation.id);
   if (!row || row.state === "abandonada") throw new AppError(404, "contrato_nao_encontrado", "Esse cliente não tem contrato pedido.");
   const now = new Date();
-  const [updated] = await db.update(contractRequests).set({ state: "abandonada", reason: reason.trim(), updatedAt: now }).where(eq(contractRequests.id, row.id)).returning();
+  const toCancel = mayExistInVoalle(row);
+  let [updated] = await db
+    .update(contractRequests)
+    .set({ state: "abandonada", reason: reason.trim(), updatedAt: now, ...(toCancel ? { cancelKey: randomUUID(), cancelState: "pendente_envio" } : {}) })
+    .where(eq(contractRequests.id, row.id))
+    .returning();
   await db
     .update(portReservations)
     .set({ status: "cancelada", cancelReason: `Contrato abandonado pela Speed: ${reason.trim()}`, cancelledBy: admin.id, cancelledAt: now, updatedAt: now })
@@ -265,7 +336,8 @@ export async function abandonContract(db: Db, admin: SessionUser, reservationId:
     entity: "contract_request",
     entityId: row.id,
     ip,
-    data: { contrato: row.contract, login: row.login, estadoAntes: row.state, etapas: (row.steps as Step[] | null) ?? [], motivo: reason.trim(), acao: "cancelar o contrato no Voalle" },
+    data: { contrato: row.contract, login: row.login, estadoAntes: row.state, etapas: (row.steps as Step[] | null) ?? [], motivo: reason.trim(), acao: toCancel ? "cancelar o contrato no Voalle" : "nada a cancelar no Voalle" },
   });
+  if (toCancel && svc && updated!.wikiOperationId) updated = await sendCancel(db, svc, updated!, reason.trim());
   return contractView(updated!);
 }

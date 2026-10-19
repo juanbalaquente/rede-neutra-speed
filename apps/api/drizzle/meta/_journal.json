@@ -99,6 +99,13 @@
       "when": 1792372593809,
       "tag": "0013_data_do_cancelamento",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792374474349,
+      "tag": "0014_cancelamento_do_contrato",
+      "breakpoints": true
     }
   ]
 }

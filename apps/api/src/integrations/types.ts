@@ -247,7 +247,14 @@ export interface ContractSnapshot {
 /** ESCRITA em produção: cria o contrato do assinante no Voalle. Só liga com CONTRACT_MODE e validação do Juan. */
 export interface ContractService {
   create(req: ContractRequest): Promise<{ operacaoId: string; estado: OperationState }>;
+  /** Lê a operação de criação ou a de cancelamento (as duas pelo mesmo GET /v3/operacoes/{id}). */
   get(operacaoId: string, partnerCode: string): Promise<ContractSnapshot | null>;
+  /**
+   * Cancela um contrato que não virou instalação (POST /v3/contratos/{operacaoId}/cancelamento, combinado em 18 out).
+   * O Voalle não tem endpoint de cancelar: a etapa contrato_cancelado vira aguardando_equipe (tarefa da Speed) e
+   * conexao_removida acontece junto, porque o Voalle apaga a conexão ao cancelar.
+   */
+  cancel(operacaoId: string, partnerCode: string, input: { idempotencyKey: string; motivo: string }): Promise<{ operacaoId: string; estado: OperationState }>;
 }
 
 export interface TicketRequest {
@@ -302,7 +309,7 @@ export interface Integrations {
 
 export type FibraEstado = "online" | "offline" | "loss" | "sem_energia" | "inativo" | "desabilitada" | "desconhecido";
 export type AutenticacaoEstado = "conectado" | "desconectado" | "desconhecido";
-export type ContratoEstado = "ativo" | "pendente_aprovacao" | "bloqueado" | "suspenso" | "cancelado" | "desconhecido";
+export type ContratoEstado = "ativo" | "pendente_aprovacao" | "rejeitado" | "bloqueado" | "suspenso" | "cancelado" | "desconhecido";
 
 export interface ClientStatus {
   login: string;

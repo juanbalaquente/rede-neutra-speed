@@ -13,7 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
-import { abandonContract, contractIssues, getContract, retryContract, startContract } from "./services/contracts.js";
+import { abandonContract, confirmCancelDone, contractIssues, getContract, refreshCancels, retryCancel, retryContract, startContract } from "./services/contracts.js";
 import { approveOperation, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
 import { signalQuality } from "./services/signal-quality.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
@@ -955,16 +955,32 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
   });
 
   /** Contratos parados ou pela metade, e o abandono de um contrato que não vai virar instalação. */
-  admin.get("/contracts/issues", async (c) => c.json({ issues: await contractIssues(db) }));
+  admin.get("/contracts/issues", async (c) => {
+    await refreshCancels(db, integrations.contracts);
+    return c.json({ issues: await contractIssues(db) });
+  });
+
+  admin.post("/contracts/:reservationId/cancel/retry", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("reservationId"));
+    return c.json({ contract: await retryCancel(db, integrations.contracts, c.get("user"), id, clientIp(c)) });
+  });
+
+  admin.post("/contracts/:reservationId/cancel/done", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("reservationId"));
+    return c.json({ contract: await confirmCancelDone(db, c.get("user"), id, clientIp(c)) });
+  });
 
   admin.post("/contracts/:reservationId/abandon", async (c) => {
     const id = z.string().uuid().parse(c.req.param("reservationId"));
     const body = await parseBody(c, z.object({ reason: z.string().trim().min(5).max(300) }));
-    return c.json({ contract: await abandonContract(db, c.get("user"), id, body.reason, clientIp(c)) });
+    return c.json({ contract: await abandonContract(db, c.get("user"), id, body.reason, clientIp(c), integrations.contracts) });
   });
 
   /** Visão consolidada da Speed: portas, receita e chamados por parceiro, instalações fora do padrão e CTOs com muitos chamados. */
-  admin.get("/painel/parceiros", async (c) => c.json(await speedOverview(db)));
+  admin.get("/painel/parceiros", async (c) => {
+    await refreshCancels(db, integrations.contracts);
+    return c.json(await speedOverview(db));
+  });
 
   /** Limite de ocupação por CTO (por parceiro ou para todos). 100 = liberada caso a caso. */
   admin.get("/cto-limits", async (c) => c.json({ limits: await listCtoLimits(db) }));

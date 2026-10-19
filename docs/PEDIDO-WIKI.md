@@ -19,6 +19,10 @@ Escrito em 16 out 2026. O portal (https://redeneutra.spdlink.com.br) já está n
 
 A Wiki propôs `POST /v3/contratos` (contrato v3, seção H) e o portal já tem o lado dele pronto contra mock (`CONTRACT_MODE`): endereço estruturado, acompanhamento das etapas `contrato_criado`, `conexao_ajustada`, `endereco_gravado` e uso do login devolvido na ativação. Pontos para fechar: (1) o **cancelamento do contrato não aprovado** quando a reserva é cancelada antes da ativação: qual rota o portal chama (por exemplo `POST /v3/contratos/{operacaoId}/cancelamento`)? (2) confirmar que `resultado.login` sempre vem como `<contrato>-<CÓDIGO>` (o portal recusa qualquer outro formato); (3) `valorMensal` é o preço que a Speed cobra do parceiro pelo plano, não o preço ao assinante.
 
+## Respondido em 18 out 2026
+
+A Wiki respondeu às perguntas sobre contrato sem valor, aprovação, cancelamento, estado do contrato, repetição de `parcial`, conexão no cancelamento, tempo até o OLTCloud e limite por CNPJ. Respostas e efeito no portal em [`FLUXO-CONTRATO-E-CONEXAO.md`](FLUXO-CONTRATO-E-CONEXAO.md). **Em aberto:** confirmar no staging que a API aceita valor zero no tipo "Integração", o teste da suspensão (se corta o PPPoE) e o tempo de sincronização com o OLTCloud (medir no primeiro cliente real).
+
 ## Atualização (18 out 2026): contrato SEM VALOR
 
 **Contrato sem valor (Juan, 18 out 2026):** o contrato no Voalle **não cobra nada**. Ele existe só para **identificar o cliente** (o número do contrato é a chave) e **gerar a conexão PPPoE** (login `<contrato>-<CÓDIGO>`, ponto de acesso, perfil de velocidade no RADIUS). O parceiro **paga direto ao dono da Speed, fora do ERP**, pelo fechamento do portal (portas ativas × valor fixo por plano). O portal manda sempre `valorMensal: 0`. Perguntas:

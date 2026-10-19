@@ -2,7 +2,7 @@ import { request } from "./api";
 
 export type FibraEstado = "online" | "offline" | "loss" | "sem_energia" | "inativo" | "desabilitada" | "desconhecido";
 export type AutenticacaoEstado = "conectado" | "desconectado" | "desconhecido";
-export type ContratoEstado = "ativo" | "pendente_aprovacao" | "bloqueado" | "suspenso" | "cancelado" | "desconhecido";
+export type ContratoEstado = "ativo" | "pendente_aprovacao" | "rejeitado" | "bloqueado" | "suspenso" | "cancelado" | "desconhecido";
 
 export interface Referencia {
   sinalCtoDbm: number;

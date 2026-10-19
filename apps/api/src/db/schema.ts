@@ -311,6 +311,13 @@ export const contractRequests = pgTable(
     login: text("login"),
     /** Motivo da recusa ou da falha, em texto curto. */
     reason: text("reason"),
+    /**
+     * Cancelamento no Voalle de um contrato abandonado. null = nada a cancelar (o pedido nem chegou à Wiki);
+     * pendente_envio = a Wiki não recebeu ainda; depois, o estado da operação da Wiki; manual = a Speed confirmou à mão.
+     */
+    cancelKey: uuid("cancel_key"),
+    cancelOperationId: text("cancel_operation_id"),
+    cancelState: text("cancel_state"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

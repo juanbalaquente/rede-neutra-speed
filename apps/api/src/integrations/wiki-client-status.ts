@@ -23,7 +23,7 @@ const tolerant = <T extends string>(known: readonly T[], what: string) =>
 
 const fibraEstado = tolerant(["online", "offline", "loss", "sem_energia", "inativo", "desabilitada", "desconhecido"] as const, "fibra");
 const authEstado = tolerant(["conectado", "desconectado", "desconhecido"] as const, "autenticação");
-const contratoEstado = tolerant(["ativo", "pendente_aprovacao", "bloqueado", "suspenso", "cancelado", "desconhecido"] as const, "contrato");
+const contratoEstado = tolerant(["ativo", "pendente_aprovacao", "rejeitado", "bloqueado", "suspenso", "cancelado", "desconhecido"] as const, "contrato");
 
 const statusSchema = z.object({
   login: z.string().min(1),

@@ -69,6 +69,11 @@ export class WikiContractService implements ContractService {
     return this.parse(startedSchema, json, "contrato");
   }
 
+  async cancel(operacaoId: string, partnerCode: string, input: { idempotencyKey: string; motivo: string }) {
+    const { json } = await this.call("POST", `/contratos/${encodeURIComponent(operacaoId)}/cancelamento`, partnerCode, input);
+    return this.parse(startedSchema, json, "cancelamento de contrato");
+  }
+
   async get(operacaoId: string, partnerCode: string): Promise<ContractSnapshot | null> {
     const { status, json } = await this.call("GET", `/operacoes/${encodeURIComponent(operacaoId)}`, partnerCode);
     if (status === 404) return null;
