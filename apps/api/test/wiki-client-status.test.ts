@@ -56,6 +56,17 @@ describe("WikiClientStatus (contrato v3, seção A)", () => {
     expect(s!.fibra.estado).toBe("online");
   });
 
+
+  it("estado novo da Wiki vira 'desconhecido' sem derrubar a leitura; contrato ainda não aprovado é um estado conhecido", async () => {
+    const { wiki } = build(() => json({ ...STATUS, fibra: { ...STATUS.fibra, estado: "em_manutencao" }, contrato: { estado: "pendente_aprovacao", desde: null, atualizadoEm: "2026-10-16T10:01:00-03:00" } }));
+    const s = await wiki.status("12345-JHV", "JHV");
+    expect(s!.fibra.estado).toBe("desconhecido");
+    expect(s!.contrato.estado).toBe("pendente_aprovacao");
+    expect(s!.autenticacao.estado).toBe("conectado"); // o resto da leitura segue valendo
+    const lote = build(() => json({ clientes: [{ login: "1-JHV", fibra: "estado_novo", autenticacao: "conectado", contrato: "ativo", fibraEm: null, autenticacaoEm: null }] }));
+    expect((await lote.wiki.summary(["1-JHV"], "JHV"))[0]!.fibra).toBe("desconhecido");
+  });
+
   it("lote com mais de 200 logins vai em várias chamadas", async () => {
     const { wiki, calls } = build((_url, init) => {
       const { logins } = JSON.parse(init!.body as string) as { logins: string[] };

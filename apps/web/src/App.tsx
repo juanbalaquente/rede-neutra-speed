@@ -221,6 +221,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     if (fleet?.alarmes.length) list.push({ id: "fibra", tone: "bad", text: fleet.alarmes.length === 1 ? "Um cliente está sem fibra ou sem PPPoE" : `${fleet.alarmes.length} clientes estão sem fibra ou sem PPPoE`, onOpen: () => setTab("inicio") });
     if (overview?.hotspots.length) list.push({ id: "hotspots", tone: "warn", text: overview.hotspots.length === 1 ? "Uma CTO com muitos chamados do mesmo parceiro" : `${overview.hotspots.length} CTOs com muitos chamados do mesmo parceiro`, onOpen: () => setTab("painel") });
     if (overview?.totais.chamadosAtrasados) list.push({ id: "chamados-atrasados", tone: "bad", text: `${overview.totais.chamadosAtrasados} chamado(s) de parceiros fora do prazo`, onOpen: () => setTab("chamados") });
+    if (overview?.totais.contratosComProblema) list.push({ id: "contratos", tone: "bad", text: `${overview.totais.contratosComProblema} contrato(s) com problema na criação`, onOpen: () => setTab("painel") });
     if (overview?.totais.aprovacoesPendentes) list.push({ id: "aprovacoes", tone: "warn", text: `${overview.totais.aprovacoesPendentes} operação(ões) esperando a aprovação da Speed`, onOpen: () => setTab("parceiros") });
     if (rede && !rede.ok) list.push({ id: "rede", tone: "bad", text: "A integração com a rede está com problema", onOpen: () => setTab("painel") });
     return list;

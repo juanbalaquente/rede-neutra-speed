@@ -1,5 +1,6 @@
 import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import type { Db } from "../db/client.js";
+import { contractIssues } from "./contracts.js";
 import { activations, customerOperations, partners, plans, portReservations, tickets } from "../db/schema.js";
 
 /** Quantos chamados do mesmo parceiro na mesma CTO, em quantos dias, acendem o alerta (planejamento: "muitos chamados na mesma CTO"). */
@@ -117,6 +118,7 @@ export async function speedOverview(db: Db, now = new Date()) {
   parceiros.sort((a, b) => b.portasAtivas - a.portasAtivas || a.name.localeCompare(b.name));
 
   const hotspots = await ticketHotspots(db, { now });
+  const contratos = await contractIssues(db, now);
   const pending = await db.select({ id: customerOperations.id }).from(customerOperations).where(eq(customerOperations.state, "aguardando_aprovacao"));
   return {
     totais: {
@@ -126,10 +128,12 @@ export async function speedOverview(db: Db, now = new Date()) {
       chamadosAtrasados: parceiros.reduce((s, p) => s + p.chamadosAtrasados, 0),
       foraDoPadrao: outOf.length,
       aprovacoesPendentes: pending.length,
+      contratosComProblema: contratos.length,
     },
     parceiros,
     foraDoPadrao: outOf.sort((a, b) => b.excessoDb - a.excessoDb).slice(0, 20),
     hotspots: hotspots.map((h) => ({ ...h, ultimoEm: h.ultimoEm.toISOString() })),
+    contratos,
     hotspotRegra: { minimo: HOTSPOT_MIN_TICKETS, dias: HOTSPOT_DAYS },
   };
 }

@@ -104,6 +104,10 @@ Durante os testes o servidor pode estar com `MFA_REQUIRED=false`, `INTEGRATIONS_
 6. Backup restaurável: rodar `deploy/backup-db.sh` e conferir o arquivo e o espelho das fotos.
 7. Se o `update.sh` falhar com `cannot assign requested address` (IPv6 do Docker Hub), é o IPv6 do servidor: ver `/etc/sysctl.d/99-no-ipv6.conf`. Sem mudança de código, `up -d --no-build api` basta para aplicar só o `.env`.
 
+## Migrations desta fase
+
+`0012_contrato_abandonado` troca o índice de contratos (um pedido vivo por reserva, salvo `falhou` e `abandonada`). Roda sozinha na subida da API; faça o backup antes, como sempre.
+
 ## 7. Depois (modelo da Wiki, quando valer a pena)
 
 A Wiki entrega por GitHub Actions: o runner empacota o código, envia por `scp` e roda o build por SSH, com `SERVER_HOST`, `SERVER_USER` e `SERVER_SSH_KEY` nos *Secrets*. Para o portal isso exige a porta 22 aberta na borda (de preferência só para as faixas `actions` de `api.github.com/meta`, que mudam com o tempo), uma chave SSH **nova e exclusiva** e o `main` atualizado. Até lá, `deploy/update.sh` basta.

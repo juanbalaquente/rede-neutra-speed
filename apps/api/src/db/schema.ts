@@ -301,7 +301,7 @@ export const contractRequests = pgTable(
     userId: uuid("user_id").notNull().references(() => users.id),
     idempotencyKey: uuid("idempotency_key").notNull().unique(),
     wikiOperationId: text("wiki_operation_id"),
-    /** recebida | executando | concluida | parcial | aguardando_equipe | falhou */
+    /** recebida | executando | concluida | parcial | aguardando_equipe | falhou | abandonada (decisão da Speed, portal apenas) */
     state: text("state").notNull().default("recebida"),
     steps: jsonb("steps"),
     /** Preenchidos quando a Wiki conclui: número do contrato e login PPPoE. */
@@ -314,8 +314,8 @@ export const contractRequests = pgTable(
   },
   (t) => [
     index("contract_requests_reservation_idx").on(t.reservationId, t.createdAt),
-    // Um contrato por reserva, salvo se o pedido anterior falhou: dois cliques não viram dois contratos no Voalle.
-    uniqueIndex("contract_requests_live_idx").on(t.reservationId).where(sql`${t.state} <> 'falhou'`),
+    // Um contrato por reserva, salvo se o pedido anterior falhou ou foi abandonado: dois cliques não viram dois contratos no Voalle.
+    uniqueIndex("contract_requests_live_idx").on(t.reservationId).where(sql`${t.state} NOT IN ('falhou', 'abandonada')`),
   ],
 );
 

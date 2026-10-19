@@ -17,14 +17,27 @@ const REFUSAL_TEXT: Record<string, string> = {
   login_de_outro_parceiro: "Esse cliente não pertence ao seu contrato.",
 };
 
+type Step = { nome: string; estado: string; motivo?: string | null };
+
+/** Alguma etapa já concluída: o Voalle tem (ao menos parte de) um contrato desse pedido. */
+const hasDoneStep = (r: Row) => ((r.steps as Step[] | null) ?? []).some((s) => s.estado === "concluida");
+
+/**
+ * Pedido que falhou ou foi recusado depois de criar algo no Voalle. Um novo pedido (chave nova) criaria um segundo
+ * contrato e deixaria o primeiro órfão, então quem resolve é a Speed.
+ */
+const leftTraces = (r: Row) => (r.state === "falhou" || r.state === "abandonada") && hasDoneStep(r);
+
 export const contractView = (r: Row) => ({
   id: r.id,
   reservationId: r.reservationId,
-  state: r.state as OperationState,
-  steps: (r.steps as { nome: string; estado: string; motivo?: string | null }[] | null) ?? [],
+  state: r.state as OperationState | "abandonada",
+  steps: (r.steps as Step[] | null) ?? [],
   contract: r.contract,
   login: r.login,
   reason: r.reason,
+  /** Falhou depois de criar algo no Voalle: não dá para pedir de novo, a Speed precisa concluir ou cancelar. */
+  needsSpeed: r.state === "falhou" && hasDoneStep(r),
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
 });
@@ -55,6 +68,12 @@ export async function startContract(db: Db, svc: ContractService, user: SessionU
   if (!partner?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código (ex.: JHV). A Speed precisa cadastrar.");
   const [plan] = await db.select().from(plans).where(eq(plans.id, reservation.planId!));
   if (!plan) throw new AppError(422, "plano_invalido", "Escolha um dos planos disponíveis.");
+
+  // Nunca um segundo contrato por cima de um que falhou no meio: o primeiro ficaria órfão no Voalle.
+  const previous = await latest(db, reservation.id);
+  if (previous && leftTraces(previous)) {
+    throw new AppError(409, "contrato_parcial", "O contrato desse cliente foi criado só em parte no sistema da Speed. A Speed precisa concluir ou cancelar antes de um novo pedido.");
+  }
 
   const key = opts.idempotencyKey ?? randomUUID();
   let row: Row;
@@ -148,11 +167,15 @@ export async function getContract(db: Db, svc: ContractService, user: SessionUse
   return contractView(await refresh(db, svc, row));
 }
 
-/** Repete (mesma chave) um pedido que não chegou à Wiki. A Wiki nunca cria dois contratos para a mesma chave. */
+/**
+ * Repete (mesma chave) um pedido que não chegou à Wiki ou que parou no meio ("parcial"): a Wiki continua de onde parou e
+ * nunca cria dois contratos para a mesma chave.
+ */
 export async function retryContract(db: Db, svc: ContractService, user: SessionUser, reservationId: string, opts: { ip?: string | null } = {}) {
   const reservation = await ownReservation(db, user, reservationId);
   const row = await latest(db, reservation.id);
-  if (!row || row.state !== "recebida" || row.wikiOperationId) throw new AppError(409, "sem_o_que_repetir", "Esse pedido de contrato não está esperando repetição.");
+  const waiting = !!row && ((row.state === "recebida" && !row.wikiOperationId) || row.state === "parcial");
+  if (!row || !waiting) throw new AppError(409, "sem_o_que_repetir", "Esse pedido de contrato não está esperando repetição.");
   const endereco = reservation.installAddress as ContractAddress | null;
   if (!endereco) throw new AppError(422, "endereco_obrigatorio", "Informe o endereço de instalação.");
   const [partner] = await db.select({ code: partners.code, cnpj: partners.cnpj }).from(partners).where(eq(partners.id, reservation.partnerId));
@@ -166,4 +189,82 @@ export async function retryContract(db: Db, svc: ContractService, user: SessionU
 export async function createdContract(db: Db, reservationId: string): Promise<{ contract: string; login: string } | null> {
   const [row] = await db.select().from(contractRequests).where(and(eq(contractRequests.reservationId, reservationId), eq(contractRequests.state, "concluida")));
   return row?.contract && row.login ? { contract: row.contract, login: row.login } : null;
+}
+
+// ── Para a Speed: contratos parados e abandono ───────────────────────────────
+
+/** Tempos a partir dos quais um contrato parado vira alerta para a Speed. */
+const STUCK_NOT_SENT_MIN = 5;
+const STUCK_RUNNING_MIN = 15;
+const STUCK_NO_ACTIVATION_DAYS = 7;
+
+export type ContractIssueKind = "nao_enviado" | "parado" | "parcial" | "aguardando_equipe" | "falhou_no_meio" | "sem_ativacao";
+
+export interface ContractIssue {
+  reservationId: string;
+  partnerName: string;
+  contract: string | null;
+  login: string | null;
+  kind: ContractIssueKind;
+  state: string;
+  steps: Step[];
+  reason: string | null;
+  ageMinutes: number;
+}
+
+/**
+ * Contratos que a Speed precisa olhar: pedido que não saiu, que não termina, que parou no meio, que espera a equipe,
+ * que falhou depois de criar algo no Voalle, ou que foi criado e não virou instalação (reserva sem ativação por dias).
+ * Um contrato criado e não aprovado não fatura, mas é lixo no Voalle se ninguém instala.
+ */
+export async function contractIssues(db: Db, now = new Date()): Promise<ContractIssue[]> {
+  const rows = await db
+    .select({ c: contractRequests, partnerName: partners.name, status: portReservations.status })
+    .from(contractRequests)
+    .innerJoin(partners, eq(partners.id, contractRequests.partnerId))
+    .innerJoin(portReservations, eq(portReservations.id, contractRequests.reservationId));
+  const out: ContractIssue[] = [];
+  for (const { c, partnerName, status } of rows) {
+    const age = Math.round((now.getTime() - c.updatedAt.getTime()) / 60_000);
+    const base = { reservationId: c.reservationId, partnerName, contract: c.contract, login: c.login, state: c.state, steps: ((c.steps as Step[] | null) ?? []), reason: c.reason, ageMinutes: age };
+    let kind: ContractIssueKind | null = null;
+    if (c.state === "recebida" && !c.wikiOperationId && age >= STUCK_NOT_SENT_MIN) kind = "nao_enviado";
+    else if (c.state === "executando" && age >= STUCK_RUNNING_MIN) kind = "parado";
+    else if (c.state === "parcial") kind = "parcial";
+    else if (c.state === "aguardando_equipe") kind = "aguardando_equipe";
+    else if (c.state === "falhou" && hasDoneStep(c)) kind = "falhou_no_meio";
+    else if (c.state === "concluida" && status === "ativa" && age >= STUCK_NO_ACTIVATION_DAYS * 24 * 60) kind = "sem_ativacao";
+    if (kind) out.push({ ...base, kind });
+  }
+  return out.sort((a, b) => b.ageMinutes - a.ageMinutes);
+}
+
+/**
+ * A Speed desiste de um contrato que não vai virar instalação: cancela a reserva (a vaga volta) e marca o pedido como
+ * "abandonada". O contrato no Voalle precisa ser cancelado à mão pela equipe (o portal registra o número na auditoria
+ * e o painel mostra "cancelar no Voalle") até a Wiki ter a rota de cancelar contrato não aprovado.
+ */
+export async function abandonContract(db: Db, admin: SessionUser, reservationId: string, reason: string, ip?: string | null) {
+  const reservation = await ownReservation(db, admin, reservationId);
+  if (reservation.status !== "ativa") {
+    throw new AppError(409, "reserva_com_instalacao", "Esse cliente já tem ONU liberada ou foi encerrado: use o cancelamento do cliente.");
+  }
+  const row = await latest(db, reservation.id);
+  if (!row || row.state === "abandonada") throw new AppError(404, "contrato_nao_encontrado", "Esse cliente não tem contrato pedido.");
+  const now = new Date();
+  const [updated] = await db.update(contractRequests).set({ state: "abandonada", reason: reason.trim(), updatedAt: now }).where(eq(contractRequests.id, row.id)).returning();
+  await db
+    .update(portReservations)
+    .set({ status: "cancelada", cancelReason: `Contrato abandonado pela Speed: ${reason.trim()}`, cancelledBy: admin.id, updatedAt: now })
+    .where(and(eq(portReservations.id, reservation.id), eq(portReservations.status, "ativa")));
+  await recordAudit(db, {
+    partnerId: row.partnerId,
+    userId: admin.id,
+    action: "contrato.abandonado",
+    entity: "contract_request",
+    entityId: row.id,
+    ip,
+    data: { contrato: row.contract, login: row.login, estadoAntes: row.state, etapas: (row.steps as Step[] | null) ?? [], motivo: reason.trim(), acao: "cancelar o contrato no Voalle" },
+  });
+  return contractView(updated!);
 }

@@ -10,9 +10,20 @@ import { IntegrationError, type ClientStatus, type ClientStatusService, type Cli
 const iso = z.string().datetime({ offset: true });
 const when = iso.nullable().default(null);
 
-const fibraEstado = z.enum(["online", "offline", "loss", "sem_energia", "inativo", "desabilitada", "desconhecido"]);
-const authEstado = z.enum(["conectado", "desconectado", "desconhecido"]);
-const contratoEstado = z.enum(["ativo", "bloqueado", "suspenso", "cancelado", "desconhecido"]);
+/**
+ * Estado que o portal ainda não conhece (a Wiki criou um novo) vira "desconhecido", com aviso no log, em vez de derrubar a tela
+ * inteira: o contrato v3 pede que cada fonte responda por si e que uma leitura estranha não quebre as outras.
+ */
+const tolerant = <T extends string>(known: readonly T[], what: string) =>
+  z.string().transform((v): T | "desconhecido" => {
+    if ((known as readonly string[]).includes(v)) return v as T;
+    console.warn(`[status] estado de ${what} desconhecido para o portal: "${v}"`);
+    return "desconhecido";
+  });
+
+const fibraEstado = tolerant(["online", "offline", "loss", "sem_energia", "inativo", "desabilitada", "desconhecido"] as const, "fibra");
+const authEstado = tolerant(["conectado", "desconectado", "desconhecido"] as const, "autenticação");
+const contratoEstado = tolerant(["ativo", "pendente_aprovacao", "bloqueado", "suspenso", "cancelado", "desconhecido"] as const, "contrato");
 
 const statusSchema = z.object({
   login: z.string().min(1),

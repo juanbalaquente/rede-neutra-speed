@@ -13,7 +13,7 @@ import { IntegrationError } from "./integrations/types.js";
 import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
-import { getContract, retryContract, startContract } from "./services/contracts.js";
+import { abandonContract, contractIssues, getContract, retryContract, startContract } from "./services/contracts.js";
 import { approveOperation, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
 import { signalQuality } from "./services/signal-quality.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
@@ -937,6 +937,15 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const id = z.string().uuid().parse(c.req.param("id"));
     const body = await parseBody(c, z.object({ reason: z.string().trim().min(5).max(300) }));
     return c.json({ operation: await refuseOperation(db, c.get("user"), id, body.reason, clientIp(c)) });
+  });
+
+  /** Contratos parados ou pela metade, e o abandono de um contrato que não vai virar instalação. */
+  admin.get("/contracts/issues", async (c) => c.json({ issues: await contractIssues(db) }));
+
+  admin.post("/contracts/:reservationId/abandon", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("reservationId"));
+    const body = await parseBody(c, z.object({ reason: z.string().trim().min(5).max(300) }));
+    return c.json({ contract: await abandonContract(db, c.get("user"), id, body.reason, clientIp(c)) });
   });
 
   /** Visão consolidada da Speed: portas, receita e chamados por parceiro, instalações fora do padrão e CTOs com muitos chamados. */

@@ -19,6 +19,17 @@ Escrito em 16 out 2026. O portal (https://redeneutra.spdlink.com.br) já está n
 
 A Wiki propôs `POST /v3/contratos` (contrato v3, seção H) e o portal já tem o lado dele pronto contra mock (`CONTRACT_MODE`): endereço estruturado, acompanhamento das etapas `contrato_criado`, `conexao_ajustada`, `endereco_gravado` e uso do login devolvido na ativação. Pontos para fechar: (1) o **cancelamento do contrato não aprovado** quando a reserva é cancelada antes da ativação: qual rota o portal chama (por exemplo `POST /v3/contratos/{operacaoId}/cancelamento`)? (2) confirmar que `resultado.login` sempre vem como `<contrato>-<CÓDIGO>` (o portal recusa qualquer outro formato); (3) `valorMensal` é o preço que a Speed cobra do parceiro pelo plano, não o preço ao assinante.
 
+## Atualização (18 out 2026): fluxo de contrato e conexão
+
+Fluxo completo, matriz de falhas e roteiro do primeiro cliente real em [`FLUXO-CONTRATO-E-CONEXAO.md`](FLUXO-CONTRATO-E-CONEXAO.md). O portal agora trata `parcial` (repete com a mesma chave), `aguardando_equipe` e `falhou` depois de criar algo (trava novo pedido para não duplicar contrato). Perguntas novas:
+
+1. **Cancelar contrato não aprovado** por API (proposta: `POST /v3/contratos/{operacaoId}/cancelamento`, seção H do contrato v3). Sem isso a Speed cancela à mão no Voalle.
+2. Qual `contrato.estado` o Voalle mostra para contrato recém-criado e não aprovado? O portal assume `pendente_aprovacao`.
+3. Mapeamento velocidade → serviço do Voalle para 600, 700, 800 e 1000 Mbps (e se `plano_nao_configurado` cobre os demais).
+4. Quanto tempo o cliente leva para aparecer no OLTCloud depois do contrato (vamos medir no primeiro cliente real) e se o `POST /api/v2/client/create` entra no fluxo.
+5. O que acontece com a conexão (login e senha) quando o contrato é cancelado.
+6. Quando um `parcial` repetido com a mesma chave é seguro em cada etapa (`contrato_criado` não pode se repetir; `conexao_ajustada` e `endereco_gravado` podem?).
+
 ## Prioridade 1: destrava o painel e os alarmes (leitura)
 
 1. **PPPoE no snapshot do NE40 para a rede neutra.** Vocês já responderam que vão incluir os logins no poller (pergunta 1). Precisamos de: `autenticacao.estado` (`conectado`/`desconectado`), `ip` e `desde` por login, e o `POST /clientes/status` servindo isso do snapshot. Qualquer intervalo até 15 min serve. Quando entrar, a tela do cliente deixa de mostrar "leitura do PPPoE ainda não disponível" e o painel mostra fibra online e PPPoE conectado lado a lado.

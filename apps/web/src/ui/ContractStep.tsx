@@ -6,11 +6,13 @@ import { useToast } from "./Toast";
 
 export interface ContractView {
   id: string;
-  state: "recebida" | "executando" | "concluida" | "parcial" | "sem_confirmacao" | "aguardando_equipe" | "falhou";
+  state: "recebida" | "executando" | "concluida" | "parcial" | "sem_confirmacao" | "aguardando_equipe" | "falhou" | "abandonada";
   steps: { nome: string; estado: "pendente" | "concluida" | "falhou"; motivo?: string | null }[];
   contract: string | null;
   login: string | null;
   reason: string | null;
+  /** Falhou depois de criar algo no sistema da Speed: não dá para pedir de novo, a Speed conclui ou cancela. */
+  needsSpeed?: boolean;
 }
 
 export interface ContractStatus {
@@ -45,13 +47,31 @@ const api = {
  * Etapa de contrato da liberação da ONU. Com a criação automática ligada, o número do contrato e o login PPPoE
  * nascem do sistema da Speed (não são digitados). Desligada, não renderiza nada e a ativação pede o número à mão.
  */
-export function ContractStep({ reservationId, onChange }: { reservationId: string; onChange: (s: ContractStatus) => void }) {
+/** Sugere rua, número, cidade e UF a partir do endereço da consulta ("Rua A, 100, Sabará, MG"). Só preenche; o parceiro confere. */
+export function guessAddress(address: string): { rua: string; numero: string; cidade: string; uf: string } {
+  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
+  const uf = parts.length > 2 && /^[A-Za-z]{2}$/.test(parts[parts.length - 1]!) ? parts.pop()!.toUpperCase() : "";
+  const numIdx = parts.findIndex((p, i) => i > 0 && /^\d{1,6}[A-Za-z]?$/.test(p));
+  const numero = numIdx > 0 ? parts[numIdx]! : "";
+  const rest = parts.filter((_, i) => i !== 0 && i !== numIdx);
+  return { rua: parts[0] ?? "", numero, cidade: rest[rest.length - 1] ?? "", uf };
+}
+
+export function ContractStep({ reservationId, address, onChange }: { reservationId: string; address?: string; onChange: (s: ContractStatus) => void }) {
   const say = useToast();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [contract, setContract] = useState<ContractView | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm, clearForm] = useDraft(`contrato:${reservationId}`, { cep: "", rua: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "MG" });
   const [key, setKey] = useState(newUuid);
+
+  // Primeira vez (formulário ainda vazio): sugere o que dá para tirar do endereço da consulta.
+  useEffect(() => {
+    if (!address || form.rua || form.cidade) return;
+    const g = guessAddress(address);
+    setForm({ rua: g.rua, numero: g.numero, cidade: g.cidade, ...(g.uf ? { uf: g.uf } : {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
 
   const apply = useCallback(
     (on: boolean, c: ContractView | null) => {
@@ -110,7 +130,16 @@ export function ContractStep({ reservationId, onChange }: { reservationId: strin
     }
   }
 
-  const failed = contract?.state === "falhou";
+  const failed = contract?.state === "falhou" && !contract.needsSpeed;
+  const stepList = contract && contract.steps.length > 0 && (
+    <ul className="atv-steps" style={{ margin: 0 }}>
+      {contract.steps.map((s) => (
+        <li key={s.nome} className={s.estado === "concluida" ? "done" : s.estado === "falhou" ? "bad" : ""}>
+          <i aria-hidden="true" />{STEP_LABEL[s.nome] ?? s.nome}{s.motivo ? <small className="muted"> ({s.motivo})</small> : null}
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
     <div className="fld" style={{ gap: 8 }}>
@@ -118,6 +147,26 @@ export function ContractStep({ reservationId, onChange }: { reservationId: strin
       {contract?.state === "concluida" ? (
         <div className="banner" style={{ margin: 0 }}>
           Contrato <b className="mono">{contract.contract}</b> criado. Login PPPoE: <b className="mono">{contract.login}</b>
+        </div>
+      ) : contract?.needsSpeed ? (
+        <div style={{ display: "grid", gap: 6 }}>
+          <p className="error" role="alert" style={{ margin: 0 }}>
+            O contrato deste cliente foi criado só em parte no sistema da Speed. A Speed foi avisada e vai concluir ou cancelar. <b>Não crie outro contrato.</b>
+          </p>
+          {stepList}
+        </div>
+      ) : contract?.state === "parcial" ? (
+        <div style={{ display: "grid", gap: 6 }}>
+          {stepList}
+          <small>
+            A criação parou numa etapa. Repetir continua de onde parou, sem criar outro contrato.{" "}
+            <button type="button" className="linkbtn" disabled={busy} onClick={() => void retry()}>Repetir agora</button>
+          </small>
+        </div>
+      ) : contract?.state === "aguardando_equipe" ? (
+        <div style={{ display: "grid", gap: 6 }}>
+          {stepList}
+          <small className="muted">Uma etapa é feita pela equipe da Speed. O contrato aparece aqui quando ela concluir.</small>
         </div>
       ) : contract && !failed ? (
         <div style={{ display: "grid", gap: 6 }}>

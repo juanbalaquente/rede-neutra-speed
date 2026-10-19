@@ -85,6 +85,13 @@
       "when": 1792173974133,
       "tag": "0011_limites_cto_e_aprovacoes",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792370534393,
+      "tag": "0012_contrato_abandonado",
+      "breakpoints": true
     }
   ]
 }

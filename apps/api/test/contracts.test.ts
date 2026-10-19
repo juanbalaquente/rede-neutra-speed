@@ -257,3 +257,119 @@ describe("contrato criado trava expiração e cancelamento da reserva", () => {
     expect((await ctx.call(ate, "POST", `/reservations/${plain}/cancel`, { reason: "desistiu" })).status).toBe(200);
   });
 });
+
+describe("contrato que para no meio (não pode virar segundo contrato no Voalle)", () => {
+  const retry = (cookie: string, id: string) => ctx.call(cookie, "POST", `/reservations/${id}/contract/retry`);
+
+  it("parcial: fica visível, repetir com a mesma chave continua de onde parou e conclui sem duplicar", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    wiki.partialNext = true;
+    await create(ate, id);
+    let c = (await read(ate, id)).contract!;
+    for (let i = 0; i < 6 && c.state !== "parcial"; i++) c = (await read(ate, id)).contract!;
+    expect(c.state).toBe("parcial");
+    expect(c.steps.map((s) => `${s.nome}:${s.estado}`)).toEqual(["contrato_criado:concluida", "conexao_ajustada:falhou", "endereco_gravado:pendente"]);
+    expect((await retry(ate, id)).status).toBe(200);
+    const done = await settle(ate, id);
+    expect(done).toMatchObject({ state: "concluida", contract: "90001", login: "90001-JHV" });
+    expect(wiki.created).toHaveLength(1); // a Wiki recebeu um único pedido de criação
+    // Já concluído: nada mais para repetir.
+    expect((await retry(ate, id)).status).toBe(409);
+  });
+
+  it("falhou depois de criar algo: não aceita novo pedido (evita o segundo contrato) e avisa que a Speed resolve", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    wiki.hardFailNext = true;
+    await create(ate, id);
+    const failed = await settle(ate, id);
+    expect(failed.state).toBe("falhou");
+    expect((await read(ate, id)).contract).toMatchObject({ needsSpeed: true });
+    const again = await create(ate, id);
+    expect(again.status).toBe(409);
+    expect((await again.json()).error).toBe("contrato_parcial");
+    expect(wiki.created).toHaveLength(1);
+  });
+
+  it("recusa na entrada (nada criado) continua permitindo novo pedido; etapa manual espera a equipe", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    expect((await create(ate, id, { endereco: { ...ENDERECO, cep: "00000000" } })).status).toBe(409);
+    expect((await read(ate, id)).contract).toMatchObject({ state: "falhou", needsSpeed: false });
+    wiki.manualNext = true;
+    expect((await create(ate, id)).status).toBe(202);
+    let c = (await read(ate, id)).contract!;
+    for (let i = 0; i < 6 && c.state !== "aguardando_equipe"; i++) c = (await read(ate, id)).contract!;
+    expect(c.state).toBe("aguardando_equipe");
+  });
+});
+
+describe("contratos com problema e abandono (Speed)", () => {
+  const issues = async () => (await (await ctx.call(await ctx.login("admin@speed.test"), "GET", "/admin/contracts/issues")).json()).issues as { kind: string; partnerName: string; contract: string | null; reservationId: string }[];
+  const abandon = async (id: string, reason = "Cliente desistiu da instalação") => ctx.call(await ctx.login("admin@speed.test"), "POST", `/admin/contracts/${id}/abandon`, { reason });
+
+  it("lista o que precisa de olhar: parcial, etapa manual, falhou no meio, não enviado e contrato sem instalação", async () => {
+    const { ate } = await partner();
+    const a = await reserved(ate);
+    const b = await reserved(ate);
+    const c = await reserved(ate);
+    const d = await reserved(ate);
+    wiki.partialNext = true;
+    await create(ate, a);
+    wiki.hardFailNext = true;
+    await create(ate, b);
+    wiki.manualNext = true;
+    await create(ate, c);
+    for (const id of [a, b, c]) await settle(ate, id, 6);
+    await create(ate, d);
+    await settle(ate, d);
+    // d concluiu há mais de 7 dias e nunca virou instalação.
+    const { contractRequests } = await import("../src/db/schema.js");
+    await ctx.db.update(contractRequests).set({ updatedAt: new Date(Date.now() - 8 * 24 * 3600_000) }).where(eq(contractRequests.reservationId, d));
+    const kinds = Object.fromEntries((await issues()).map((i) => [i.reservationId, i.kind]));
+    expect(kinds).toMatchObject({ [a]: "parcial", [b]: "falhou_no_meio", [c]: "aguardando_equipe", [d]: "sem_ativacao" });
+    const o = await (await ctx.call(await ctx.login("admin@speed.test"), "GET", "/admin/painel/parceiros")).json();
+    expect(o.totais.contratosComProblema).toBe(4);
+  });
+
+  it("abandonar cancela a reserva, devolve a vaga e registra o número do contrato para cancelar no Voalle", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    await create(ate, id);
+    await settle(ate, id);
+    const res = await abandon(id);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.state).toBe("abandonada");
+    const [r] = await ctx.db.select().from(portReservations).where(eq(portReservations.id, id));
+    expect(r!.status).toBe("cancelada");
+    expect(r!.cancelReason).toContain("Contrato abandonado pela Speed");
+    const log = (await ctx.db.select().from(auditLog)).find((l) => l.action === "contrato.abandonado");
+    expect(log?.data).toMatchObject({ contrato: "90001", login: "90001-JHV", acao: "cancelar o contrato no Voalle" });
+    expect((await abandon(id)).status).toBe(409); // reserva já cancelada
+  });
+
+  it("não abandona reserva que já virou instalação; só a Speed; motivo obrigatório", async () => {
+    const { ate, sup } = await partner();
+    const id = await reserved(ate);
+    await create(ate, id);
+    await settle(ate, id);
+    expect((await ctx.call(sup, "POST", `/admin/contracts/${id}/abandon`, { reason: "tentativa do parceiro" })).status).toBe(403);
+    expect((await abandon(id, "x")).status).toBe(400);
+    await ctx.db.update(portReservations).set({ status: "convertida" }).where(eq(portReservations.id, id));
+    const res = await abandon(id);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("reserva_com_instalacao");
+  });
+
+  it("depois de abandonado o parceiro faz uma nova reserva e um novo contrato normalmente", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    await create(ate, id);
+    await settle(ate, id);
+    await abandon(id);
+    const next = await reserved(ate);
+    expect((await create(ate, next)).status).toBe(202);
+    expect((await settle(ate, next)).contract).toBe("90002");
+  });
+});

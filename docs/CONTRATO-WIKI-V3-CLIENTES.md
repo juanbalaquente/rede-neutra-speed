@@ -238,6 +238,12 @@ A Wiki já tem a criação de contrato no Voalle construída e desligada: `contr
 - `202 { "operacaoId": "..." }`; `GET /v3/operacoes/{id}` com `tipo: "contrato"`, etapas `contrato_criado`, `conexao_ajustada` e `endereco_gravado`, e, ao concluir, `resultado: { "contrato": "33431", "login": "33431-JHV" }`.
 - O contrato nasce **sem aprovação, logo não fatura**. Proposta da Wiki: aprovar quando a ativação da ONU (v2) chega a `online`, para a cobrança começar na porta ativada. Reserva cancelada antes da ativação: o contrato não aprovado é cancelado. **[DECIDIR - Juan]** confirmar o gatilho e a proporcionalidade do primeiro mês.
 
+**Estados e repetição (como o portal trata):** `recebida`, `executando`, `concluida`, `parcial`, `aguardando_equipe` e `falhou`. Em `parcial` o portal repete o `POST` com a **mesma `idempotencyKey`** e a Wiki deve continuar de onde parou, sem criar outro contrato. Em `falhou` **depois de uma etapa concluída** (`contrato_criado`, por exemplo) o portal **não permite novo pedido**, porque uma chave nova criaria um segundo contrato e deixaria o primeiro órfão: a Speed conclui ou cancela no Voalle e marca como abandonado no portal. Em `falhou` sem etapa concluída (recusa na entrada: `parceiro_sem_cadastro`, `plano_nao_configurado`) o parceiro pode pedir de novo. `aguardando_equipe` vale para etapa manual. O fluxo inteiro está em [`FLUXO-CONTRATO-E-CONEXAO.md`](FLUXO-CONTRATO-E-CONEXAO.md).
+
+**Pedido à Wiki sobre cancelamento:** hoje não há como cancelar por API um contrato criado e não aprovado (reserva abandonada, cliente que desistiu). Proposta: `POST /v3/contratos/{operacaoId}/cancelamento` (escrita, mesma chave e headers), válido só para contrato **não aprovado**, devolvendo `202 {operacaoId}` e acompanhado por `GET /v3/operacoes/{id}` (etapas `contrato_cancelado` e `conexao_removida`). Sem isso a Speed cancela à mão no Voalle.
+
+**Estado do contrato na leitura (seção A):** para contrato criado e ainda não aprovado, o portal espera `contrato.estado = "pendente_aprovacao"`. Estado que o portal não conheça vira "Sem leitura" (com aviso no log), sem derrubar a resposta. Confirmar o texto.
+
 **Impacto no portal (a construir):** hoje o atendente digita o número do contrato ao pedir a ativação. Com esta rota o número nasce da criação automática, e o login passa a vir da operação. Isso muda o fluxo da etapa de contrato e fica atrás de um modo próprio (desligado por padrão) até a Wiki entregar e o Juan validar.
 
 ## Respostas da Wiki ao pedido (16 out 2026, após as respostas do suporte da Voalle)

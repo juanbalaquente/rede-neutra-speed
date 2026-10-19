@@ -279,7 +279,7 @@ export function ActivationPanel({
                 <small>Evita liberar a ONU pendente de outro técnico.</small>
               </label>
             )}
-            <ContractStep reservationId={reservation.id} onChange={setContractStatus} />
+            <ContractStep reservationId={reservation.id} address={reservation.address} onChange={setContractStatus} />
             <div className="g2">
               {!contractStatus.enabled && (
                 <label className="fld">
