@@ -21,7 +21,7 @@ A Wiki propôs `POST /v3/contratos` (contrato v3, seção H) e o portal já tem 
 
 ## Respondido em 18 out 2026
 
-A Wiki respondeu às perguntas sobre contrato sem valor, aprovação, cancelamento, estado do contrato, repetição de `parcial`, conexão no cancelamento, tempo até o OLTCloud e limite por CNPJ. Respostas e efeito no portal em [`FLUXO-CONTRATO-E-CONEXAO.md`](FLUXO-CONTRATO-E-CONEXAO.md). **Em aberto:** confirmar no staging que a API aceita valor zero no tipo "Integração", o teste da suspensão (se corta o PPPoE) e o tempo de sincronização com o OLTCloud (medir no primeiro cliente real).
+A Wiki respondeu às perguntas sobre contrato sem valor, aprovação, cancelamento, estado do contrato, repetição de `parcial`, conexão no cancelamento, tempo até o OLTCloud e limite por CNPJ. Respostas e efeito no portal em [`FLUXO-CONTRATO-E-CONEXAO.md`](FLUXO-CONTRATO-E-CONEXAO.md). **Atualização:** a Wiki confirmou o mapeamento velocidade → serviço (600, 700, 800 e 1000 Mbps, os quatro planos do portal), que a conexão PPPoE nasce sozinha com o contrato e que a chave "Integração" não é necessária; a configuração que falta é vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle. **Em aberto:** o contrato de teste real (conexão, aprovação, PPPoE e suspensão), as rotas `POST /v3/contratos` e de cancelamento, e o tempo de sincronização com o OLTCloud.
 
 ## Atualização (18 out 2026): contrato SEM VALOR
 

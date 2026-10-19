@@ -36,7 +36,7 @@ Nenhuma credencial está aqui.
 - A API não tem **bloqueio administrativo**, só **suspensão** (`Contract/Suspend`), que provavelmente **interrompe a cobrança**. O planejamento exige que o cliente bloqueado continue faturado.
 - Não há endpoint de **cancelar contrato** na API para Terceiros (perguntado à Voalle). Quem paga é o **parceiro** (um CNPJ com todos os contratos), não o assinante.
 - O Voalle sobrescreve o endereço principal a cada contrato: a Wiki manda o endereço do cadastro do parceiro e grava o do assinante só na conexão, pela API de mapas.
-- Ponto de acesso pela sigla: R1 = 2, ITA = 3, FAT = 11. Falta a configuração do tipo de contrato "Integração" e da campanha "E-commerce - Integração".
+- Ponto de acesso pela sigla: R1 = 2, ITA = 3, FAT = 11. Falta vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle (a chave "Integração" não é necessária).
 
 **Codemaps**
 - A viabilidade devolve no máximo 10 CTOs; em área densa uma CTO mais distante pode não aparecer. O geocoder erra o ponto na Rua Carvalho de Brito (CTO 24109).
@@ -71,7 +71,7 @@ São as perguntas que o que a Wiki já fez com o OLTCloud pode fechar:
 
 ### 4.3 Voalle
 
-Configurar o tipo de contrato com "Integração" e a campanha; responder sobre cancelamento de contrato por API; limite prático de contratos por CNPJ (sem resposta).
+Vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle. (Cancelamento de contrato: a API não tem; vira tarefa da equipe. Limite por CNPJ: sem problema conhecido até 107 contratos.)
 
 ### 4.4 Decisões do Juan
 

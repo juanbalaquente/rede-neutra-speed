@@ -72,7 +72,7 @@ SLA dos chamados · divergência de porta (hoje superada pela decisão da Wiki d
 **Do PDF, o portal cobre tudo o que dependia só dele.** O que resta, por dono:
 
 - **Wiki (Externo):** ligar a ativação de ONU (v2, construída e desligada), criação de contrato, chamados, reinício, bloqueio, cancelamento, PPPoE no snapshot do NE40 e incidente por CTO. Pedido completo em [`PEDIDO-WIKI.md`](PEDIDO-WIKI.md).
-- **Voalle (Externo):** configurar o tipo de contrato com "Integração" e a campanha "E-commerce - Integração"; responder sobre o cancelamento de contrato por API.
+- **Voalle (Externo):** vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle. (Cancelamento de contrato não tem API: vira tarefa da equipe, já tratada no portal.)
 - **Decisões do Juan:** regra de cobrança no fechamento do portal (mês cheio ou proporcional na ativação e no cancelamento); board e colunas do Kanban dos chamados. (Gatilho de aprovação, bloqueio por suspensão e fatura em aberto deixaram de ser decisões com o contrato sem valor.)
 - **Diretoria:** SLA por tipo de chamado, preço fixo ou degressivo, fotos obrigatórias, WhatsApp no piloto, indicadores do painel da Speed.
 - **Opcional / depois do piloto:** módulo de WhatsApp (visitas e alarmes, instância separada, cobrado à parte), pagamento por arquivo de retorno ou integração, tela "Resumo do mês" e mapa do parceiro do protótipo, bloqueio em massa dos clientes de um parceiro inadimplente (depende do Voalle), alarme por transição (precisa do snapshot real), monitoramento no Zabbix/Grafana.

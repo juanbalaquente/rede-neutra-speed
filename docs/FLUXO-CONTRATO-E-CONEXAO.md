@@ -8,11 +8,11 @@ O que o parceiro pede é **uma ação só** ("Criar contrato"). Por baixo, três
 
 ## Respostas da Wiki (18 out 2026)
 
-O `POST /v3/contratos` **ainda não existe** na Wiki: o módulo de criação está pronto e testado sem gravar, e a rota sai quando o Voalle estiver configurado (tipo "Integração" e a campanha). As respostas valem para quando ela sair; "medido" é leitura real no Voalle e no NE40 em 18 out.
+O `POST /v3/contratos` **ainda não existe** na Wiki: o módulo de criação está pronto e testado sem gravar, e a rota sai depois de um contrato de teste real. **O que falta no Voalle é só configuração:** vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle (a chave "Integração" **não** é necessária: há contratos criados pela API em tipo com ela desligada). As respostas valem para quando ela sair; "medido" é leitura real no Voalle e no NE40 em 18 out.
 
 | Tema | Resposta | Efeito no portal |
 |---|---|---|
-| Contrato sem valor | **Medido:** 510 contratos ativos com valor zero autenticam PPPoE normalmente. Um serviço por velocidade, item do contrato em zero, tipo "Integração". Falta confirmar no staging que a API aceita zero nesse tipo. | Nenhum: o portal já manda `valorMensal: 0`. |
+| Contrato sem valor | **Medido:** 510 contratos ativos com valor zero autenticam PPPoE normalmente. Os planos são os da própria Speed, com o item do contrato em zero (mapeamento abaixo). Velocidade fora da tabela falha com `plano_nao_configurado`, sem criar nada. | Nenhum: o portal já manda `valorMensal: 0`. |
 | Aprovação e PPPoE | **Medido no NE40:** aprovados 10 de 10 autenticam; "Em Aprovação" 1 de 20; "Rejeitado" 0 de 10. **A Wiki aprova na criação** (a rota existe e o módulo já chama). | `pendente_aprovacao` deve durar segundos. |
 | Suspensão | Sem resposta segura: 2 de 7 suspensos e 2 de 10 em bloqueio financeiro seguem com sessão (pode ser o pool de bloqueio). Vão testar no staging. **Não tratar a suspensão como bloqueio automático ainda.** | Bloqueio segue como está (aguarda o teste). |
 | Cancelar contrato antes da instalação | De acordo com `POST /v3/contratos/{operacaoId}/cancelamento`. O Voalle não tem endpoint de cancelar: `contrato_cancelado` vira `aguardando_equipe` (tarefa da Speed); `conexao_removida` sai junto. | **Feito:** abandonar um contrato pede o cancelamento; o painel mostra "Cancelamento no Voalle pendente" até concluir, com reenviar e "Já cancelei no Voalle". |
@@ -22,7 +22,20 @@ O `POST /v3/contratos` **ainda não existe** na Wiki: o módulo de criação est
 | Tempo até aparecer no OLTCloud | Não medido. A ativação espera **até 2 h** pela sincronização. `client/create` fora do fluxo por enquanto. | **Feito:** a tela avisa que pode levar até 2 h e que não é para refazer o pedido. |
 | Limite de contratos por CNPJ | **Medido:** o maior cliente tem 107 contratos, sem problema. Sem limite documentado; reavaliar se passar de algumas centenas. | Nenhum. |
 
-Próximo passo da Wiki: com o Voalle configurado, criar um contrato de teste no staging (valor zero, aprovado na criação), medir a suspensão, construir o `POST /v3/contratos` e seguir para o primeiro cliente real do JHV.
+**Mapeamento velocidade → serviço do Voalle (confirmado pela Wiki):**
+
+| `velocidadeMbps` | Serviço do Voalle | Plano no portal |
+|---|---|---|
+| 600 | 00229 SPEED STANDARD 600Mb | 600 Mega |
+| 700 | 00232 Novo 700Mb | 700 Mega |
+| 800 | 00233 SPEED ADVANCE 800Mb | 800 Mega |
+| 1000 | 00332 SPEED GIGA MAIS 1Gb | 1 Giga |
+
+Os quatro planos do portal batem com a tabela. **Se a Speed criar no portal um plano de outra velocidade, a Wiki precisa mapear um serviço antes**, senão a criação de contrato falha com `plano_nao_configurado`.
+
+**Como a criação funciona no Voalle (investigação da Wiki no banco, só leitura):** há contratos criados pela API (1.828 na migração TOPNET e 2 em agosto). A **conexão PPPoE nasce sozinha** com o contrato, de 0,2 a 3 s depois dele, com o login igual ao número do contrato; a Wiki troca para `<contrato>-<CÓDIGO>`.
+
+**Próximos passos:** (1) a Speed vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle; (2) a Wiki cria **um contrato de teste real** com valor zero e confere se a conexão nasce sozinha, se a aprovação funciona, se o PPPoE autentica e o efeito da suspensão, e depois o cancela; (3) a Wiki constrói `POST /v3/contratos` e a rota de cancelamento e avisa quando estiverem no ar, desligadas; (4) primeiro cliente real do JHV pelo roteiro abaixo.
 
 ## 1. Sequência
 
@@ -109,7 +122,7 @@ Enquanto o contrato não é aprovado, a leitura de status do cliente (v3) devolv
 ## 6. Roteiro do primeiro cliente real (JHV)
 
 Pré-requisitos (fora do portal):
-1. Voalle: tipo de contrato com "Integração" ligada e campanha "E-commerce - Integração" configurados.
+1. Voalle: vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle. A Wiki já fez o contrato de teste real (conexão, aprovação, PPPoE e suspensão conferidos).
 2. Parceiro JHV cadastrado no Voalle com **CNPJ e endereço completos**.
 3. Wiki: serviço do Voalle mapeado para cada velocidade (600, 700, 800 e 1000 Mbps) e a chave de escrita.
 4. Portal: JHV cadastrado com código `JHV`, siglas liberadas, preços e limites; 2FA religado; conta de teste desativada.
@@ -139,7 +152,7 @@ Reversão geral: voltar os modos para `off`. Contratos criados continuam no banc
 - O Voalle exige **contrato aprovado** para a conexão PPPoE autenticar? Se sim, a Wiki aprova na criação.
 - Limite prático de contratos sob o mesmo CNPJ (ainda sem resposta).
 - O que acontece com a conexão (login e senha) quando o contrato é cancelado.
-- Configuração do Voalle (tipo de contrato "Integração" e campanha).
+- Configuração do Voalle: vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle.
 
 **Decisões do Juan**
 1. ~~Gatilho de aprovação do contrato~~: **deixou de ser decisão de cobrança** (o contrato não tem valor). Só importa se o Voalle exigir contrato aprovado para a conexão autenticar; nesse caso a Wiki aprova já na criação (não há risco de cobrança). Pergunta à Wiki.

@@ -12,7 +12,7 @@ O pedido não tem nenhuma rota para **criar o contrato**, e é dele que nasce o 
 - `contracts/create` cria o contrato no nome do parceiro. **A conexão PPPoE nasce junto** (confirmado pela Voalle), com o login igual ao número do contrato.
 - A Wiki troca o login para `<contrato>-<CÓDIGO>`, gera a senha (nunca devolvida, nunca em log), define o ponto de acesso pela sigla da CTO (R1 = 2, ITA = 3, FAT = 11) e o concentrador acompanha.
 - **Endereço:** o Voalle sobrescreve o endereço principal do cliente a cada contrato. Por isso a Wiki manda sempre o endereço que **já está no cadastro do parceiro** e grava o endereço real do assinante **só na conexão**, pela API de mapas da Voalle, com a coordenada.
-- Falta só a configuração no Voalle (tipo de contrato com "Integração" ligada e campanha "E-commerce - Integração"), já em andamento.
+- Falta só a configuração no Voalle (tipo de contrato com "Integração" ligada e campanha "E-commerce - Integração"), já em andamento. **Corrigido em 18 out:** a chave "Integração" não é necessária; o que falta é vincular os 4 planos da Speed (serviços 00229, 00232, 00233 e 00332) a um tipo de contrato no Voalle.
 
 **Proposta de rota** (escrita, `X-RedeNeutra-Write-Key`, mesmas regras de idempotência e operação do v3):
 
