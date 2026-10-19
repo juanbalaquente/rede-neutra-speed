@@ -2,6 +2,7 @@ import type { Config } from "../config.js";
 import { CodemapsClient } from "./codemaps.js";
 import { createHttp, type ApiCallLogger } from "./http.js";
 import { MockNetworkMap } from "./mock.js";
+import { DEMO_CTOS, demoGeocode } from "./mock-demo.js";
 import { OltcloudClient } from "./oltcloud.js";
 import { MockActivationService } from "./mock-activation.js";
 import { MockCustomerActions } from "./mock-actions.js";
@@ -64,7 +65,9 @@ export function createIntegrations(config: Config, log: ApiCallLogger): Integrat
 }
 
 function createNetwork(config: Config, log: ApiCallLogger): { network: NetworkMap } {
-  if (config.INTEGRATIONS_MODE === "mock") return { network: new MockNetworkMap() };
+  if (config.INTEGRATIONS_MODE === "mock") {
+    return { network: config.MOCK_NETWORK === "demo" ? new MockNetworkMap(DEMO_CTOS, demoGeocode) : new MockNetworkMap() };
+  }
 
   if (config.INTEGRATIONS_MODE === "wiki") {
     const missing = (["WIKI_BASE_URL", "WIKI_API_KEY"] as const).filter((k) => !config[k]);

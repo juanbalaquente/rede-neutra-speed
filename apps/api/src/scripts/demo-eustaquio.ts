@@ -17,7 +17,7 @@ import { mfaRequired } from "../services/mfa.js";
  * passe `--novas-senhas`. Não existe perfil de técnico: em campo o técnico entra como atendente.
  * Fica na auditoria sem usuário (feito por quem tem acesso ao servidor).
  */
-export const DEMO_PARTNER = { name: "Eustáquio Telecom", cnpj: "11222333000181", code: "EUS", allowedRegions: ["R1", "ITA", "FAT"] };
+export const DEMO_PARTNER = { name: "Eustáquio Telecom", cnpj: "47931526000159", code: "EUS", allowedRegions: ["R1", "ITA", "FAT"] };
 
 export const DEMO_USERS = [
   { email: "eustaquio.admin@demo.local", name: "Eustáquio (Admin Speed)", role: "admin_speed", perfil: "Administrador Speed" },
@@ -40,20 +40,44 @@ function generatePassword(): string {
   return chars.join("");
 }
 
+/**
+ * O parceiro de demonstração é o de código EUS com o nome acima. Código ou CNPJ já usados por outro parceiro
+ * param tudo: os scripts de demonstração apagam dados e nunca podem cair num parceiro de verdade.
+ */
+export async function findDemoPartner(db: Db) {
+  const [byCode] = await db.select().from(partners).where(eq(partners.code, DEMO_PARTNER.code));
+  if (byCode && byCode.name !== DEMO_PARTNER.name) {
+    throw new Error(`O código ${DEMO_PARTNER.code} já é do parceiro "${byCode.name}", que não é o de demonstração. Nada foi alterado.`);
+  }
+  return byCode ?? null;
+}
+
+async function ensureDemoPartner(db: Db) {
+  const found = await findDemoPartner(db);
+  if (found) return found;
+  const [byCnpj] = await db.select().from(partners).where(eq(partners.cnpj, DEMO_PARTNER.cnpj));
+  if (byCnpj) throw new Error(`O CNPJ de demonstração já é do parceiro "${byCnpj.name}". Nada foi alterado.`);
+  const [partner] = await db.insert(partners).values(DEMO_PARTNER).returning();
+  await recordAudit(db, { partnerId: partner!.id, userId: null, action: "parceiro.criado", entity: "partner", entityId: partner!.id, data: { origem: "servidor", demo: true } });
+  return partner!;
+}
+
 /** Devolve cada conta com a senha nova, ou `null` quando a conta já existia e foi mantida. */
 export async function createDemoAccounts(db: Db, opts: { resetPasswords: boolean }) {
-  let [partner] = await db.select().from(partners).where(eq(partners.cnpj, DEMO_PARTNER.cnpj));
-  if (!partner) {
-    [partner] = await db.insert(partners).values(DEMO_PARTNER).returning();
-    await recordAudit(db, { partnerId: partner!.id, userId: null, action: "parceiro.criado", entity: "partner", entityId: partner!.id, data: { origem: "servidor", demo: true } });
-  }
+  const partner = await ensureDemoPartner(db);
 
-  const accounts: { perfil: string; email: string; password: string | null }[] = [];
+  const accounts: { perfil: string; email: string; password: string | null; moved?: boolean }[] = [];
   for (const u of DEMO_USERS) {
-    const partnerId = u.role === "admin_speed" ? null : partner!.id;
-    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, u.email));
+    const partnerId = u.role === "admin_speed" ? null : partner.id;
+    const [existing] = await db.select({ id: users.id, partnerId: users.partnerId }).from(users).where(eq(users.email, u.email));
+    // Conta criada pela versão antiga deste script pode ter ficado em outro parceiro (CNPJ repetido): volta para o de demonstração.
+    const moved = !!existing && existing.partnerId !== partnerId;
+    if (moved) {
+      await db.update(users).set({ partnerId }).where(eq(users.id, existing.id));
+      await recordAudit(db, { partnerId, userId: null, action: "usuario.parceiro_corrigido", entity: "user", entityId: existing.id, data: { origem: "servidor", demo: true, de: existing.partnerId } });
+    }
     if (existing && !opts.resetPasswords) {
-      accounts.push({ perfil: u.perfil, email: u.email, password: null });
+      accounts.push({ perfil: u.perfil, email: u.email, password: null, moved });
       continue;
     }
     const password = generatePassword();
@@ -65,7 +89,7 @@ export async function createDemoAccounts(db: Db, opts: { resetPasswords: boolean
       const [created] = await db.insert(users).values({ partnerId, email: u.email, name: u.name, role: u.role, passwordHash }).returning({ id: users.id });
       await recordAudit(db, { partnerId, userId: null, action: "usuario.criado", entity: "user", entityId: created!.id, data: { origem: "servidor", demo: true } });
     }
-    accounts.push({ perfil: u.perfil, email: u.email, password });
+    accounts.push({ perfil: u.perfil, email: u.email, password, moved });
   }
   return accounts;
 }
@@ -77,6 +101,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const accounts = await createDemoAccounts(db, { resetPasswords: process.argv.includes("--novas-senhas") });
     const lines = accounts.map((a) => `${a.perfil}\n  e-mail: ${a.email}\n  senha:  ${a.password ?? "(já existia, não alterada)"}`);
     console.log(`\nContas do Eustáquio (anote agora, as senhas não aparecem de novo):\n\n${lines.join("\n\n")}\n`);
+    const moved = accounts.filter((a) => a.moved).length;
+    if (moved) console.log(`${moved} conta(s) estavam em outro parceiro e foram movidas para "${DEMO_PARTNER.name}".`);
     if (mfaRequired(config, "supervisor")) {
       console.log("Admin e supervisor pedem o segundo fator no primeiro login: configure no celular antes da apresentação.");
     }

@@ -84,6 +84,18 @@ Servidor sugerido: Ubuntu Server LTS, 4 vCPU, 4 GB de RAM, 50 GB, IP fixo, `open
 6. Fotos de campo ficam no volume `photos-data` (pasta `/data/photos` do container da API). O mesmo script de backup espelha esse volume em `$BACKUP_DIR/fotos`; copie o diretório de backup inteiro para outra máquina.
 7. Atualizar: tire um snapshot da VM, `git pull` e repita o comando do passo 4.
 
+## Demonstração
+
+Para apresentar o portal sem dado real: contas em nome do Eustáquio (admin Speed, supervisor, atendente e técnico) no parceiro fictício "Eustáquio Telecom" (código EUS), e seis meses de história (instalações com fotos ilustradas, financeiro, chamados, operações, consultas e agenda).
+
+```bash
+docker compose exec -T api node dist/scripts/demo-eustaquio.js            # contas; senhas sorteadas, mostradas uma vez
+docker compose exec -T api node dist/scripts/demo-dados.js --refazer      # dados, com datas a partir de hoje
+docker compose exec -T api node dist/scripts/demo-dados.js --apagar       # tira tudo do parceiro de demonstração
+```
+
+Para a tela combinar com os dados, use `INTEGRATIONS_MODE=mock`, `MOCK_NETWORK=demo` e `CLIENT_STATUS_MODE=mock` (semáforo e sinal dos clientes). Os scripts só tocam no parceiro de código EUS com o nome "Eustáquio Telecom" e recusam qualquer outro.
+
 ## Ainda não feito
 
 - Criação de contrato no Voalle com ponto de acesso, aceite e liberação de PPPoE (depende da validação no Voalle).

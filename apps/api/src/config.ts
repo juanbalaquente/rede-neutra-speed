@@ -13,6 +13,8 @@ const envSchema = z.object({
    * servidor liberado por IP, usado para validação).
    */
   INTEGRATIONS_MODE: z.enum(["mock", "wiki", "real"]).default("mock"),
+  /** Só com INTEGRATIONS_MODE=mock. teste = 3 CTOs (o que os testes usam); demo = rede de demonstração com ~40 CTOs por sigla. */
+  MOCK_NETWORK: z.enum(["teste", "demo"]).default("teste"),
   /** Base da SpeedWiki, sem o /proxy/redeneutra/v1. */
   WIKI_BASE_URL: z.string().url().optional(),
   /** Chave da integração, enviada em X-RedeNeutra-Key. Só no ambiente do servidor. */

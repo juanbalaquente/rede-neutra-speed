@@ -20,7 +20,7 @@ export class MockClientStatus implements ClientStatusService {
   }
 
   private seed(login: string): number {
-    return createHash("sha1").update(login).digest().readUInt32BE(0);
+    return mockSeed(login);
   }
 
   private guard(login: string, partnerCode: string) {
@@ -38,14 +38,14 @@ export class MockClientStatus implements ClientStatusService {
     const s = this.scenario(login);
     const now = Date.now();
     const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
-    const base = -19 - (this.seed(login) % 40) / 10;
+    const base = mockBaseDbm(login);
     return {
       login,
       fibra: {
         estado: s.fibra,
         sinalDbm: s.fibra === "online" ? Number(base.toFixed(1)) : null,
         uptimeDesde: s.fibra === "online" ? iso(6 * 24 * 3600_000) : null,
-        ultimaQuedaEm: iso(13 * 24 * 3600_000),
+        ultimaQuedaEm: iso((mockHadDrop(login) ? 13 : 61) * 24 * 3600_000),
         atualizadoEm: iso(opts.fresh ? 1_000 : 4 * 60_000),
       },
       autenticacao: {
@@ -55,7 +55,7 @@ export class MockClientStatus implements ClientStatusService {
         atualizadoEm: iso(opts.fresh ? 2_000 : 9 * 60_000),
       },
       contrato: { estado: s.contrato, desde: "2026-09-30", atualizadoEm: iso(60_000) },
-      onu: { serial: `ZTEGC${String(this.seed(login) % 10_000_000).padStart(7, "0")}`, modelo: "F670L", olt: "OLT_SANTA_INES", vlan: 2500 },
+      onu: { serial: mockSerial(login), modelo: "F670L", olt: "OLT_SANTA_INES", vlan: 2500 },
     };
   }
 
@@ -63,7 +63,7 @@ export class MockClientStatus implements ClientStatusService {
     this.calls.push(`signal:${login}:${dias}`);
     if (!this.guard(login, partnerCode)) return null;
     const seed = this.seed(login);
-    const base = -19 - (seed % 40) / 10;
+    const base = mockBaseDbm(login);
     const now = Date.now();
     const step = 6 * 3600_000;
     const pontos: SignalSeries["pontos"] = [];
@@ -75,7 +75,7 @@ export class MockClientStatus implements ClientStatusService {
       pontos.push({ em: new Date(now - i * step).toISOString(), rxDbm: Number((base + noise + wave).toFixed(2)) });
     }
     const quedas: SignalSeries["quedas"] =
-      dias >= 14 ? [{ inicio: new Date(now - 13 * 24 * 3600_000).toISOString(), fim: new Date(now - 13 * 24 * 3600_000 + 25 * 60_000).toISOString(), tipo: "loss" }] : [];
+      dias >= 14 && mockHadDrop(login) ? [{ inicio: new Date(now - 13 * 24 * 3600_000).toISOString(), fim: new Date(now - 13 * 24 * 3600_000 + 25 * 60_000).toISOString(), tipo: "loss" }] : [];
     return { login, dias, pontos, quedas };
   }
 
@@ -94,4 +94,24 @@ export class MockClientStatus implements ClientStatusService {
       return { login, fibra: s.fibra, autenticacao: s.ppp, contrato: s.contrato, fibraEm: at, autenticacaoEm: at };
     });
   }
+}
+
+/** Semente do login: o mesmo login dá sempre o mesmo sinal, serial e quedas (os dados de demonstração usam para combinar). */
+export function mockSeed(login: string): number {
+  return createHash("sha1").update(login).digest().readUInt32BE(0);
+}
+
+/** Sinal típico da ONU desse login, de -19 a -22,9 dBm. */
+export function mockBaseDbm(login: string): number {
+  return -19 - (mockSeed(login) % 40) / 10;
+}
+
+export function mockSerial(login: string): string {
+  return `ZTEGC${String(mockSeed(login) % 10_000_000).padStart(7, "0")}`;
+}
+
+/** Só parte da base teve queda nos últimos 14 dias (cerca de 1 em 5), mais quem está em loss ou offline. */
+export function mockHadDrop(login: string): boolean {
+  const digit = login.replace(/-.*$/, "").slice(-1);
+  return digit === "3" || digit === "7" || mockSeed(login) % 5 === 3;
 }

@@ -1,6 +1,6 @@
 import type { CtoVagas, NearbyResult, NetworkMap, RegionMap } from "./types.js";
 
-interface MockCto {
+export interface MockCto {
   /** Id da caixa; quando falta, o nome faz o papel de id. */
   id?: string;
   name: string;
@@ -34,11 +34,15 @@ export const MOCK_CTOS: MockCto[] = [
 
 /** Endereços que começam com "sem viabilidade" não acham CTO nenhuma. */
 export class MockNetworkMap implements NetworkMap {
-  constructor(private readonly ctos: MockCto[] = MOCK_CTOS) {}
+  /** geocode: onde o endereço cai no mapa. Sem ele, todo endereço cai no mesmo ponto (o que os testes esperam). */
+  constructor(
+    private readonly ctos: MockCto[] = MOCK_CTOS,
+    private readonly geocode: (address: string) => { lat: number; lng: number } = () => ({ lat: -19.9193, lng: -43.9385 }),
+  ) {}
 
   async findNearbyCtos(address: string, radiusM: number): Promise<NearbyResult> {
     if (/^sem viabilidade/i.test(address.trim())) return { point: { lat: -20.5, lng: -44.5 }, ctos: [] };
-    const point = { lat: -19.9193, lng: -43.9385 };
+    const point = this.geocode(address);
     const ctos = this.ctos
       .map((c) => ({
         ctoId: c.unresolved ? null : (c.id ?? c.name),
