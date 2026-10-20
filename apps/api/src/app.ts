@@ -223,6 +223,17 @@ export function createApp({ db, config, integrations, photoStorage, now }: AppDe
     return c.json({ ok: true });
   });
 
+  /** Quem está logado, ou `user: null` sem erro: a tela de login consulta isto ao abrir, sem sujar o console com um 401. */
+  app.get("/auth/session", async (c) => {
+    try {
+      await requireUser(c, async () => {});
+    } catch (e) {
+      if (e instanceof AppError && e.status === 401) return c.json({ user: null, mfa: null });
+      throw e;
+    }
+    return c.json({ user: c.get("user"), mfa: mfa.mfaState(config, c.get("userRow")) });
+  });
+
   app.get("/auth/me", requireUser, (c) => c.json({ user: c.get("user"), mfa: mfa.mfaState(config, c.get("userRow")) }));
 
   /** Nome e limites do parceiro da sessão. Administrador Speed não tem parceiro. */

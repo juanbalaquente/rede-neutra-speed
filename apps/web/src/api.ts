@@ -174,6 +174,8 @@ export const api = {
   reset2fa: (userId: string) => request<{ ok: true }>("POST", `/admin/users/${userId}/2fa/reset`),
   logout: () => request<{ ok: true }>("POST", "/auth/logout"),
   me: () => request<{ user: User; mfa: MfaState }>("GET", "/auth/me"),
+  /** Como o `me`, mas sem erro quando ninguém está logado (`user: null`). */
+  session: () => request<{ user: User | null; mfa: MfaState | null }>("GET", "/auth/session"),
   conferir: (days: number) => request<{ days: number; rows: ConferirRow[] }>("GET", `/admin/cto-conferir?days=${days}`),
   partner: () => request<{ partner: Partner | null }>("GET", "/partner"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),

@@ -18,7 +18,7 @@ import { ReservationsPage } from "./pages/ReservationsPage";
 import { TicketsPage } from "./pages/TicketsPage";
 import { ViabilityPage } from "./pages/ViabilityPage";
 import { CommandPalette, type Command } from "./ui/CommandPalette";
-import { ChartIcon, ClockIcon, ListIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon } from "./ui/Icons";
+import { CalendarIcon, CameraIcon, ChartIcon, ChatIcon, ClockIcon, InboxIcon, ListIcon, OutIcon, PeopleIcon, PinIcon, SearchIcon, ShieldIcon } from "./ui/Icons";
 import { Bell, type Notice } from "./ui/Bell";
 import { ToastProvider, useToast } from "./ui/Toast";
 import { THEMES, useTheme } from "./ui/theme";
@@ -65,7 +65,7 @@ function Portal() {
 
   useEffect(() => {
     api
-      .me()
+      .session()
       .then((r) => {
         setUser(r.user);
         setMfa(r.mfa);
@@ -195,8 +195,11 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   // Dados da busca (Ctrl K): contratos e clientes de quem pode ver; parceiros só para a Speed. Carrega ao abrir a busca.
   const [searchData, setSearchData] = useState<{ inst: Installation[]; partners: AdminPartner[] }>({ inst: [], partners: [] });
+  const searchLoaded = useRef(false);
   useEffect(() => {
-    if (!paletteOpen) return;
+    // Carrega uma vez ao abrir o portal (a busca já nasce pronta) e atualiza cada vez que a busca abre.
+    if (!paletteOpen && searchLoaded.current) return;
+    searchLoaded.current = true;
     api.installations().then((r) => setSearchData((d) => ({ ...d, inst: r.installations }))).catch(() => {});
     if (user.role === "admin_speed") api.adminPartners().then((r) => setSearchData((d) => ({ ...d, partners: r.partners }))).catch(() => {});
   }, [paletteOpen, user.role]);
@@ -260,16 +263,16 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
       ...(user.role === "admin_speed"
         ? [
             { id: "go-painel", group: "Ir para", title: "Painel da rede", icon: <ChartIcon />, run: () => setTab("painel") },
-            { id: "go-auditoria", group: "Ir para", title: "Auditoria", icon: <ListIcon />, run: () => setTab("auditoria") },
+            { id: "go-auditoria", group: "Ir para", title: "Auditoria", icon: <ShieldIcon />, run: () => setTab("auditoria") },
           ]
         : []),
       ...(user.role === "supervisor" ? [{ id: "go-equipe", group: "Ir para", title: "Equipe", icon: <PeopleIcon />, run: () => setTab("equipe") }] : []),
       ...(user.role === "admin_speed" ? [{ id: "go-parceiros", group: "Ir para", title: "Parceiros", icon: <PeopleIcon />, run: () => setTab("parceiros") }] : []),
-      ...(user.role === "admin_speed" ? [{ id: "go-pedidos", group: "Ir para", title: "Pedidos de vaga", hint: `${pedidos} esperando`, icon: <ListIcon />, run: () => setTab("pedidos") }] : []),
+      ...(user.role === "admin_speed" ? [{ id: "go-pedidos", group: "Ir para", title: "Pedidos de vaga", hint: `${pedidos} esperando`, icon: <InboxIcon />, run: () => setTab("pedidos") }] : []),
       ...(user.role === "admin_speed" ? [{ id: "go-conferir", group: "Ir para", title: "CTOs para conferir", icon: <PinIcon />, run: () => setTab("conferir") }] : []),
-      { id: "go-inst", group: "Ir para", title: "Instalações", icon: <ListIcon />, run: () => setTab("instalacoes") },
-      { id: "go-agenda", group: "Ir para", title: "Agenda", icon: <ClockIcon />, run: () => setTab("agenda") },
-      { id: "go-chamados", group: "Ir para", title: "Chamados", icon: <ListIcon />, run: () => setTab("chamados") },
+      { id: "go-inst", group: "Ir para", title: "Instalações", icon: <CameraIcon />, run: () => setTab("instalacoes") },
+      { id: "go-agenda", group: "Ir para", title: "Agenda", icon: <CalendarIcon />, run: () => setTab("agenda") },
+      { id: "go-chamados", group: "Ir para", title: "Chamados", icon: <ChatIcon />, run: () => setTab("chamados") },
       { id: "go-resv", group: "Ir para", title: "Reservas", hint: `${activeCount} abertas`, icon: <ClockIcon />, run: () => setTab("reservas") },
       ...THEMES.filter((t) => t.id !== theme).map((t) => {
         const Ico = THEME_ICON[t.id];
@@ -336,14 +339,14 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <ClockIcon />Reservas {reservations && <em className={soon.length ? "warn" : ""} title={soon.length ? `${soon.length} vence(m) em menos de 3 horas` : undefined}>{activeCount}</em>}
           </button>
           <button className={`nv ${tab === "instalacoes" ? "on" : ""}`} onClick={() => setTab("instalacoes")}>
-            <ListIcon />Instalações
+            <CameraIcon />Instalações
           </button>
           <button className={`nv ${tab === "agenda" ? "on" : ""}`} onClick={() => setTab("agenda")}>
-            <ClockIcon />Agenda
+            <CalendarIcon />Agenda
           </button>
           {user.role !== "admin_speed" && (
             <button className={`nv ${tab === "chamados" ? "on" : ""}`} onClick={() => setTab("chamados")}>
-              <ListIcon />Chamados {!!dash?.chamadosAbertos && <em className={dash.chamadosAtrasados ? "warn" : ""}>{dash.chamadosAbertos}</em>}
+              <ChatIcon />Chamados {!!dash?.chamadosAbertos && <em className={dash.chamadosAtrasados ? "warn" : ""}>{dash.chamadosAbertos}</em>}
             </button>
           )}
           {user.role === "supervisor" && (
@@ -367,13 +370,13 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
                 <PeopleIcon />Parceiros
               </button>
               <button className={`nv ${tab === "chamados" ? "on" : ""}`} onClick={() => setTab("chamados")}>
-                <ListIcon />Chamados
+                <ChatIcon />Chamados
               </button>
               <button className={`nv ${tab === "pedidos" ? "on" : ""}`} onClick={() => setTab("pedidos")}>
-                <ListIcon />Pedidos de vaga {pedidos > 0 && <em className="warn">{pedidos}</em>}
+                <InboxIcon />Pedidos de vaga {pedidos > 0 && <em className="warn">{pedidos}</em>}
               </button>
               <button className={`nv ${tab === "auditoria" ? "on" : ""}`} onClick={() => setTab("auditoria")}>
-                <ListIcon />Auditoria
+                <ShieldIcon />Auditoria
               </button>
               <div className="grp">Rede</div>
               <button className={`nv ${tab === "conferir" ? "on" : ""}`} onClick={() => setTab("conferir")}>
@@ -397,7 +400,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <div className="crumb">{partner?.name ?? "Speed"} <span>/</span> <b>{TAB_LABEL[tab]}</b></div>
           <button className="sbtn" onClick={() => setPaletteOpen(true)}>
             <SearchIcon />
-            <span>Buscar endereço ou ir para…</span>
+            <span>Buscar endereço, contrato ou ir para…</span>
             <kbd>Ctrl K</kbd>
           </button>
           <Bell notices={notices} />

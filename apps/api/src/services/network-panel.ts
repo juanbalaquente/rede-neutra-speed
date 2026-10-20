@@ -190,7 +190,7 @@ export async function regionMap(db: Db, network: NetworkMap, sigla: string): Pro
     console.error("[mapa] falha ao ler a região:", e instanceof Error ? e.message : e);
     throw new AppError(502, "sistema_indisponivel", "A consulta à rede da Speed está indisponível agora. Tente de novo em alguns minutos.");
   }
-  if (!map) throw new AppError(404, "regiao_desconhecida", "Sigla desconhecida na rede.");
+  if (!map) throw new AppError(404, "regiao_desconhecida", `A leitura atual da rede não tem a sigla ${sigla}. Ela pode não existir ou ainda não ter dados.`);
   const open = await db
     .select({ ctoId: portReservations.ctoId, n: count() })
     .from(portReservations)

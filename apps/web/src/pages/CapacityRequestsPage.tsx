@@ -92,9 +92,10 @@ export function CapacityRequestsPage({ onChanged }: { onChanged: () => void }) {
                   <td>
                     {refusing === r.id ? (
                       <div style={{ display: "grid", gap: 6, minWidth: 200 }}>
-                        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Motivo da recusa" aria-label="Motivo da recusa" />
+                        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Motivo da recusa (o parceiro vai ler)" aria-label="Motivo da recusa" maxLength={500} />
+                        {note.trim().length < 10 && <small className="muted">Escreva o motivo com pelo menos 10 caracteres.</small>}
                         <div className="acts2">
-                          <button className="btn sm" disabled={busy === r.id || !note.trim()} onClick={() => void decide(r, "recusar")}>Recusar</button>
+                          <button className="btn sm" disabled={busy === r.id || note.trim().length < 10} onClick={() => void decide(r, "recusar")}>Recusar</button>
                           <button className="btn sec sm" onClick={() => { setRefusing(null); setNote(""); }}>Voltar</button>
                         </div>
                       </div>

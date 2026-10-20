@@ -96,6 +96,9 @@ export function ViabilityPage({
     }
   }
 
+  /** Pedido de vaga em CTO cheia: um clique abre a confirmação, o segundo envia (o pedido vai direto para a Speed). */
+  const [confirmAsk, setConfirmAsk] = useState<string | null>(null);
+
   async function askCapacity(cto: ViabilityCto) {
     if (cto.ctoId === null) return;
     const ctoId = cto.ctoId;
@@ -190,10 +193,22 @@ export function ViabilityPage({
                           <small style={{ color: "var(--ok)" }}>Pedido enviado à Speed. Acompanhe em Reservas.</small>
                         ) : (
                           <>
-                            <button className="btn sm sec" disabled={asking === cto.ctoId} onClick={() => void askCapacity(cto)}>
-                              {asking === cto.ctoId ? "Enviando…" : "Pedir vaga nesta CTO"}
-                            </button>
-                            <small style={{ display: "block", marginTop: 4 }}>A Speed confirma ou estende a rede. Com a confirmação, a vaga fica reservada por 48 horas.</small>
+                            {confirmAsk === cto.ctoId ? (
+                              <div style={{ display: "grid", gap: 6 }}>
+                                <small>Enviar o pedido à Speed para o endereço <b>{queried}</b>? Ela confirma ou recusa; com a confirmação, a vaga fica reservada por 48 horas.</small>
+                                <div className="acts2">
+                                  <button className="btn sm" disabled={asking === cto.ctoId} onClick={() => { setConfirmAsk(null); void askCapacity(cto); }}>{asking === cto.ctoId ? "Enviando…" : "Sim, enviar o pedido"}</button>
+                                  <button className="btn sm sec" onClick={() => setConfirmAsk(null)}>Voltar</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <button className="btn sm sec" disabled={asking === cto.ctoId} onClick={() => setConfirmAsk(cto.ctoId)}>
+                                  {asking === cto.ctoId ? "Enviando…" : "Pedir vaga nesta CTO"}
+                                </button>
+                                <small style={{ display: "block", marginTop: 4 }}>A Speed confirma ou estende a rede. Com a confirmação, a vaga fica reservada por 48 horas.</small>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
@@ -234,9 +249,12 @@ export function ViabilityPage({
             {result?.viable && !sel && <p className="muted" style={{ margin: 0 }}>Escolha uma CTO com vaga para reservar.</p>}
             {result?.viable && <p className="note">Vaga livre segundo os sistemas da Speed. A confirmação final é feita em campo, na ativação.</p>}
             {result?.viable && (
-              <button className="btn" disabled={!sel || !canReserve || reserving} onClick={reserve} title={canReserve ? undefined : "Somente parceiros reservam"}>
-                {reserving ? "Reservando…" : "Reservar vaga"}
-              </button>
+              <>
+                <button className="btn" disabled={!sel || !canReserve || reserving} onClick={reserve}>
+                  {reserving ? "Reservando…" : "Reservar vaga"}
+                </button>
+                {!canReserve && <p className="hint">Só usuários de parceiro reservam vagas. Aqui a Speed consulta a viabilidade.</p>}
+              </>
             )}
           </div>
         </div>

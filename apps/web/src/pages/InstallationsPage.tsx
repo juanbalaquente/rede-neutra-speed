@@ -250,6 +250,10 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
   const [filter, setFilter] = useState<Filter>("todas");
   const [picked, setPicked] = useState<string[]>([]);
   const isAdmin = user.role === "admin_speed";
+  // Contrato escolhido na busca (Ctrl K) com esta tela já aberta: abre o detalhe dele.
+  useEffect(() => {
+    if (initialId) setSelected(initialId);
+  }, [initialId]);
 
   const load = useCallback(() => {
     api.installations().then((r) => setList(r.installations)).catch((e) => { say(errMsg(e, "Falha ao carregar."), "bad"); setList([]); });
@@ -346,6 +350,8 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
                       <span className="badge b-warn">Bloqueado</span>
                     ) : i.osClosedAt ? (
                       <span className="badge b-ok">O.S. fechada</span>
+                    ) : i.activationState === "online" ? (
+                      <span className="badge b-warn">O.S. pendente</span>
                     ) : i.activationState ? (
                       <span className={`badge ${ACT_LABEL[i.activationState]?.tone ?? "b-mute"}`}>{ACT_LABEL[i.activationState]?.label ?? i.activationState}</span>
                     ) : (

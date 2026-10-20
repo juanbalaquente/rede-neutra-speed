@@ -64,3 +64,31 @@ export const ListIcon = () => (
     <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
   </Icon>
 );
+export const CalendarIcon = () => (
+  <Icon>
+    <rect x="4" y="5.5" width="16" height="14.5" rx="2.5" />
+    <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
+  </Icon>
+);
+export const CameraIcon = () => (
+  <Icon>
+    <path d="M4 8h3l1.5-2h7L17 8h3v11H4Z" />
+    <circle cx="12" cy="13.5" r="3.2" />
+  </Icon>
+);
+export const ChatIcon = () => (
+  <Icon>
+    <path d="M4 5h16v11H9l-5 4Z" />
+  </Icon>
+);
+export const InboxIcon = () => (
+  <Icon>
+    <path d="M4 13 6.5 5h11L20 13M4 13v6h16v-6M4 13h5l1 2h4l1-2h5" />
+  </Icon>
+);
+export const ShieldIcon = () => (
+  <Icon>
+    <path d="M12 3 5 6v5.5c0 4.2 2.8 7.5 7 9.5 4.2-2 7-5.3 7-9.5V6Z" />
+    <path d="m9.5 12 2 2 3.5-4" />
+  </Icon>
+);

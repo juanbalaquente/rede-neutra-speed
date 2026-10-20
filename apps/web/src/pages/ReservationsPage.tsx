@@ -50,6 +50,12 @@ function Ring({ left, total }: { left: number; total: number }) {
   );
 }
 
+/** Data da visita; mostra o ano quando não é o ano corrente, para uma data antiga não passar por atual. */
+const fmtVisit = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", ...(d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" as const } : {}), hour: "2-digit", minute: "2-digit" });
+};
+
 export function ReservationsPage({
   user,
   partner,
@@ -188,7 +194,7 @@ export function ReservationsPage({
                   {r.planId && r.visitAt ? (
                     <p className="rv-cli">
                       {r.nickname ? <b>{r.nickname}</b> : null}{r.nickname ? " · " : ""}
-                      visita {new Date(r.visitAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {r.technician}
+                      visita {fmtVisit(r.visitAt)} · {r.technician}
                     </p>
                   ) : (
                     <p className="rv-cli warn">Falta preencher os dados do cliente.</p>
