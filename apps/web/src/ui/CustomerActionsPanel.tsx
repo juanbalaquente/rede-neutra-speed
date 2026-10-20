@@ -128,7 +128,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
                 <span className={`badge ${STATE[o.state].tone}`}>{STATE[o.state].label}</span>
                 <small className="muted">{when(o.createdAt)}</small>
                 {o.state === "parcial" && <button className="linkbtn" onClick={() => void retry(o.id)}>Repetir</button>}
-                {o.notSent && <button className="linkbtn" onClick={() => void retry(o.id)}>Reenviar</button>}
+                {o.notSent && <button className="btn sm" onClick={() => void retry(o.id)}>Reenviar</button>}
               </div>
               {o.notSent && <small className="muted">O pedido não chegou ao sistema da Speed. Reenviar não duplica a operação.</small>}
               {o.reason && <small className="muted">{o.reason}</small>}
