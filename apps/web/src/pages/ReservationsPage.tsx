@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Activation, type Partner, type Reservation, type User } from "../api";
 import { ActivationPanel } from "../ui/ActivationPanel";
+import { CapacityRequestsList } from "../ui/CapacityRequestsList";
 import { ClienteForm } from "../ui/ClienteForm";
 import { useToast } from "../ui/Toast";
 
@@ -147,6 +148,8 @@ export function ReservationsPage({
           </div>
         </div>
       )}
+
+      {!isAdmin && <CapacityRequestsList onChanged={() => void reload()} />}
 
       {/* Procura em todas as reservas: ao ficar online ela deixa de ser ativa, e o painel segue aberto com a confirmação. */}
       {editingCliente && active.some((r) => r.id === editingCliente) && (

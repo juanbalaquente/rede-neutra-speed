@@ -54,7 +54,8 @@ export async function createCapacityRequest(
   }
   const entry = (listed.result as { ctos?: ListedCto[] } | null)?.ctos?.find((c) => c.ctoId === input.ctoId);
   if (!entry) throw new AppError(422, "viabilidade_necessaria", "Essa CTO não apareceu na consulta deste endereço.");
-  if (entry.blocked === null) {
+  const blockedReason = entry.blocked;
+  if (blockedReason === null) {
     throw new AppError(409, "cto_com_vaga", "Essa CTO tem vaga livre: reserve direto, sem pedido.");
   }
 
@@ -96,7 +97,7 @@ export async function createCapacityRequest(
         ctoLat: entry.location?.lat ?? null,
         ctoLng: entry.location?.lng ?? null,
         totalVagas: entry.totalVagas || null,
-        blockedReason: entry.blocked,
+        blockedReason,
         motivos: entry.motivos ?? [],
         createdAt: now,
       })
@@ -108,7 +109,7 @@ export async function createCapacityRequest(
       entity: "capacity_request",
       entityId: created!.id,
       ip: opts.ip,
-      data: { ctoId: input.ctoId, cto: entry.name, motivo: entry.blocked },
+      data: { ctoId: input.ctoId, cto: entry.name, motivo: blockedReason },
     });
     return created!;
   });

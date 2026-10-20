@@ -5,6 +5,7 @@ import { api, type Dashboard, type MfaState, type Partner, type Reservation, typ
 import { LoginPage } from "./pages/LoginPage";
 import { MfaSetupPage } from "./pages/MfaSetupPage";
 import { ConferirPage } from "./pages/ConferirPage";
+import { CapacityRequestsPage } from "./pages/CapacityRequestsPage";
 import { AuditPage } from "./pages/AuditPage";
 import { PanelPage } from "./pages/PanelPage";
 import { PartnersPage } from "./pages/PartnersPage";
@@ -23,7 +24,7 @@ import { ToastProvider, useToast } from "./ui/Toast";
 import { THEMES, useTheme } from "./ui/theme";
 import { THEME_ICON, ThemeMenu } from "./ui/ThemeMenu";
 
-type Tab = "inicio" | "financeiro" | "viabilidade" | "reservas" | "instalacoes" | "agenda" | "chamados" | "conferir" | "parceiros" | "painel" | "auditoria" | "equipe";
+type Tab = "inicio" | "financeiro" | "viabilidade" | "reservas" | "instalacoes" | "agenda" | "chamados" | "conferir" | "pedidos" | "parceiros" | "painel" | "auditoria" | "equipe";
 
 const ROLE_LABEL: Record<User["role"], string> = {
   atendente: "Atendente",
@@ -34,7 +35,7 @@ const ROLE_LABEL: Record<User["role"], string> = {
 /** A partir de quanto tempo antes do vencimento o portal avisa o parceiro. */
 const EXPIRY_WARN_MS = 3 * 3600_000;
 
-const TAB_LABEL: Record<Tab, string> = { inicio: "Painel", financeiro: "Financeiro", viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", chamados: "Chamados", conferir: "CTOs para conferir", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
+const TAB_LABEL: Record<Tab, string> = { inicio: "Painel", financeiro: "Financeiro", viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", chamados: "Chamados", conferir: "CTOs para conferir", pedidos: "Pedidos de vaga", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
 
 export function App() {
   return (
@@ -131,10 +132,16 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [fleet, setFleet] = useState<Fleet | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [rede, setRede] = useState<{ ok: boolean; detail: string } | null>(null);
+  const [pedidos, setPedidos] = useState(0);
+  const loadPedidos = useCallback(() => {
+    if (user.role !== "admin_speed") return;
+    api.capacityRequests("pendente").then((r) => setPedidos(r.requests.length)).catch(() => {});
+  }, [user.role]);
   useEffect(() => {
     const isAdmin = user.role === "admin_speed";
     const poll = () => {
       if (isAdmin) {
+        loadPedidos();
         api.integrationsHealth().then((h) => setRede({ ok: h.ok, detail: h.detail })).catch(() => {});
         loadOverview().then(setOverview).catch(() => {});
       }
@@ -147,7 +154,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     poll();
     const t = setInterval(poll, isAdmin ? 60_000 : 120_000);
     return () => clearInterval(t);
-  }, [user.role]);
+  }, [user.role, loadPedidos]);
 
   // A instalação escolhida na agenda só vale para a abertura da tela.
   useEffect(() => {
@@ -202,6 +209,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
         : []),
       ...(user.role === "supervisor" ? [{ id: "go-equipe", group: "Ir para", title: "Equipe", icon: <PeopleIcon />, run: () => setTab("equipe") }] : []),
       ...(user.role === "admin_speed" ? [{ id: "go-parceiros", group: "Ir para", title: "Parceiros", icon: <PeopleIcon />, run: () => setTab("parceiros") }] : []),
+      ...(user.role === "admin_speed" ? [{ id: "go-pedidos", group: "Ir para", title: "Pedidos de vaga", hint: `${pedidos} esperando`, icon: <ListIcon />, run: () => setTab("pedidos") }] : []),
       ...(user.role === "admin_speed" ? [{ id: "go-conferir", group: "Ir para", title: "CTOs para conferir", icon: <PinIcon />, run: () => setTab("conferir") }] : []),
       { id: "go-inst", group: "Ir para", title: "Instalações", icon: <ListIcon />, run: () => setTab("instalacoes") },
       { id: "go-agenda", group: "Ir para", title: "Agenda", icon: <ClockIcon />, run: () => setTab("agenda") },
@@ -213,7 +221,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
       }),
       { id: "out", group: "Preferências", title: "Sair", icon: <OutIcon />, run: () => void logout() },
     ],
-    [activeCount, theme, choose, logout, user.role],
+    [activeCount, pedidos, theme, choose, logout, user.role],
   );
 
   const notices = useMemo<Notice[]>(() => {
@@ -227,9 +235,10 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     if (overview?.totais.chamadosAtrasados) list.push({ id: "chamados-atrasados", tone: "bad", text: `${overview.totais.chamadosAtrasados} chamado(s) de parceiros fora do prazo`, onOpen: () => setTab("chamados") });
     if (overview?.totais.contratosComProblema) list.push({ id: "contratos", tone: "bad", text: `${overview.totais.contratosComProblema} contrato(s) com problema na criação`, onOpen: () => setTab("painel") });
     if (overview?.totais.aprovacoesPendentes) list.push({ id: "aprovacoes", tone: "warn", text: `${overview.totais.aprovacoesPendentes} operação(ões) esperando a aprovação da Speed`, onOpen: () => setTab("parceiros") });
+    if (pedidos > 0) list.push({ id: "pedidos", tone: "warn", text: pedidos === 1 ? "Um pedido de vaga esperando a Speed" : `${pedidos} pedidos de vaga esperando a Speed`, onOpen: () => setTab("pedidos") });
     if (rede && !rede.ok) list.push({ id: "rede", tone: "bad", text: "A integração com a rede está com problema", onOpen: () => setTab("painel") });
     return list;
-  }, [soon, dash, fleet, overview, rede]);
+  }, [soon, dash, fleet, overview, rede, pedidos]);
 
   const consult = useCallback((address: string) => {
     setTab("viabilidade");
@@ -304,6 +313,9 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
               <button className={`nv ${tab === "chamados" ? "on" : ""}`} onClick={() => setTab("chamados")}>
                 <ListIcon />Chamados
               </button>
+              <button className={`nv ${tab === "pedidos" ? "on" : ""}`} onClick={() => setTab("pedidos")}>
+                <ListIcon />Pedidos de vaga {pedidos > 0 && <em className="warn">{pedidos}</em>}
+              </button>
               <button className={`nv ${tab === "auditoria" ? "on" : ""}`} onClick={() => setTab("auditoria")}>
                 <ListIcon />Auditoria
               </button>
@@ -354,6 +366,8 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <PartnersPage />
         ) : tab === "conferir" && user.role === "admin_speed" ? (
           <ConferirPage />
+        ) : tab === "pedidos" && user.role === "admin_speed" ? (
+          <CapacityRequestsPage onChanged={loadPedidos} />
         ) : tab === "inicio" && user.role !== "admin_speed" ? (
           <PartnerDashboardPage user={user} onGo={(t, id) => { if (id) setInstId(id); setTab(t); }} />
         ) : tab === "financeiro" && user.role === "supervisor" ? (
