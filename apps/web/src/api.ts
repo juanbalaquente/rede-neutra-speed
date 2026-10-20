@@ -539,7 +539,7 @@ export interface CustomerOperation {
   login: string;
   reason: string | null;
   state: OperationState;
-  steps: { nome: string; estado: "pendente" | "concluida" | "falhou"; motivo?: string | null }[];
+  steps: { nome: string; estado: "pendente" | "concluida" | "falhou" | "aguardando_equipe"; motivo?: string | null }[];
   createdAt: string;
   updatedAt: string;
 }

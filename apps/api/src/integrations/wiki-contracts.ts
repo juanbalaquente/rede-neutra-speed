@@ -17,7 +17,7 @@ const snapshotSchema = z.object({
   operacaoId: z.string().min(1),
   tipo: z.literal("contrato").optional(),
   estado,
-  etapas: z.array(z.object({ nome: z.string(), estado: z.enum(["pendente", "concluida", "falhou"]), motivo: z.string().nullable().optional() })).default([]),
+  etapas: z.array(z.object({ nome: z.string(), estado: z.enum(["pendente", "concluida", "falhou", "aguardando_equipe"]), motivo: z.string().nullable().optional() })).default([]),
   resultado: z.object({ contrato: z.string().min(1), login: z.string().min(1) }).nullable().default(null),
   atualizadoEm: z.string().datetime({ offset: true }),
 });

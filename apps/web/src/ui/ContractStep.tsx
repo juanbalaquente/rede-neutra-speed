@@ -8,7 +8,7 @@ import { useToast } from "./Toast";
 export interface ContractView {
   id: string;
   state: "recebida" | "executando" | "concluida" | "parcial" | "sem_confirmacao" | "aguardando_equipe" | "falhou" | "abandonada";
-  steps: { nome: string; estado: "pendente" | "concluida" | "falhou"; motivo?: string | null }[];
+  steps: { nome: string; estado: "pendente" | "concluida" | "falhou" | "aguardando_equipe"; motivo?: string | null }[];
   contract: string | null;
   login: string | null;
   reason: string | null;
@@ -151,7 +151,9 @@ export function ContractStep({ reservationId, address, saved, onChange }: { rese
     <ul className="atv-steps" style={{ margin: 0 }}>
       {contract.steps.map((s) => (
         <li key={s.nome} className={s.estado === "concluida" ? "done" : s.estado === "falhou" ? "bad" : ""}>
-          <i aria-hidden="true" />{STEP_LABEL[s.nome] ?? s.nome}{s.motivo ? <small className="muted"> ({s.motivo})</small> : null}
+          <i aria-hidden="true" />{STEP_LABEL[s.nome] ?? s.nome}
+          {s.estado === "aguardando_equipe" ? <small className="muted"> (com a equipe da Speed)</small> : null}
+          {s.motivo ? <small className="muted"> ({s.motivo})</small> : null}
         </li>
       ))}
     </ul>
@@ -200,6 +202,7 @@ export function ContractStep({ reservationId, address, saved, onChange }: { rese
               {contract.steps.map((s) => (
                 <li key={s.nome} className={s.estado === "concluida" ? "done" : s.estado === "falhou" ? "bad" : ""}>
                   <i aria-hidden="true" />{STEP_LABEL[s.nome] ?? s.nome}
+                  {s.estado === "aguardando_equipe" ? <small className="muted"> (com a equipe da Speed)</small> : null}
                 </li>
               ))}
             </ul>

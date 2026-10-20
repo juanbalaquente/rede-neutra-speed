@@ -63,7 +63,7 @@ describe("criação do contrato", () => {
 
     const done = await settle(ate, id);
     expect(done).toMatchObject({ state: "concluida", contract: "90001", login: "90001-JHV" });
-    expect(done.steps.map((s) => s.nome)).toEqual(["contrato_criado", "conexao_ajustada", "endereco_gravado"]);
+    expect(done.steps.map((s) => s.nome)).toEqual(["contrato_criado", "conexao_ajustada", "endereco_gravado", "cliente_no_oltcloud"]);
     const [r] = await ctx.db.select().from(portReservations).where(eq(portReservations.id, id));
     expect(r!.contractNumber).toBe("90001");
     expect(r!.installAddress).toMatchObject({ cidade: "Sabará" });
@@ -219,6 +219,21 @@ describe("WikiContractService (contrato v3, seção H)", () => {
     expect(snap).toMatchObject({ estado: "concluida", resultado: { contrato: "33431", login: "33431-JHV" } });
   });
 
+  it("aceita etapa em aguardando_equipe e o resultado com oltcloudClienteId (etapa 4 da Wiki, 21 out 2026)", async () => {
+    const etapas = [
+      { nome: "contrato_criado", estado: "concluida" },
+      { nome: "conexao_ajustada", estado: "concluida" },
+      { nome: "endereco_gravado", estado: "concluida" },
+      { nome: "cliente_no_oltcloud", estado: "aguardando_equipe", motivo: "mais de uma conexão" },
+    ];
+    const parado = await build(() => json({ operacaoId: "op1", tipo: "contrato", estado: "aguardando_equipe", etapas, resultado: null, atualizadoEm: "2026-10-21T00:20:00-03:00" })).svc.get("op1", "JHV");
+    expect(parado).toMatchObject({ estado: "aguardando_equipe", etapas: [{}, {}, {}, { nome: "cliente_no_oltcloud", estado: "aguardando_equipe" }] });
+    const pronto = await build(() =>
+      json({ operacaoId: "op1", tipo: "contrato", estado: "concluida", etapas: etapas.map((e) => ({ ...e, estado: "concluida" })), resultado: { contrato: "33721", login: "33721-JHV", oltcloudClienteId: 39700 }, atualizadoEm: "2026-10-21T00:22:00-03:00" }),
+    ).svc.get("op1", "JHV");
+    expect(pronto).toMatchObject({ estado: "concluida", resultado: { contrato: "33721", login: "33721-JHV" } });
+  });
+
   it("recusa de negócio vira OperationRefused; 404 é null; resposta torta é erro", async () => {
     await expect(build(() => json({ error: "parceiro_sem_cadastro" }, 422)).svc.create(REQ)).rejects.toMatchObject({ code: "parceiro_sem_cadastro", status: 422 });
     expect(await build(() => json({ error: "x" }, 404)).svc.get("nope", "JHV")).toBeNull();
@@ -273,7 +288,7 @@ describe("contrato que para no meio (não pode virar segundo contrato no Voalle)
     let c = (await read(ate, id)).contract!;
     for (let i = 0; i < 6 && c.state !== "parcial"; i++) c = (await read(ate, id)).contract!;
     expect(c.state).toBe("parcial");
-    expect(c.steps.map((s) => `${s.nome}:${s.estado}`)).toEqual(["contrato_criado:concluida", "conexao_ajustada:falhou", "endereco_gravado:pendente"]);
+    expect(c.steps.map((s) => `${s.nome}:${s.estado}`)).toEqual(["contrato_criado:concluida", "conexao_ajustada:falhou", "endereco_gravado:pendente", "cliente_no_oltcloud:pendente"]);
     expect((await retry(ate, id)).status).toBe(200);
     const done = await settle(ate, id);
     expect(done).toMatchObject({ state: "concluida", contract: "90001", login: "90001-JHV" });
@@ -453,8 +468,8 @@ describe("contrato no agendamento (21 out 2026: o técnico não espera em campo)
 
     await settle(ate, id);
     body = await list(ate);
-    // Com as 3 etapas de hoje o contrato está criado, mas o portal não afirma que o cliente já está no OLTCloud.
-    expect(body.reservations.find((r) => r.id === id)!.contractRequest).toMatchObject({ state: "concluida", contract: "90001", login: "90001-JHV", readyForOnu: false });
+    // Com a etapa cliente_no_oltcloud concluída o cliente já pode receber a ONU: "Pronto para instalar".
+    expect(body.reservations.find((r) => r.id === id)!.contractRequest).toMatchObject({ state: "concluida", contract: "90001", login: "90001-JHV", readyForOnu: true });
     expect(body.reservations.find((r) => r.id === sem)!.contractRequest).toBeNull();
   });
 

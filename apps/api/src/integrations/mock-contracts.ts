@@ -11,7 +11,8 @@ interface Entry {
   cancel?: boolean;
 }
 
-const STEPS = ["contrato_criado", "conexao_ajustada", "endereco_gravado"];
+// cliente_no_oltcloud: no ar na Wiki desde 21 out 2026 (o cliente nasce no OLTCloud junto com o contrato).
+const STEPS = ["contrato_criado", "conexao_ajustada", "endereco_gravado", "cliente_no_oltcloud"];
 
 /**
  * Wiki de mentira para a criação de contrato. Cada leitura avança uma etapa.

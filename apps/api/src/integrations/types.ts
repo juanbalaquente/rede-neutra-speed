@@ -180,7 +180,8 @@ export const OPERATION_FINAL: readonly OperationState[] = ["concluida", "sem_con
 
 export interface OperationStep {
   nome: string;
-  estado: "pendente" | "concluida" | "falhou";
+  /** aguardando_equipe: a etapa precisa de alguém da Speed (ex.: pedido sem coordenada, mais de uma conexão). */
+  estado: "pendente" | "concluida" | "falhou" | "aguardando_equipe";
   motivo?: string | null;
 }
 
