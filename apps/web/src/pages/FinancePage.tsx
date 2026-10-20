@@ -26,6 +26,8 @@ function PriceRow({ p, onSaved }: { p: PlanPrice; onSaved: (prices: PlanPrice[])
   const valid = text.trim() !== "" && Number.isFinite(cents) && cents >= 100;
   const changed = valid && cents !== p.salePriceCents;
   const lucro = valid ? cents - p.speedPriceCents : null;
+  // Vender abaixo do que a Speed cobra dá prejuízo em toda porta: o botão pede confirmação (muda o rótulo).
+  const belowCost = valid && cents < p.speedPriceCents;
 
   async function save() {
     setBusy(true);
@@ -46,8 +48,10 @@ function PriceRow({ p, onSaved }: { p: PlanPrice; onSaved: (prices: PlanPrice[])
       <td>
         <span className="inrow">
           <input value={text} onChange={(e) => setText(e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Preço de venda do ${p.name}`} style={{ maxWidth: 120 }} />
-          <button className="btn sm" disabled={!changed || busy} onClick={() => void save()}>Salvar</button>
+          <button className="btn sm" disabled={!changed || busy} onClick={() => void save()}>{belowCost ? "Salvar mesmo assim" : "Salvar"}</button>
         </span>
+        {text.trim() !== "" && !valid && <small className="error" style={{ display: "block", marginTop: 4 }}>Informe um valor a partir de R$ 1,00.</small>}
+        {belowCost && <small style={{ display: "block", marginTop: 4, color: "var(--warn)" }}>Abaixo do que a Speed cobra: prejuízo de {brl(p.speedPriceCents - cents)} por porta.</small>}
       </td>
       <td className="tab num">{lucro === null ? "—" : `${brl(lucro)} (${Math.round((lucro / cents) * 100)}%)`}</td>
     </tr>
@@ -139,7 +143,7 @@ export function FinancePage() {
           <div className="card kpi"><span>Portas ativas</span><b>{r.portasAtivas}</b><small>{r.semPreco ? `${r.semPreco} sem preço de venda` : "no mês"}</small></div>
           <div className="card kpi"><span>Custo com a Speed</span><b>{brl(r.custoCents)}</b><small>por porta ativada</small></div>
           <div className="card kpi"><span>Faturamento previsto</span><b>{brl(r.faturamentoCents)}</b><small>pelos seus preços</small></div>
-          <div className="card kpi"><span>Lucro previsto</span><b className={r.lucroCents < 0 ? "neg" : ""}>{brl(r.lucroCents)}</b><small>faturamento menos custo</small></div>
+          <div className="card kpi"><span>Lucro previsto</span><b className={r.lucroCents < 0 && r.semPreco === 0 ? "neg" : ""}>{r.portasAtivas > 0 && r.semPreco === r.portasAtivas ? "—" : brl(r.lucroCents)}</b><small>{r.semPreco ? "incompleto: faltam preços de venda" : "faturamento menos custo"}</small></div>
           <div className="card kpi"><span>Recebido</span><b>{brl(r.recebidoCents)}</b><small>{r.pagos} de {r.portasAtivas} clientes</small></div>
           <div className="card kpi"><span>Em aberto</span><b>{brl(r.emAbertoCents)}</b><small>a receber no mês</small></div>
         </div>

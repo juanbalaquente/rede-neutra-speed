@@ -39,15 +39,17 @@ export interface OsInput {
 }
 
 /** Referência da trava de sinal da ativação concluída: o menor sinal aceitável na ONU. */
-export async function signalReference(db: Db, reservationId: string): Promise<{ sinalCtoDbm: number; limiteDb: number; minimoDbm: number } | null> {
+export async function signalReference(db: Db, reservationId: string): Promise<{ sinalCtoDbm: number; limiteDb: number; minimoDbm: number; onuDbm: number | null } | null> {
   const [a] = await db
-    .select({ sinalCtoDbm: activations.sinalCtoDbm, limiteDb: activations.limiteDb })
+    .select({ sinalCtoDbm: activations.sinalCtoDbm, limiteDb: activations.limiteDb, snapshot: activations.snapshot })
     .from(activations)
     .where(and(eq(activations.reservationId, reservationId), eq(activations.state, "online")))
     .orderBy(desc(activations.createdAt))
     .limit(1);
   if (!a) return null;
-  return { sinalCtoDbm: a.sinalCtoDbm, limiteDb: a.limiteDb, minimoDbm: Number((a.sinalCtoDbm - a.limiteDb).toFixed(2)) };
+  // Sinal que o sistema leu na ONU durante a ativação: serve de sugestão para o técnico confirmar ao fechar a O.S.
+  const onu = (a.snapshot as { sinal?: { onuDbm?: unknown } } | null)?.sinal?.onuDbm;
+  return { sinalCtoDbm: a.sinalCtoDbm, limiteDb: a.limiteDb, minimoDbm: Number((a.sinalCtoDbm - a.limiteDb).toFixed(2)), onuDbm: typeof onu === "number" ? onu : null };
 }
 
 /** Janela aceita para a data da visita: não pode ter passado há mais de um dia nem ficar a mais de um ano. */
@@ -216,6 +218,7 @@ export async function getInstallation(db: Db, user: SessionUser, id: string) {
     fotosFaltando: missing,
     fotosObrigatorias: await getOsPhotosRequired(db),
     sinalMinimoDbm: ref?.minimoDbm ?? null,
+    sinalOnuLidoDbm: ref?.onuDbm ?? null,
   };
 }
 

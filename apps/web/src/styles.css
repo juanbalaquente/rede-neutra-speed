@@ -546,3 +546,8 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
   .side .nav { padding-right: 36px; }
 }
 .hint { color: var(--mute); font-size: 12.5px; margin: 0; }
+
+.hist tr.clk { cursor: pointer; }
+.hist tr.clk:hover td { background: var(--hover); }
+.hist tr.clk.on td { background: color-mix(in srgb, var(--data-soft) 60%, transparent); }
+.kpi b { white-space: nowrap; }

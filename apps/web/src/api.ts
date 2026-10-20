@@ -432,6 +432,8 @@ export interface InstallationDetail extends Installation {
   fotosObrigatorias: boolean;
   /** Menor sinal aceitável na ONU (sinal da CTO menos o limite da ativação); null sem ativação concluída. */
   sinalMinimoDbm: number | null;
+  /** Sinal que o sistema leu na ONU durante a ativação (sugestão ao fechar a O.S.). */
+  sinalOnuLidoDbm: number | null;
 }
 
 export interface AgendaVisit {

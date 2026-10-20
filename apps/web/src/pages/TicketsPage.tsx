@@ -118,7 +118,9 @@ function NewTicket({ onCreated, onCancel, reservationId }: { onCreated: (t: Tick
         {!form.reservationId && (
           <label className="fld">
             <span>CTO (opcional)</span>
-            <input value={form.cto} onChange={(e) => set({ cto: e.target.value })} maxLength={120} />
+            <input value={form.cto} onChange={(e) => set({ cto: e.target.value })} maxLength={120} list="rn-ctos" placeholder="nome da CTO, como aparece na Reserva" />
+            <datalist id="rn-ctos">{[...new Set(clients.map((i) => i.ctoName))].map((n) => <option key={n} value={n} />)}</datalist>
+            <small>Sugerimos as CTOs dos seus clientes; confira o nome antes de enviar.</small>
           </label>
         )}
         <label className="fld" style={{ maxWidth: 240 }}>
@@ -192,7 +194,7 @@ function Detail({ id, user, onChanged }: { id: string; user: User; onChanged: ()
   return (
     <div className="card">
       <div className="ch">
-        <h3>{t.typeLabel}{t.origin === "sistema" ? " · automático" : ""}</h3>
+        <h3>{t.typeLabel.replace(" (automático)", "")}{t.origin === "sistema" ? " · automático" : ""}</h3>
         <span className={`badge ${st.tone}`}>{st.label}</span>
       </div>
       <div className="summary" style={{ display: "grid", gap: 8 }}>
@@ -293,7 +295,7 @@ export function TicketsPage({ user, initialId, startFor }: { user: User; initial
               {shown.map((t) => (
                 <tr key={t.id} className={t.id === selected ? "on" : ""}>
                   <td style={{ fontFamily: "var(--font)" }}>
-                    <button className="rowbtn" onClick={() => { setSelected(t.id); setCreating(false); }}>{t.typeLabel}{t.origin === "sistema" ? " · automático" : ""}</button>
+                    <button className="rowbtn" onClick={() => { setSelected(t.id); setCreating(false); }}>{t.typeLabel.replace(" (automático)", "")}{t.origin === "sistema" ? " · automático" : ""}</button>
                     <div className="muted" style={{ fontSize: 12 }}>aberto em {fmtDate(t.createdAt)}</div>
                   </td>
                   {isAdmin && <td style={{ fontFamily: "var(--font)" }}>{t.partnerName}</td>}

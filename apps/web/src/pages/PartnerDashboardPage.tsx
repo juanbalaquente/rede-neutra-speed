@@ -16,7 +16,7 @@ function greeting(): string {
 }
 
 /** Painel do parceiro: o que está acontecendo na operação dele hoje. */
-export function PartnerDashboardPage({ user, onGo }: { user: User; onGo: (tab: "reservas" | "instalacoes" | "agenda" | "financeiro" | "chamados", installationId?: string) => void }) {
+export function PartnerDashboardPage({ user, onGo }: { user: User; onGo: (tab: "viabilidade" | "reservas" | "instalacoes" | "agenda" | "financeiro" | "chamados", installationId?: string) => void }) {
   const say = useToast();
   const [d, setD] = useState<Dashboard | null>(null);
   const [fleet, setFleet] = useState<Fleet | null>(null);
@@ -53,10 +53,24 @@ export function PartnerDashboardPage({ user, onGo }: { user: User; onGo: (tab: "
             <div className="card kpi"><span>Instalações no mês</span><b>{d.instalacoesNoMes}</b><small>O.S. fechadas</small></div>
             <button className="card kpi kpi-btn" onClick={() => onGo("instalacoes")}><span>O.S. pendentes</span><b>{d.osPendentes}</b><small>ONU liberada, falta fechar</small></button>
             <button className="card kpi kpi-btn" onClick={() => onGo("reservas")}><span>Reservas abertas</span><b>{d.reservasAbertas}</b><small>guardando vaga</small></button>
-            <button className="card kpi kpi-btn" onClick={() => onGo("agenda")}><span>Visitas hoje</span><b>{d.visitasHoje}</b><small>na agenda</small></button>
+            <button className={`card kpi kpi-btn ${d.visitasAtrasadas ? "alert" : ""}`} onClick={() => onGo("agenda")}><span>Visitas hoje</span><b>{d.visitasHoje}</b><small>{d.visitasAtrasadas ? `${d.visitasAtrasadas} atrasada${d.visitasAtrasadas > 1 ? "s" : ""}, passou do dia sem fechar` : "na agenda, nenhuma atrasada"}</small></button>
             <button className={`card kpi kpi-btn ${d.chamadosAtrasados ? "alert" : ""}`} onClick={() => onGo("chamados")}><span>Chamados abertos</span><b>{d.chamadosAbertos}</b><small>{d.chamadosAtrasados ? `${d.chamadosAtrasados} fora do prazo` : "dentro do prazo"}</small></button>
-            <button className={`card kpi kpi-btn ${d.visitasAtrasadas ? "alert" : ""}`} onClick={() => onGo("agenda")}><span>Visitas atrasadas</span><b>{d.visitasAtrasadas}</b><small>{d.visitasAtrasadas ? "passaram do dia sem fechar" : "nenhuma atrasada"}</small></button>
           </div>
+
+          {d.portasAtivas === 0 && d.reservasAbertas === 0 && d.instalacoesNoMes === 0 && d.osPendentes === 0 && (
+            <div className="card">
+              <div className="ch"><h3>Comece pela primeira venda</h3></div>
+              <div className="summary">
+                <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
+                  <li>Consulte o endereço do cliente e veja as CTOs com vaga.</li>
+                  <li>Reserve a vaga (ela fica guardada por 48 horas).</li>
+                  <li>Preencha plano, visita e técnico, e crie o contrato.</li>
+                  <li>No dia da visita, libere a ONU, envie as fotos e feche a O.S.</li>
+                </ol>
+                <div><button className="btn" onClick={() => onGo("viabilidade")}>Fazer a primeira venda</button></div>
+              </div>
+            </div>
+          )}
 
           {user.role === "supervisor" && <SignalQualityCard onOpen={(id) => onGo("instalacoes", id)} />}
 

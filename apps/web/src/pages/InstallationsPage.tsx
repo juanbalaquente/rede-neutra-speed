@@ -1,5 +1,5 @@
 import { RouteLink } from "../ui/RouteLink";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, photoUrl, type Installation, type InstallationDetail, type Photo, type User } from "../api";
 import { PHOTO_KINDS, PHOTO_LABEL } from "../photoKinds";
 import { BatchBar } from "../ui/BatchBar";
@@ -52,7 +52,7 @@ function Gallery({ reservationId, reloadKey }: { reservationId: string; reloadKe
   return (
     <>
       <div className="ph-gallery">
-        {photos.map((p) => (
+        {[...photos].sort((a, b) => PHOTO_KINDS.findIndex((k) => k.kind === a.kind) - PHOTO_KINDS.findIndex((k) => k.kind === b.kind)).map((p) => (
           <figure key={p.id}>
             <a href={photoUrl(p.id)} target="_blank" rel="noopener">
               <img src={photoUrl(p.id)} alt={PHOTO_LABEL[p.kind] ?? p.kind} loading="lazy" />
@@ -84,8 +84,9 @@ function Gallery({ reservationId, reloadKey }: { reservationId: string; reloadKe
 
 function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: InstallationDetail) => void }) {
   const say = useToast();
-  const [draft, setDraft, clearDraft] = useDraft(`os:${inst.id}`, { porta: "", sinal: "", modelo: "", serial: inst.onuSerial ?? "", obs: "" });
-  const { porta, sinal, modelo, serial, obs } = draft;
+  const [draft, setDraft, clearDraft] = useDraft(`os:${inst.id}`, { porta: "", sinal: inst.sinalOnuLidoDbm !== null ? String(inst.sinalOnuLidoDbm).replace(".", ",") : "", modelo: "", serial: inst.onuSerial ?? "", obs: "", just: "" });
+  const { porta, sinal, modelo, serial, obs, just } = draft;
+  const setJust = (v: string) => setDraft({ just: v });
   const setPorta = (v: string) => setDraft({ porta: v });
   const setSinal = (v: string) => setDraft({ sinal: v });
   const setModelo = (v: string) => setDraft({ modelo: v });
@@ -95,13 +96,23 @@ function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: In
   const dbm = Number(sinal.replace(",", "."));
   const sinalOk = sinal.trim() !== "" && Number.isFinite(dbm) && dbm <= 0 && dbm >= -40;
   const missing = inst.fotosObrigatorias ? inst.fotosFaltando : [];
-  const valid = sinalOk && modelo.trim().length >= 2 && /^[A-Za-z0-9]{6,40}$/.test(serial.trim()) && missing.length === 0;
+  // Abaixo do mínimo da ativação (sinal da CTO menos o limite) a O.S. só fecha com justificativa.
+  const foraDoLimite = sinalOk && inst.sinalMinimoDbm !== null && dbm < inst.sinalMinimoDbm;
+  const serialOk = /^[A-Za-z0-9]{6,40}$/.test(serial.trim());
+  const blocker =
+    missing.length > 0 ? `Faltam fotos: ${missing.map((k) => PHOTO_LABEL[k] ?? k).join(", ")}.`
+    : !sinalOk ? "Informe o sinal final medido na ONU, entre -40 e 0 dBm."
+    : foraDoLimite && just.trim().length < 10 ? "Sinal abaixo do mínimo: escreva a justificativa (mínimo 10 caracteres)."
+    : modelo.trim().length < 2 ? "Informe o modelo da ONU."
+    : !serialOk ? "Informe o serial da ONU (6 a 40 letras ou números)."
+    : null;
+  const valid = blocker === null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      const r = await api.closeOs(inst.id, { porta: porta.trim() || null, sinalFinalDbm: dbm, modeloOnu: modelo.trim(), serialOnu: serial.trim(), observacao: obs.trim() || null });
+      const r = await api.closeOs(inst.id, { porta: porta.trim() || null, sinalFinalDbm: dbm, modeloOnu: modelo.trim(), serialOnu: serial.trim(), observacao: obs.trim() || null, ...(foraDoLimite ? { justificativaSinal: just.trim() } : {}) });
       clearDraft();
       say("O.S. fechada. O contrato entra na contagem de portas ativas.");
       onClosed(r.installation);
@@ -122,7 +133,7 @@ function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: In
         <label className="fld">
           <span>Sinal final medido na ONU (dBm)</span>
           <input value={sinal} onChange={(e) => setSinal(e.target.value)} inputMode="decimal" placeholder="ex.: -21,2" />
-          <small>{sinal && !sinalOk ? "Informe um valor entre -40 e 0." : "O que ficou entregue ao cliente."}</small>
+          <small>{sinal && !sinalOk ? "Informe um valor entre -40 e 0." : inst.sinalOnuLidoDbm !== null && sinal === String(inst.sinalOnuLidoDbm).replace(".", ",") ? "Sugestão: o que o sistema leu na ONU ao ativar. Confirme com a sua medição." : "O que ficou entregue ao cliente."}{inst.sinalMinimoDbm !== null ? ` Mínimo aceitável: ${String(inst.sinalMinimoDbm).replace(".", ",")} dBm.` : ""}</small>
         </label>
         <label className="fld">
           <span>Porta usada (opcional)</span>
@@ -138,11 +149,19 @@ function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: In
           <input value={serial} onChange={(e) => setSerial(e.target.value.toUpperCase())} className="mono" />
         </label>
       </div>
+      {foraDoLimite && (
+        <div className="atv-trava">
+          <b>Sinal abaixo do mínimo aceitável</b>
+          <p>Você informou {String(dbm).replace(".", ",")} dBm e o mínimo é {String(inst.sinalMinimoDbm).replace(".", ",")} dBm. Refaça a medição; se o valor for esse mesmo, explique o motivo. A justificativa fica na O.S. e na auditoria.</p>
+          <label className="fld"><span>Justificativa</span><input value={just} onChange={(e) => setJust(e.target.value)} maxLength={500} placeholder="ex.: fibra longa, conector refeito, medição repetida com power meter" /></label>
+        </div>
+      )}
       <label className="fld">
         <span>Observação (opcional)</span>
         <input value={obs} onChange={(e) => setObs(e.target.value)} maxLength={1000} />
       </label>
       <div><button className="btn" disabled={!valid || busy}>{busy ? "Fechando…" : "Fechar O.S."}</button></div>
+      {blocker && <p className="hint">{blocker}</p>}
     </form>
   );
 }
@@ -151,16 +170,26 @@ function Detail({ id, user, onChanged, onOpenTicket }: { id: string; user: User;
   const [inst, setInst] = useState<InstallationDetail | null>(null);
   const [tick, setTick] = useState(0);
   const isPartner = user.role !== "admin_speed";
+  const top = useRef<HTMLDivElement>(null);
+  const scrolled = useRef(false);
 
   const load = useCallback(() => {
     api.installation(id).then((r) => setInst(r.installation)).catch(() => setInst(null));
   }, [id]);
   useEffect(load, [load, tick]);
 
+  // A lista fica acima: ao abrir um cliente, a tela desce até o detalhe (antes ficava fora da vista).
+  useEffect(() => {
+    if (inst && !scrolled.current) {
+      scrolled.current = true;
+      top.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [inst]);
+
   if (!inst) return <div className="card"><p className="empty">Carregando…</p></div>;
   const open = isPartner && inst.status === "convertida" && !inst.osClosedAt;
   return (
-    <div className="card">
+    <div className="card" ref={top} style={{ scrollMarginTop: 70 }}>
       <div className="ch">
         <div>
           <h3>{inst.contract ? `Contrato ${inst.contract}` : "Sem contrato ainda"}{inst.nickname ? ` · ${inst.nickname}` : ""}</h3>
@@ -192,6 +221,7 @@ function Detail({ id, user, onChanged, onOpenTicket }: { id: string; user: User;
             <div><small>ONU</small><span>{inst.os.modeloOnu} · <span className="mono">{inst.os.serialOnu}</span></span></div>
             <div><small>Porta</small><span>{inst.os.porta ?? "não informada"}</span></div>
           </div>
+          {inst.os.justificativaSinal && <p className="note" style={{ margin: 0 }}><b>Sinal abaixo do mínimo.</b> Justificativa: {inst.os.justificativaSinal}</p>}
           {inst.os.observacao && <p className="muted" style={{ margin: 0 }}>{inst.os.observacao}</p>}
         </div>
       )}
@@ -286,9 +316,9 @@ export function InstallationsPage({ user, initialId, onOpenTicket }: { user: Use
             </thead>
             <tbody>
               {shown.map((i) => (
-                <tr key={i.id} className={i.id === selected ? "on" : ""}>
+                <tr key={i.id} className={`clk ${i.id === selected ? "on" : ""}`} onClick={() => setSelected(i.id)}>
                   {!isAdmin && (
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       {i.osClosedAt && i.customerStatus !== "cancelado" ? (
                         <input
                           type="checkbox"
