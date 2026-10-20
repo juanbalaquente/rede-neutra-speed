@@ -106,6 +106,13 @@
       "when": 1792374474349,
       "tag": "0014_cancelamento_do_contrato",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792504321025,
+      "tag": "0015_pedidos_de_vaga",
+      "breakpoints": true
     }
   ]
 }

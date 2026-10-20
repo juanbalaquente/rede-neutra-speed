@@ -447,6 +447,44 @@ export const auditLog = pgTable(
   (t) => [index("audit_log_partner_idx").on(t.partnerId, t.createdAt)],
 );
 
+/**
+ * Pedido de vaga numa CTO cheia, em "conferir" ou no limite do parceiro. Não ocupa vaga nem passa
+ * pela trava: a Speed decide e, ao confirmar, nasce uma reserva normal de 48 h (a Speed estende a rede se precisar).
+ */
+export const capacityRequests = pgTable(
+  "capacity_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partnerId: uuid("partner_id").notNull().references(() => partners.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    ctoId: text("cto_id").notNull(),
+    ctoName: text("cto_name").notNull(),
+    regiao: text("regiao"),
+    address: text("address").notNull(),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    ctoLat: doublePrecision("cto_lat"),
+    ctoLng: doublePrecision("cto_lng"),
+    totalVagas: integer("total_vagas"),
+    /** Por que a CTO não podia ser reservada na hora do pedido (sem_vaga_livre, limite_ocupacao, conferir). */
+    blockedReason: text("blocked_reason").notNull(),
+    motivos: jsonb("motivos"),
+    /** pendente | confirmado | recusado | cancelado */
+    status: text("status").notNull().default("pendente"),
+    decisionNote: text("decision_note"),
+    decidedBy: uuid("decided_by").references(() => users.id),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /** Reserva criada quando a Speed confirmou. */
+    reservationId: uuid("reservation_id").references(() => portReservations.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("capacity_requests_partner_idx").on(t.partnerId, t.createdAt),
+    index("capacity_requests_status_idx").on(t.status, t.createdAt),
+    uniqueIndex("capacity_requests_pending_uq").on(t.partnerId, t.ctoId, t.address).where(sql`${t.status} = 'pendente'`),
+  ],
+);
+
 /** Log de toda chamada aos sistemas de origem, para depuração. */
 export const apiCallLog = pgTable(
   "api_call_log",

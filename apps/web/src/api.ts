@@ -88,6 +88,28 @@ export interface Reservation {
   cancelReason: string | null;
 }
 
+export interface CapacityRequest {
+  id: string;
+  partnerName: string;
+  ctoId: string;
+  ctoName: string;
+  regiao: string | null;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  ctoLat: number | null;
+  ctoLng: number | null;
+  totalVagas: number | null;
+  blockedReason: "sem_vaga_livre" | "limite_ocupacao" | "conferir";
+  /** Só a Speed recebe os motivos técnicos. */
+  motivos: string[];
+  status: "pendente" | "confirmado" | "recusado" | "cancelado";
+  decisionNote: string | null;
+  decidedAt: string | null;
+  reservationId: string | null;
+  createdAt: string;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
     super(message);
@@ -146,6 +168,13 @@ export const api = {
   reserve: (input: { ctoId: string; address: string; lat?: number | null; lng?: number | null }) =>
     request<{ reservation: Reservation }>("POST", "/reservations", input),
   cancel: (id: string, reason?: string) => request<{ reservation: Reservation }>("POST", `/reservations/${id}/cancel`, { reason }),
+  capacityRequests: (status?: CapacityRequest["status"]) =>
+    request<{ requests: CapacityRequest[] }>("GET", status ? `/capacity-requests?status=${status}` : "/capacity-requests"),
+  requestCapacity: (input: { ctoId: string; address: string; lat?: number | null; lng?: number | null }) =>
+    request<{ request: CapacityRequest }>("POST", "/capacity-requests", input),
+  cancelCapacityRequest: (id: string) => request<{ request: CapacityRequest }>("POST", `/capacity-requests/${id}/cancel`),
+  decideCapacityRequest: (id: string, decision: "confirmar" | "recusar", note?: string) =>
+    request<{ request: CapacityRequest }>("POST", `/admin/capacity-requests/${id}/decision`, { decision, note }),
 
   // ── Administração Speed ──
   adminPartners: () => request<{ partners: AdminPartner[] }>("GET", "/admin/partners"),

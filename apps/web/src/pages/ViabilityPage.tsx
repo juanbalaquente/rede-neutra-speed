@@ -48,6 +48,8 @@ export function ViabilityPage({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reserving, setReserving] = useState(false);
+  const [asking, setAsking] = useState<string | null>(null);
+  const [asked, setAsked] = useState<Set<string>>(new Set());
   const canReserve = user.role !== "admin_speed";
 
   const search = useCallback(async (text: string) => {
@@ -55,6 +57,7 @@ export function ViabilityPage({
     setError(null);
     setResult(null);
     setSel(null);
+    setAsked(new Set());
     try {
       setResult(await api.viability(text));
       setQueried(text);
@@ -90,6 +93,24 @@ export function ViabilityPage({
       say(message, "bad");
     } finally {
       setReserving(false);
+    }
+  }
+
+  async function askCapacity(cto: ViabilityCto) {
+    if (cto.ctoId === null) return;
+    const ctoId = cto.ctoId;
+    setAsking(ctoId);
+    setError(null);
+    try {
+      await api.requestCapacity({ ctoId, address: queried, lat: result?.point?.lat, lng: result?.point?.lng });
+      setAsked((prev) => new Set(prev).add(ctoId));
+      say(`Pedido de vaga na ${cto.name} enviado à Speed`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao pedir a vaga.";
+      setError(message);
+      say(message, "bad");
+    } finally {
+      setAsking(null);
     }
   }
 
@@ -163,6 +184,20 @@ export function ViabilityPage({
                         </button>
                       </div>
                     )}
+                    {blocked && cto.ctoId !== null && canReserve && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        {asked.has(cto.ctoId) ? (
+                          <small style={{ color: "var(--ok)" }}>Pedido enviado à Speed. Acompanhe em Reservas.</small>
+                        ) : (
+                          <>
+                            <button className="btn sm sec" disabled={asking === cto.ctoId} onClick={() => void askCapacity(cto)}>
+                              {asking === cto.ctoId ? "Enviando…" : "Pedir vaga nesta CTO"}
+                            </button>
+                            <small style={{ display: "block", marginTop: 4 }}>A Speed confirma ou estende a rede. Com a confirmação, a vaga fica reservada por 48 horas.</small>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -176,7 +211,11 @@ export function ViabilityPage({
             {!result && <p className="muted" style={{ margin: 0 }}>O resultado da consulta aparece aqui.</p>}
             {result && (
               <div className={`verdict ${result.viable ? "ok" : "no"}`}>
-                {result.viable ? "Há viabilidade neste endereço" : "Sem viabilidade neste endereço"}
+                {result.viable
+                  ? "Há viabilidade neste endereço"
+                  : result.ctos.some((c) => c.ctoId !== null)
+                    ? "Sem vaga livre agora. Peça a vaga à Speed"
+                    : "Sem viabilidade neste endereço"}
               </div>
             )}
             {result && result.plans.length > 0 && (

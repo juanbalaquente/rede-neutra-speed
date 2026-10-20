@@ -29,6 +29,7 @@ import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { networkPanel, regionMap } from "./services/network-panel.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
 import { runViability } from "./services/viability.js";
+import { cancelCapacityRequest, createCapacityRequest, decideCapacityRequest, listCapacityRequests } from "./services/capacity-requests.js";
 import { createPhotoLink, listPhotos, ownPhoto, photoView, readPhoto, uploadPhoto, verifyPhotoLink } from "./services/photos.js";
 import type { PhotoStorage } from "./storage/photos.js";
 import { PHOTO_KINDS } from "./db/schema.js";
@@ -258,6 +259,30 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const id = z.string().uuid().parse(c.req.param("id"));
     const updated = await cancelReservation(db, c.get("user"), id, body.reason ?? null, { ip: clientIp(c) });
     return c.json({ reservation: updated });
+  });
+
+  // ── Pedidos de vaga em CTO cheia ou em "conferir" (a Speed decide) ─────────
+  app.get("/capacity-requests", requireUser, async (c) => {
+    const status = z.enum(["pendente", "confirmado", "recusado", "cancelado"]).optional().parse(c.req.query("status") || undefined);
+    return c.json({ requests: await listCapacityRequests(db, c.get("user"), status) });
+  });
+
+  app.post("/capacity-requests", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const body = await parseBody(
+      c,
+      z.object({
+        ctoId: z.string().min(1).max(120),
+        address: z.string().min(8).max(300),
+        lat: z.number().nullable().optional(),
+        lng: z.number().nullable().optional(),
+      }),
+    );
+    return c.json({ request: await createCapacityRequest(db, c.get("user"), body, { ip: clientIp(c) }) }, 201);
+  });
+
+  app.post("/capacity-requests/:id/cancel", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ request: await cancelCapacityRequest(db, c.get("user"), id, { ip: clientIp(c) }) });
   });
 
   // ── Liberação de ONU (desligada por padrão: ACTIVATION_MODE) ───────────────
@@ -770,6 +795,13 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
   // ── Administração Speed ───────────────────────────────────────────────────
   const admin = new Hono<Env>();
   admin.use(requireUser, requireRole("admin_speed"));
+
+  admin.post("/capacity-requests/:id/decision", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(c, z.object({ decision: z.enum(["confirmar", "recusar"]), note: z.string().max(500).nullable().optional() }));
+    const request = await decideCapacityRequest(db, c.get("user"), id, body, { hours: config.RESERVATION_HOURS, ip: clientIp(c) });
+    return c.json({ request });
+  });
 
   /** Parceiros com o uso atual (reservas abertas e usuários ativos), para a tela de gestão. */
   admin.get("/partners", async (c) => {
