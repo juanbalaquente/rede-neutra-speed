@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, request, type Reservation } from "../api";
-import { AddressFields, addressPayload, addressValid, normalizeAddress } from "./AddressFields";
+import { AddressFields, addressPayload, addressProblem, normalizeAddress } from "./AddressFields";
 import { guessAddress } from "./ContractStep";
 import { useDraft } from "./useDraft";
 import { useToast } from "./Toast";
@@ -49,7 +49,21 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
       .catch(() => setNeedsAddress(false));
   }, [reservation.id]);
 
-  const valid = planId !== "" && visit !== "" && tech.trim().length >= 2 && (!needsAddress || addressValid(addr));
+  // Mesma janela do servidor: a visita pode ter passado há até um dia e ficar a até um ano.
+  const visitMs = visit ? new Date(visit).getTime() : NaN;
+  const dateChanged = visit !== toLocalInput(reservation.visitAt);
+  const minVisit = toLocalInput(new Date(Date.now() - 24 * 3600_000).toISOString());
+  const maxVisit = toLocalInput(new Date(Date.now() + 365 * 24 * 3600_000).toISOString());
+  // O botão só libera quando está tudo certo; enquanto não, a frase abaixo diz o que falta.
+  const blocker =
+    planId === "" ? "Escolha o plano."
+    : visit === "" || Number.isNaN(visitMs) ? "Informe a data e a hora da visita."
+    : dateChanged && visitMs < Date.now() - 24 * 3600_000 ? "A data da visita já passou. Escolha hoje ou uma data futura."
+    : dateChanged && visitMs > Date.now() + 366 * 24 * 3600_000 ? "A data da visita está longe demais (máximo de um ano)."
+    : tech.trim().length < 2 ? "Informe o técnico responsável."
+    : needsAddress ? addressProblem(addr)
+    : null;
+  const valid = blocker === null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -99,7 +113,7 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
           </label>
           <label className="fld">
             <span>Data e hora da visita</span>
-            <input type="datetime-local" value={visit} onChange={(e) => setVisit(e.target.value)} required />
+            <input type="datetime-local" value={visit} min={dateChanged || !reservation.visitAt ? minVisit : undefined} max={maxVisit} onChange={(e) => setVisit(e.target.value)} required />
           </label>
           <label className="fld">
             <span>Técnico responsável</span>
@@ -117,6 +131,7 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
           </>
         )}
         <div className="acts2"><button className="btn" disabled={!valid || busy}>{busy ? "Salvando…" : "Salvar"}</button></div>
+        {blocker && <p className="hint">{blocker}</p>}
       </div>
     </form>
   );

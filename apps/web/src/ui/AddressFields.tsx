@@ -1,4 +1,5 @@
 import type { Address } from "../api";
+import { BRAZIL_UFS, maskCep } from "../validators";
 
 export const emptyAddress: Address = { cep: "", rua: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "MG" };
 
@@ -14,8 +15,19 @@ export function addressValid(a: Address): boolean {
     a.numero.trim() !== "" &&
     a.bairro.trim().length >= 2 &&
     a.cidade.trim().length >= 2 &&
-    /^[A-Za-z]{2}$/.test(a.uf.trim())
+    BRAZIL_UFS.includes(a.uf.trim().toUpperCase())
   );
+}
+
+/** O que falta no endereço, em uma frase, para explicar o botão bloqueado. */
+export function addressProblem(a: Address): string | null {
+  if (a.cep.replace(/D/g, "").length !== 8) return "Informe o CEP com 8 dígitos.";
+  if (a.rua.trim().length < 2) return "Informe a rua.";
+  if (a.numero.trim() === "") return "Informe o número (ou S/N).";
+  if (a.bairro.trim().length < 2) return "Informe o bairro.";
+  if (a.cidade.trim().length < 2) return "Informe a cidade.";
+  if (!BRAZIL_UFS.includes(a.uf.trim().toUpperCase())) return "Escolha a UF.";
+  return null;
 }
 
 /** Endereço no formato que a API espera. */
@@ -38,7 +50,7 @@ export function AddressFields({ value, onChange }: { value: Address; onChange: (
       </div>
       <div className="g2">
         <label className="fld"><span>Cidade</span><input value={value.cidade} onChange={(e) => onChange({ cidade: e.target.value })} maxLength={80} /></label>
-        <label className="fld"><span>UF</span><input value={value.uf} onChange={(e) => onChange({ uf: e.target.value.slice(0, 2).toUpperCase() })} maxLength={2} style={{ maxWidth: 90 }} /></label>
+        <label className="fld"><span>UF</span><select value={value.uf} onChange={(e) => onChange({ uf: e.target.value })} style={{ maxWidth: 110 }}>{BRAZIL_UFS.map((u) => <option key={u} value={u}>{u}</option>)}</select></label>
       </div>
     </>
   );
