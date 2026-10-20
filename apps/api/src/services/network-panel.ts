@@ -41,6 +41,8 @@ export interface NetworkPanel {
   totals: { consultas: number; viaveis: number; foraDaArea: number; reservasAbertas: number; ctosVistas: number; ctosConferir: number };
   porDia: PanelDay[];
   regioes: PanelRegion[];
+  /** Siglas das CTOs que ficaram fora da área liberada, com quantas consultas cada uma barrou. */
+  foraDaAreaRegioes: { regiao: string; consultas: number }[];
 }
 
 const TZ = "America/Sao_Paulo";
@@ -80,6 +82,17 @@ export async function networkPanel(db: Db, days: number, now = new Date()): Prom
       FROM viability_queries q
       WHERE q.created_at >= ${since.toISOString()}::timestamptz AND q.partner_id IS NOT NULL
       GROUP BY 1
+    `),
+  );
+
+  const foraRows = rowsOf(
+    await db.execute(sql`
+      SELECT s AS "regiao", count(*)::int AS "consultas"
+      FROM viability_queries q
+      CROSS JOIN LATERAL jsonb_array_elements_text(coalesce(q.result->'foraDaAreaRegioes', '[]'::jsonb)) AS s
+      WHERE q.created_at >= ${since.toISOString()}::timestamptz AND q.partner_id IS NOT NULL AND q.reason = 'fora_da_area'
+      GROUP BY 1
+      ORDER BY 2 DESC, 1
     `),
   );
 
@@ -145,6 +158,7 @@ export async function networkPanel(db: Db, days: number, now = new Date()): Prom
     },
     porDia,
     regioes,
+    foraDaAreaRegioes: foraRows.map((r) => ({ regiao: String(r.regiao), consultas: Number(r.consultas) })),
   };
 }
 

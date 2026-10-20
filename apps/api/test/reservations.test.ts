@@ -78,6 +78,7 @@ describe("área liberada por sigla", () => {
     const [q] = await ctx.db.select().from(viabilityQueries);
     expect(q?.reason).toBe("fora_da_area");
     expect((q?.result as { foraDaAreaCount: number }).foraDaAreaCount).toBe(3);
+    expect((q?.result as { foraDaAreaRegioes: string[] }).foraDaAreaRegioes).toEqual(["ITA"]);
   });
 
   it("sem siglas liberadas, nada é oferecido; o administrador vê tudo", async () => {

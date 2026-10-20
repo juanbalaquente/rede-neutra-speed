@@ -259,6 +259,7 @@ export interface NetworkPanel {
   totals: { consultas: number; viaveis: number; foraDaArea: number; reservasAbertas: number; ctosVistas: number; ctosConferir: number };
   porDia: PanelDay[];
   regioes: PanelRegion[];
+  foraDaAreaRegioes: { regiao: string; consultas: number }[];
 }
 
 export interface PartnerLimits {

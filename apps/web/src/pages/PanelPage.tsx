@@ -237,7 +237,7 @@ export function PanelPage() {
           <div className="kpis">
             <div className="card kpi"><span>Consultas</span><b>{t.consultas}</b><small>nos últimos {data.days} dias</small></div>
             <div className="card kpi"><span>Com viabilidade</span><b>{pct(t.viaveis, t.consultas)}</b><small>{t.viaveis} consultas</small></div>
-            <div className="card kpi"><span>Fora da área</span><b>{t.foraDaArea}</b><small>demanda fora do piloto</small></div>
+            <div className="card kpi"><span>Fora da área</span><b>{t.foraDaArea}</b><small>{data.foraDaAreaRegioes.length > 0 ? `siglas barradas: ${data.foraDaAreaRegioes.map((r) => `${r.regiao} (${r.consultas})`).join(", ")}` : "demanda fora do piloto"}</small></div>
             <div className="card kpi"><span>Reservas abertas</span><b>{t.reservasAbertas}</b><small>agora</small></div>
             <div className="card kpi"><span>CTOs para conferir</span><b>{t.ctosConferir}</b><small>de {t.ctosVistas} vistas</small></div>
           </div>

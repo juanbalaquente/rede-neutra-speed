@@ -141,7 +141,7 @@ export function ViabilityPage({
               {result.ctos.length === 0 && (
                 <p className="empty" style={{ padding: "18px 0" }}>
                   {result.foraDaArea
-                    ? "Este endereço está fora da área liberada para o seu contrato. A consulta foi registrada."
+                    ? "Há rede da Speed perto deste endereço, mas a região ainda não foi liberada para o seu contrato. A consulta foi registrada e a Speed vê essa demanda."
                     : "Nenhuma CTO da Speed num raio de 300 m deste endereço."}
                 </p>
               )}

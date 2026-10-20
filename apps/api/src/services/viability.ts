@@ -71,6 +71,7 @@ export async function runViability(
   // Só a área liberada ao parceiro: CTO com sigla fora da lista (ou sem sigla) não é oferecida.
   const inArea = partner ? nearby.ctos.filter((c) => isRegionAllowed(partner.allowedRegions, c.regiao)) : nearby.ctos;
   const foraDaArea = nearby.ctos.length > 0 && inArea.length === 0;
+  const foraSiglas = [...new Set(nearby.ctos.filter((c) => !inArea.includes(c)).map((c) => c.regiao?.toUpperCase() ?? "sem sigla"))];
   const candidates = inArea.slice(0, MAX_CTOS);
   const ids = candidates.map((c) => c.ctoId).filter((id): id is string => id !== null);
   const reserved = await liveReservationsByCto(db, ids);
@@ -156,6 +157,7 @@ export async function runViability(
         sources: candidates.map((c) => ({ ctoId: c.ctoId, mapFree: c.freePorts })),
         // CTOs perto do endereço que ficaram fora da área liberada (demanda fora do piloto).
         foraDaAreaCount: nearby.ctos.length - inArea.length,
+        foraDaAreaRegioes: foraSiglas,
       },
     })
     .returning({ id: viabilityQueries.id });
