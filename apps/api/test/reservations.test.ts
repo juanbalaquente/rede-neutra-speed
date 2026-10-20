@@ -18,9 +18,9 @@ afterEach(async () => {
 const ADDRESS = "Rua dos Testes, 100, Belo Horizonte";
 
 /** Reservar exige a viabilidade do endereço antes, como no fluxo real. */
-async function reserve(cookie: string, ctoId: string) {
-  await ctx.call(cookie, "POST", "/viability", { address: ADDRESS });
-  return ctx.call(cookie, "POST", "/reservations", { ctoId, address: ADDRESS });
+async function reserve(cookie: string, ctoId: string, address: string = ADDRESS) {
+  await ctx.call(cookie, "POST", "/viability", { address });
+  return ctx.call(cookie, "POST", "/reservations", { ctoId, address });
 }
 
 const vagasOf = (body: { ctos: { ctoId: string; vagas: number }[] }, id: string) => body.ctos.find((c) => c.ctoId === id)!.vagas;
@@ -150,12 +150,25 @@ describe("reserva de vaga", () => {
     expect((await res.json()).error).toBe("sem_vaga");
   });
 
+  it("não reserva duas vezes o mesmo endereço na mesma CTO (duplo clique)", async () => {
+    const a = await ctx.createPartner("A", "11111111000111", { maxActiveReservations: 10, maxCtoOccupancyPct: 100 });
+    const ca = await ctx.login(a.atendente);
+    expect((await reserve(ca, "CTO-TESTE-03")).status).toBe(201);
+    const again = await reserve(ca, "CTO-TESTE-03", ADDRESS.toUpperCase());
+    expect(again.status).toBe(409);
+    expect((await again.json()).error).toBe("reserva_duplicada");
+    // Depois de cancelar, o mesmo endereço pode ser reservado de novo.
+    const list = await (await ctx.call(ca, "GET", "/reservations")).json();
+    await ctx.call(ca, "POST", `/reservations/${list.reservations[0].id}/cancel`, {});
+    expect((await reserve(ca, "CTO-TESTE-03")).status).toBe(201);
+  });
+
   it("respeita o limite de reservas simultâneas", async () => {
     const a = await ctx.createPartner("A", "11111111000111", { maxActiveReservations: 2, maxCtoOccupancyPct: 100 });
     const ca = await ctx.login(a.atendente);
-    expect((await reserve(ca, "CTO-TESTE-03")).status).toBe(201);
-    expect((await reserve(ca, "CTO-TESTE-03")).status).toBe(201);
-    const third = await reserve(ca, "CTO-TESTE-03");
+    expect((await reserve(ca, "CTO-TESTE-03", `${ADDRESS} 1`)).status).toBe(201);
+    expect((await reserve(ca, "CTO-TESTE-03", `${ADDRESS} 2`)).status).toBe(201);
+    const third = await reserve(ca, "CTO-TESTE-03", `${ADDRESS} 3`);
     expect(third.status).toBe(409);
     expect((await third.json()).error).toBe("limite_reservas");
   });
@@ -163,8 +176,8 @@ describe("reserva de vaga", () => {
   it("respeita o limite de ocupação por CTO (50% de 8 vagas = 4)", async () => {
     const a = await ctx.createPartner("A", "11111111000111", { maxActiveReservations: 20 });
     const ca = await ctx.login(a.atendente);
-    for (let i = 0; i < 4; i++) expect((await reserve(ca, "CTO-TESTE-03")).status).toBe(201);
-    const fifth = await reserve(ca, "CTO-TESTE-03");
+    for (let i = 0; i < 4; i++) expect((await reserve(ca, "CTO-TESTE-03", `${ADDRESS} ${i}`)).status).toBe(201);
+    const fifth = await reserve(ca, "CTO-TESTE-03", `${ADDRESS} 4`);
     expect((await fifth.json()).error).toBe("limite_ocupacao_cto");
     const body = await (await ctx.call(ca, "POST", "/viability", { address: ADDRESS })).json();
     expect(body.ctos.find((c: { ctoId: string }) => c.ctoId === "CTO-TESTE-03").blockedReason).toBe("limite_ocupacao");
