@@ -246,6 +246,12 @@ A Wiki já tem a criação de contrato no Voalle construída e desligada: `contr
 
 **Estado do contrato na leitura (seção A):** para contrato criado e ainda não aprovado, o portal espera `contrato.estado = "pendente_aprovacao"`. Estado que o portal não conheça vira "Sem leitura" (com aviso no log), sem derrubar a resposta. Confirmar o texto.
 
+**Pedido à Wiki: o cliente nasce no OLTCloud junto com o contrato (21 out 2026, urgente).** No primeiro teste real (contratos 33719 e 33720) a ativação ficou em `aguardando_cliente` até a Wiki importar o cliente no OLTCloud à mão, e a sincronização Voalle → OLTCloud não tem prazo. Com o técnico na casa do cliente essa espera não pode existir. Proposta: uma 4ª etapa na mesma operação, **`cliente_no_oltcloud`**, depois de `endereco_gravado`, que cria o cliente no OLTCloud (`POST /api/v2/client/create`) com o login `<contrato>-<CÓDIGO>` e conclui quando ele já pode receber a ONU. Regras:
+- A operação só fica `concluida` depois dessa etapa. Falha nela segue as regras de sempre: `parcial` (repetir com a mesma chave continua daqui, sem criar outro contrato) ou `aguardando_equipe` se precisar de alguém.
+- Cliente já existente no OLTCloud com o mesmo login (sincronização chegou antes) conta como concluída, sem duplicar.
+- O `resultado` não muda (`contrato`, `login`). O id do cliente no OLTCloud é opcional e o portal não depende dele.
+- **Portal (pronto, 21 out 2026):** o contrato agora é criado **no agendamento**, pelo cartão da reserva, e não mais com o técnico em campo. O cartão mostra "Pronto para instalar" **só** com `cliente_no_oltcloud` concluída; sem ela mostra "Contrato criado". O sino avisa visita de hoje ou amanhã sem contrato concluído. A etapa já tem texto na tela ("Cliente no sistema de rede"); nada mais muda do lado do portal.
+
 **Impacto no portal (a construir):** hoje o atendente digita o número do contrato ao pedir a ativação. Com esta rota o número nasce da criação automática, e o login passa a vir da operação. Isso muda o fluxo da etapa de contrato e fica atrás de um modo próprio (desligado por padrão) até a Wiki entregar e o Juan validar.
 
 ## Respostas da Wiki ao pedido (16 out 2026, após as respostas do suporte da Voalle)

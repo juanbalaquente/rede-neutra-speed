@@ -128,9 +128,14 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [instId, setInstId] = useState<string | null>(null);
   const [ticketFor, setTicketFor] = useState<string | null>(null);
 
+  /** Criação de contrato pelo portal ligada (CONTRACT_MODE): o contrato sai no agendamento, antes da visita. */
+  const [contractsEnabled, setContractsEnabled] = useState(false);
+
   const reload = useCallback(async () => {
     try {
-      setReservations((await api.reservations()).reservations);
+      const r = await api.reservations();
+      setReservations(r.reservations);
+      setContractsEnabled(!!r.contractsEnabled);
     } catch {
       setReservations((prev) => prev ?? []);
     }
@@ -239,6 +244,15 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     () => (user.role === "admin_speed" ? [] : (reservations ?? []).filter((r) => r.status === "ativa" && r.expiresAt && new Date(r.expiresAt).getTime() - clock < EXPIRY_WARN_MS && new Date(r.expiresAt).getTime() > clock)),
     [reservations, clock, user.role],
   );
+  // Visita de hoje ou amanhã sem contrato concluído: o técnico chegaria e teria de esperar o contrato e o sistema de rede.
+  const semContrato = useMemo(() => {
+    if (user.role === "admin_speed" || !contractsEnabled) return 0;
+    return (reservations ?? []).filter((r) => {
+      if (r.status !== "ativa" || !r.visitAt) return false;
+      const until = new Date(r.visitAt).getTime() - clock;
+      return until > -12 * 3600_000 && until < 36 * 3600_000 && r.contractRequest?.state !== "concluida";
+    }).length;
+  }, [reservations, clock, user.role, contractsEnabled]);
   const warned = useRef(new Set<string>());
   useEffect(() => {
     const fresh = soon.filter((r) => !warned.current.has(r.id));
@@ -296,8 +310,9 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     if (overview?.totais.aprovacoesPendentes) list.push({ id: "aprovacoes", tone: "warn", text: `${overview.totais.aprovacoesPendentes} operação(ões) esperando a aprovação da Speed`, onOpen: () => setTab("parceiros") });
     if (pedidos > 0) list.push({ id: "pedidos", tone: "warn", text: pedidos === 1 ? "Um pedido de vaga esperando a Speed" : `${pedidos} pedidos de vaga esperando a Speed`, onOpen: () => setTab("pedidos") });
     if (rede && !rede.ok) list.push({ id: "rede", tone: "bad", text: "A integração com a rede está com problema", onOpen: () => setTab("painel") });
+    if (semContrato > 0) list.push({ id: "sem-contrato", tone: "bad", text: semContrato === 1 ? "Uma visita de hoje ou amanhã ainda sem contrato pronto" : `${semContrato} visitas de hoje ou amanhã ainda sem contrato pronto`, onOpen: () => setTab("reservas") });
     return list;
-  }, [soon, dash, fleet, overview, rede, pedidos]);
+  }, [soon, dash, fleet, overview, rede, pedidos, semContrato]);
 
   const consult = useCallback((address: string) => {
     setTab("viabilidade");
@@ -449,7 +464,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             }}
           />
         ) : (
-          <ReservationsPage user={user} partner={partner} items={reservations} reload={reload} openClienteFor={clienteFor} />
+          <ReservationsPage user={user} partner={partner} items={reservations} reload={reload} openClienteFor={clienteFor} contractsEnabled={contractsEnabled} />
         )}
       </div>
 

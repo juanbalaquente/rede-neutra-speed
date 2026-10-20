@@ -27,6 +27,8 @@ const STEP_LABEL: Record<string, string> = {
   contrato_criado: "Contrato criado no sistema da Speed",
   conexao_ajustada: "Conexão PPPoE configurada",
   endereco_gravado: "Endereço de instalação gravado",
+  // Proposta à Wiki (21 out 2026): o cliente nasce no OLTCloud junto com o contrato, e a ONU sai sem espera.
+  cliente_no_oltcloud: "Cliente no sistema de rede",
 };
 
 const REASON_LABEL: Record<string, string> = {

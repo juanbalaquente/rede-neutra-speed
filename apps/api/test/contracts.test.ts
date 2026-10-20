@@ -434,3 +434,44 @@ describe("cancelamento do contrato abandonado (rota combinada com a Wiki em 18 o
     expect((await ctx.db.select().from(auditLog)).map((l) => l.action)).toContain("contrato.cancelado_no_voalle");
   });
 });
+
+describe("contrato no agendamento (21 out 2026: o técnico não espera em campo)", () => {
+  type Listed = { id: string; contractRequest: { state: string; contract: string | null; login: string | null; readyForOnu: boolean } | null };
+  const list = async (cookie: string) => (await (await ctx.call(cookie, "GET", "/reservations")).json()) as { reservations: Listed[]; contractsEnabled: boolean };
+
+  it("cria o contrato antes de qualquer ativação e a lista de reservas mostra o estado e o login de cada uma", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    const sem = await reserved(ate);
+    let body = await list(ate);
+    expect(body.contractsEnabled).toBe(true);
+    expect(body.reservations.find((r) => r.id === id)!.contractRequest).toBeNull();
+
+    expect((await create(ate, id)).status).toBe(202);
+    body = await list(ate);
+    expect(body.reservations.find((r) => r.id === id)!.contractRequest).toMatchObject({ state: "recebida", contract: null });
+
+    await settle(ate, id);
+    body = await list(ate);
+    // Com as 3 etapas de hoje o contrato está criado, mas o portal não afirma que o cliente já está no OLTCloud.
+    expect(body.reservations.find((r) => r.id === id)!.contractRequest).toMatchObject({ state: "concluida", contract: "90001", login: "90001-JHV", readyForOnu: false });
+    expect(body.reservations.find((r) => r.id === sem)!.contractRequest).toBeNull();
+  });
+
+  it("o resumo do contrato não vaza para outro parceiro", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    await create(ate, id);
+    const outro = await partner("22222222000122", "OUT");
+    expect((await list(outro.ate)).reservations.some((r) => r.id === id)).toBe(false);
+  });
+
+  it("pronto para instalar só com a etapa cliente_no_oltcloud concluída (proposta à Wiki)", async () => {
+    const { readyForOnu } = await import("../src/services/reservations.js");
+    const tres = [{ nome: "contrato_criado", estado: "concluida" }, { nome: "conexao_ajustada", estado: "concluida" }, { nome: "endereco_gravado", estado: "concluida" }];
+    expect(readyForOnu("concluida", tres)).toBe(false);
+    expect(readyForOnu("concluida", [...tres, { nome: "cliente_no_oltcloud", estado: "concluida" }])).toBe(true);
+    expect(readyForOnu("executando", [...tres, { nome: "cliente_no_oltcloud", estado: "concluida" }])).toBe(false);
+    expect(readyForOnu("concluida", null)).toBe(false);
+  });
+});

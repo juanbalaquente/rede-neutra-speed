@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Activation, type Partner, type Reservation, type User } from "../api";
+import { api, request, type Activation, type Partner, type Reservation, type User } from "../api";
 import { ActivationPanel } from "../ui/ActivationPanel";
 import { CapacityRequestsList } from "../ui/CapacityRequestsList";
 import { ClienteForm } from "../ui/ClienteForm";
+import { ContractStep, type ContractStatus } from "../ui/ContractStep";
 import { useToast } from "../ui/Toast";
 import { fmtVisit } from "../ui/visit";
 
@@ -27,6 +28,26 @@ function fmtLeft(ms: number): string {
 
 function ringState(ms: number): "" | "warn" | "bad" {
   return ms < 3 * HOUR ? "bad" : ms < 12 * HOUR ? "warn" : "";
+}
+
+/** Contrato em andamento na Wiki: o cartão acompanha até concluir. */
+const CONTRACT_RUNNING = ["recebida", "executando", "parcial", "aguardando_equipe"];
+
+/** Linha do cartão com o estado do contrato. O contrato sai no agendamento para o técnico não esperar em campo. */
+function ContractLine({ r }: { r: Reservation }) {
+  const c = r.contractRequest && r.contractRequest.state !== "abandonada" ? r.contractRequest : null;
+  if (!c) return <p className="rv-cli warn">Contrato ainda não criado. Crie agora para a ONU sair sem espera na visita.</p>;
+  if (c.state === "concluida") {
+    return (
+      <p className="rv-cli">
+        <span className={`badge ${c.readyForOnu ? "b-ok" : "b-data"}`}>{c.readyForOnu ? "Pronto para instalar" : "Contrato criado"}</span>{" "}
+        <span className="mono" style={{ whiteSpace: "nowrap" }}>{c.login}</span>
+      </p>
+    );
+  }
+  if (c.state === "aguardando_equipe") return <p className="rv-cli warn">Contrato esperando uma etapa da equipe da Speed.</p>;
+  if (c.state === "falhou" || c.state === "parcial") return <p className="rv-cli warn">O contrato parou no meio. Abra o contrato para ver.</p>;
+  return <p className="rv-cli">Criando o contrato no sistema da Speed…</p>;
 }
 
 function Ring({ left, total }: { left: number; total: number }) {
@@ -57,12 +78,14 @@ export function ReservationsPage({
   items,
   reload,
   openClienteFor,
+  contractsEnabled = false,
 }: {
   user: User;
   partner: Partner | null;
   items: Reservation[] | null;
   reload: () => Promise<void>;
   openClienteFor?: string | null;
+  contractsEnabled?: boolean;
 }) {
   const say = useToast();
   const isAdmin = user.role === "admin_speed";
@@ -74,6 +97,20 @@ export function ReservationsPage({
   const [acts, setActs] = useState<Activation[] | null>(null);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [editingCliente, setEditingCliente] = useState<string | null>(openClienteFor ?? null);
+  const [contracting, setContracting] = useState<string | null>(null);
+  // Contrato concluído no painel: o cartão passa a mostrar o login.
+  const onContract = useCallback((s: ContractStatus) => { if (s.contract) void reload(); }, [reload]);
+
+  // Contratos em andamento fora do painel: a leitura por reserva atualiza o estado pela Wiki; a lista recarrega depois.
+  const running = (items ?? []).filter((r) => r.status === "ativa" && r.contractRequest && CONTRACT_RUNNING.includes(r.contractRequest.state) && r.id !== contracting).map((r) => r.id);
+  const runningKey = running.join(",");
+  useEffect(() => {
+    if (isAdmin || !contractsEnabled || !runningKey) return;
+    const t = setInterval(() => {
+      void Promise.all(runningKey.split(",").map((id) => request("GET", `/reservations/${id}/contract`).catch(() => null))).then(() => reload());
+    }, 10_000);
+    return () => clearInterval(t);
+  }, [isAdmin, contractsEnabled, runningKey, reload]);
 
   const loadActs = useCallback(() => {
     if (isAdmin) return;
@@ -162,6 +199,25 @@ export function ReservationsPage({
         />
       )}
 
+      {contracting && active.some((r) => r.id === contracting) && (() => {
+        const r = active.find((x) => x.id === contracting)!;
+        return (
+          <div className="card atv">
+            <div className="ch">
+              <div>
+                <h3>Contrato antes da visita</h3>
+                <small className="mono">{r.ctoName}</small>
+              </div>
+              <button className="btn sec sm" onClick={() => { setContracting(null); void reload(); }}>Fechar</button>
+            </div>
+            <div className="summary">
+              <p className="muted" style={{ margin: 0 }}>Crie o contrato ao agendar. Quando o técnico chegar, o cliente já está no sistema da Speed e a ONU sai em cerca de um minuto.</p>
+              <ContractStep key={r.id} reservationId={r.id} address={r.address} saved={r.installAddress} onChange={onContract} />
+            </div>
+          </div>
+        );
+      })()}
+
       {releasing && items.some((r) => r.id === releasing) && (
         <ActivationPanel
           key={releasing}
@@ -194,11 +250,28 @@ export function ReservationsPage({
                   ) : (
                     <p className="rv-cli warn">Falta preencher os dados do cliente.</p>
                   )}
+                  {contractsEnabled && !isAdmin && r.planId && r.visitAt && r.technician && <ContractLine r={r} />}
                   {asking !== r.id && (
                     <div className="acts2">
                       <button className={`btn sm ${r.planId && r.visitAt && r.technician ? "sec" : ""}`} onClick={() => setEditingCliente(r.id)}>
                         {r.planId && r.visitAt && r.technician ? "Dados do cliente" : "Preencher dados"}
                       </button>
+                      {contractsEnabled && !isAdmin && (() => {
+                        const ready = !!(r.planId && r.visitAt && r.technician);
+                        const none = !r.contractRequest || r.contractRequest.state === "abandonada";
+                        // Concluído: o cartão já mostra o login, e o painel da ONU traz o contrato. Botão só para criar ou acompanhar.
+                        if (r.contractRequest?.state === "concluida") return null;
+                        return (
+                          <button
+                            className={`btn sm ${none && ready ? "" : "sec"}`}
+                            disabled={!ready}
+                            title={!ready ? "Preencha plano, visita e técnico antes de criar o contrato" : undefined}
+                            onClick={() => setContracting(r.id)}
+                          >
+                            {none ? "Criar contrato" : "Ver contrato"}
+                          </button>
+                        );
+                      })()}
                       {acts !== null && (
                         <button
                           className="btn sm"
