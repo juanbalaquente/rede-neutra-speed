@@ -78,6 +78,8 @@ export interface Reservation {
   /** Reserva é por vaga; só reservas antigas têm número de porta. */
   port: number | null;
   address: string;
+  /** Endereço estruturado da instalação, salvo com os dados do cliente. */
+  installAddress?: Address | null;
   lat: number | null;
   lng: number | null;
   ctoLat: number | null;
@@ -86,6 +88,17 @@ export interface Reservation {
   expiresAt: string | null;
   createdAt: string;
   cancelReason: string | null;
+}
+
+/** Endereço da instalação, no formato do contrato (CEP só com dígitos). */
+export interface Address {
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
 }
 
 export interface CapacityRequest {
@@ -203,7 +216,7 @@ export const api = {
     request<{ activation: Activation }>("POST", `/activations/${id}/decision`, decision),
   plans: () => request<{ plans: { id: string; name: string; speedMbps: number }[] }>("GET", "/plans"),
   technicians: () => request<{ technicians: string[] }>("GET", "/technicians"),
-  saveCliente: (id: string, body: { planId: string; nickname: string | null; visitAt: string; technician: string }) =>
+  saveCliente: (id: string, body: { planId: string; nickname: string | null; visitAt: string; technician: string; endereco?: Address }) =>
     request<{ installation: InstallationDetail }>("PATCH", `/reservations/${id}/cliente`, body),
 
   agenda: (from: string, to: string) => request<{ visits: AgendaVisit[] }>("GET", `/agenda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),

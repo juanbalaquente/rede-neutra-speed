@@ -1,7 +1,8 @@
 import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { activations, partners, photos, plans, portReservations, settings, type PhotoKind } from "../db/schema.js";
+import { activations, contractRequests, partners, photos, plans, portReservations, settings, type PhotoKind } from "../db/schema.js";
+import type { ContractAddress } from "../integrations/types.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 
@@ -168,6 +169,8 @@ export interface ClienteInput {
   nickname?: string | null;
   visitAt: Date;
   technician: string;
+  /** Endereço da instalação; a criação do contrato usa o que ficou salvo aqui. */
+  endereco?: ContractAddress;
 }
 
 /** Salva os dados do cliente na reserva. Mudar a data de uma visita já marcada vira "reagendada". */
@@ -180,11 +183,22 @@ export async function saveCliente(db: Db, user: SessionUser, reservationId: stri
   const [plan] = await db.select({ id: plans.id }).from(plans).where(and(eq(plans.id, input.planId), eq(plans.active, true)));
   if (!plan) throw new AppError(422, "plano_invalido", "Escolha um dos planos disponíveis.");
 
+  // Com contrato já pedido o endereço está no sistema da Speed: mudar aqui não o altera, então não aceita.
+  if (input.endereco) {
+    const [contract] = await db
+      .select({ id: contractRequests.id })
+      .from(contractRequests)
+      .where(and(eq(contractRequests.reservationId, reservation.id), sql`${contractRequests.state} <> 'falhou'`))
+      .limit(1);
+    if (contract) throw new AppError(409, "contrato_criado", "O contrato desse cliente já foi pedido: o endereço não muda mais por aqui.");
+  }
+
   const moved = reservation.visitAt !== null && reservation.visitAt.getTime() !== input.visitAt.getTime();
   const now = opts.now ?? new Date();
   const [updated] = await db
     .update(portReservations)
     .set({
+      ...(input.endereco ? { installAddress: input.endereco } : {}),
       planId: input.planId,
       nickname: input.nickname?.trim() || null,
       visitAt: input.visitAt,

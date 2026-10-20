@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, type Reservation } from "../api";
+import { api, request, type Reservation } from "../api";
+import { AddressFields, addressPayload, addressValid, normalizeAddress } from "./AddressFields";
+import { guessAddress } from "./ContractStep";
 import { useDraft } from "./useDraft";
 import { useToast } from "./Toast";
 
@@ -31,14 +33,23 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
   const setNickname = (v: string) => setDraft({ nickname: v });
   const setVisit = (v: string) => setDraft({ visit: v });
   const setTech = (v: string) => setDraft({ tech: v });
+  // Endereço da instalação (vira o do contrato): salvo no mesmo formulário. Na primeira vez sugere o da consulta.
+  const [addr, setAddr, clearAddr] = useDraft(`endereco:${reservation.id}`, {
+    ...normalizeAddress(reservation.installAddress ?? guessAddress(reservation.address)),
+  });
+  // Só pede endereço quando o contrato é criado pelo portal e ainda não foi pedido.
+  const [needsAddress, setNeedsAddress] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.plans().then((r) => setPlans(r.plans)).catch(() => setPlans([]));
     api.technicians().then((r) => setTechs(r.technicians)).catch(() => {});
-  }, []);
+    request<{ enabled: boolean; contract: { state: string } | null }>("GET", `/reservations/${reservation.id}/contract`)
+      .then((r) => setNeedsAddress(r.enabled && (r.contract === null || r.contract.state === "falhou")))
+      .catch(() => setNeedsAddress(false));
+  }, [reservation.id]);
 
-  const valid = planId !== "" && visit !== "" && tech.trim().length >= 2;
+  const valid = planId !== "" && visit !== "" && tech.trim().length >= 2 && (!needsAddress || addressValid(addr));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -50,8 +61,10 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
         // O navegador devolve hora local sem fuso; vira instante com o fuso do aparelho.
         visitAt: new Date(visit).toISOString(),
         technician: tech.trim(),
+        ...(needsAddress ? { endereco: addressPayload(addr) } : {}),
       });
       clearDraft();
+      clearAddr();
       say("Dados do cliente salvos");
       onSaved();
     } catch (err) {
@@ -94,6 +107,15 @@ export function ClienteForm({ reservation, onSaved, onClose }: { reservation: Re
             <datalist id="rn-techs">{techs.map((t) => <option key={t} value={t} />)}</datalist>
           </label>
         </div>
+        {needsAddress && (
+          <>
+            <div className="fld" style={{ marginTop: 8 }}>
+              <span>Endereço da instalação</span>
+              <small>Usado para criar o contrato. O número do contrato e o login PPPoE nascem sozinhos.</small>
+            </div>
+            <AddressFields value={addr} onChange={setAddr} />
+          </>
+        )}
         <div className="acts2"><button className="btn" disabled={!valid || busy}>{busy ? "Salvando…" : "Salvar"}</button></div>
       </div>
     </form>

@@ -49,6 +49,19 @@ describe("dados do cliente", () => {
     expect((await ctx.call(cookie, "PATCH", url, { ...base, technician: "" })).status).toBe(400);
   });
 
+  it("guarda o endereço da instalação junto com os dados do cliente e valida o CEP", async () => {
+    const { cookie, reservation } = await reserved();
+    const endereco = { cep: "34505000", rua: "Rua Tomé de Souza", numero: "507", complemento: "", bairro: "Rosário", cidade: "Sabará", uf: "mg" };
+    expect((await ctx.setCliente(cookie, reservation.id, { endereco: { ...endereco, cep: "345-05" } })).status).toBe(400);
+    expect((await ctx.setCliente(cookie, reservation.id, { endereco })).status).toBe(200);
+    const [row] = await ctx.db.select().from(portReservations).where(eq(portReservations.id, reservation.id));
+    expect(row?.installAddress).toEqual({ ...endereco, uf: "MG" });
+    // Sem endereço no pedido, o que estava salvo continua.
+    expect((await ctx.setCliente(cookie, reservation.id, { nickname: "Zé" })).status).toBe(200);
+    const [kept] = await ctx.db.select().from(portReservations).where(eq(portReservations.id, reservation.id));
+    expect(kept?.installAddress).toMatchObject({ cep: "34505000", numero: "507" });
+  });
+
   it("recusa plano que não existe ou foi desativado", async () => {
     const { cookie, reservation } = await reserved();
     const res = await ctx.setCliente(cookie, reservation.id, { planId: "00000000-0000-4000-8000-000000000000" });

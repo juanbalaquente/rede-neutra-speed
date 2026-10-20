@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, request } from "../api";
+import { ApiError, request, type Address } from "../api";
+import { AddressFields, addressPayload, addressValid, normalizeAddress } from "./AddressFields";
 import { newUuid } from "../uuid";
 import { useDraft } from "./useDraft";
 import { useToast } from "./Toast";
@@ -39,7 +40,7 @@ const IN_PROGRESS: ContractView["state"][] = ["recebida", "executando", "parcial
 
 const api = {
   get: (id: string) => request<{ enabled: boolean; contract: ContractView | null }>("GET", `/reservations/${id}/contract`),
-  create: (id: string, endereco: Record<string, string>, idempotencyKey: string) => request<{ contract: ContractView }>("POST", `/reservations/${id}/contract`, { endereco, idempotencyKey }),
+  create: (id: string, endereco: Address, idempotencyKey: string) => request<{ contract: ContractView }>("POST", `/reservations/${id}/contract`, { endereco, idempotencyKey }),
   retry: (id: string) => request<{ contract: ContractView }>("POST", `/reservations/${id}/contract/retry`),
 };
 
@@ -57,21 +58,15 @@ export function guessAddress(address: string): { rua: string; numero: string; ci
   return { rua: parts[0] ?? "", numero, cidade: rest[rest.length - 1] ?? "", uf };
 }
 
-export function ContractStep({ reservationId, address, onChange }: { reservationId: string; address?: string; onChange: (s: ContractStatus) => void }) {
+export function ContractStep({ reservationId, address, saved, onChange }: { reservationId: string; address?: string; /** Endereço já salvo com os dados do cliente. */ saved?: Address | null; onChange: (s: ContractStatus) => void }) {
   const say = useToast();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [contract, setContract] = useState<ContractView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm, clearForm] = useDraft(`contrato:${reservationId}`, { cep: "", rua: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "MG" });
+  // Reservas sem endereço salvo (anteriores a esta tela) ainda pedem os campos aqui.
+  const savedAddress = saved && addressValid(normalizeAddress(saved)) ? normalizeAddress(saved) : null;
+  const [form, setForm, clearForm] = useDraft(`contrato:${reservationId}`, { ...normalizeAddress(address ? guessAddress(address) : null) });
   const [key, setKey] = useState(newUuid);
-
-  // Primeira vez (formulário ainda vazio): sugere o que dá para tirar do endereço da consulta.
-  useEffect(() => {
-    if (!address || form.rua || form.cidade) return;
-    const g = guessAddress(address);
-    setForm({ rua: g.rua, numero: g.numero, cidade: g.cidade, ...(g.uf ? { uf: g.uf } : {}) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address]);
 
   const apply = useCallback(
     (on: boolean, c: ContractView | null) => {
@@ -100,13 +95,12 @@ export function ContractStep({ reservationId, address, onChange }: { reservation
 
   if (!enabled) return null;
 
-  const cep = form.cep.replace(/\D/g, "");
-  const valid = cep.length === 8 && form.rua.trim().length >= 2 && form.numero.trim() !== "" && form.bairro.trim().length >= 2 && form.cidade.trim().length >= 2 && /^[A-Za-z]{2}$/.test(form.uf.trim());
+  const valid = savedAddress !== null || addressValid(form);
 
   async function submit() {
     setBusy(true);
     try {
-      const r = await api.create(reservationId, { ...form, cep, uf: form.uf.trim().toUpperCase() }, key);
+      const r = await api.create(reservationId, addressPayload(savedAddress ?? form), key);
       clearForm();
       apply(true, r.contract);
     } catch (e) {
@@ -189,20 +183,17 @@ export function ContractStep({ reservationId, address, onChange }: { reservation
       ) : (
         <>
           {failed && <p className="error" role="alert">{REASON_LABEL[contract?.reason ?? ""] ?? "A criação do contrato falhou."} Confira os dados e tente de novo.</p>}
-          <small>Informe o endereço da instalação. O número do contrato e o login PPPoE são criados automaticamente.</small>
-          <div className="g2">
-            <label className="fld"><span>CEP</span><input value={form.cep} onChange={(e) => setForm({ cep: e.target.value.replace(/\D/g, "").slice(0, 8) })} inputMode="numeric" placeholder="34505000" /></label>
-            <label className="fld"><span>Rua</span><input value={form.rua} onChange={(e) => setForm({ rua: e.target.value })} maxLength={120} /></label>
-          </div>
-          <div className="g3">
-            <label className="fld"><span>Número</span><input value={form.numero} onChange={(e) => setForm({ numero: e.target.value })} maxLength={12} /></label>
-            <label className="fld"><span>Complemento</span><input value={form.complemento} onChange={(e) => setForm({ complemento: e.target.value })} maxLength={60} /></label>
-            <label className="fld"><span>Bairro</span><input value={form.bairro} onChange={(e) => setForm({ bairro: e.target.value })} maxLength={80} /></label>
-          </div>
-          <div className="g2">
-            <label className="fld"><span>Cidade</span><input value={form.cidade} onChange={(e) => setForm({ cidade: e.target.value })} maxLength={80} /></label>
-            <label className="fld"><span>UF</span><input value={form.uf} onChange={(e) => setForm({ uf: e.target.value.slice(0, 2).toUpperCase() })} maxLength={2} style={{ maxWidth: 90 }} /></label>
-          </div>
+          {savedAddress ? (
+            <small>
+              Endereço da instalação: <b>{savedAddress.rua}, {savedAddress.numero}{savedAddress.complemento ? ` (${savedAddress.complemento})` : ""} · {savedAddress.bairro}, {savedAddress.cidade}/{savedAddress.uf} · CEP {savedAddress.cep}</b>.
+              O número do contrato e o login PPPoE são criados automaticamente. Para corrigir o endereço, use "Dados do cliente".
+            </small>
+          ) : (
+            <>
+              <small>Informe o endereço da instalação. O número do contrato e o login PPPoE são criados automaticamente.</small>
+              <AddressFields value={form} onChange={setForm} />
+            </>
+          )}
           <div><button type="button" className="btn sec" disabled={!valid || busy} onClick={() => void submit()}>{busy ? "Enviando…" : "Criar contrato"}</button></div>
         </>
       )}

@@ -56,6 +56,16 @@ async function parseBody<T extends z.ZodTypeAny>(c: Context, schema: T): Promise
   return parsed.data;
 }
 
+const installAddressSchema = z.object({
+  cep: z.string().regex(/^\d{8}$/, "CEP com 8 dígitos"),
+  rua: z.string().trim().min(2).max(120),
+  numero: z.string().trim().min(1).max(12),
+  complemento: z.string().trim().max(60).default(""),
+  bairro: z.string().trim().min(2).max(80),
+  cidade: z.string().trim().min(2).max(80),
+  uf: z.string().trim().length(2).transform((s) => s.toUpperCase()),
+});
+
 export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
   const app = new Hono<Env>().basePath("/api");
 
@@ -323,15 +333,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
     const body = await parseBody(
       c,
       z.object({
-        endereco: z.object({
-          cep: z.string().regex(/^\d{8}$/, "CEP com 8 dígitos"),
-          rua: z.string().trim().min(2).max(120),
-          numero: z.string().trim().min(1).max(12),
-          complemento: z.string().trim().max(60).default(""),
-          bairro: z.string().trim().min(2).max(80),
-          cidade: z.string().trim().min(2).max(80),
-          uf: z.string().trim().length(2).transform((s) => s.toUpperCase()),
-        }),
+        endereco: installAddressSchema,
         idempotencyKey: z.string().uuid().optional(),
       }),
     );
@@ -489,6 +491,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
         nickname: z.string().trim().max(120).nullable().optional(),
         visitAt: z.string().datetime({ offset: true }),
         technician: z.string().trim().min(2).max(120),
+        endereco: installAddressSchema.optional(),
       }),
     );
     await saveCliente(db, c.get("user"), id, { ...body, visitAt: new Date(body.visitAt) }, { ip: clientIp(c) });
