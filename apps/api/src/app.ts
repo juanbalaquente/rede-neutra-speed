@@ -33,6 +33,7 @@ import { cancelCapacityRequest, createCapacityRequest, decideCapacityRequest, li
 import { createPhotoLink, listPhotos, ownPhoto, photoView, readPhoto, uploadPhoto, verifyPhotoLink } from "./services/photos.js";
 import type { PhotoStorage } from "./storage/photos.js";
 import { PHOTO_KINDS } from "./db/schema.js";
+import { viaCep, type CepLookup } from "./services/cep.js";
 
 export interface AppDeps {
   db: Db;
@@ -41,6 +42,8 @@ export interface AppDeps {
   photoStorage: PhotoStorage;
   /** Relógio do servidor, só para validar datas de visita; os testes fixam o dia. */
   now?: () => Date;
+  /** Consulta de CEP; os testes trocam por uma versão sem rede. */
+  cepLookup?: CepLookup;
 }
 
 type Env = { Variables: { user: SessionUser; userRow: typeof users.$inferSelect } };
@@ -75,7 +78,7 @@ const installAddressSchema = z.object({
     .refine((s) => BRAZIL_UFS.includes(s), "UF inválida"),
 });
 
-export function createApp({ db, config, integrations, photoStorage, now }: AppDeps) {
+export function createApp({ db, config, integrations, photoStorage, now, cepLookup = viaCep }: AppDeps) {
   const app = new Hono<Env>().basePath("/api");
 
   // Conta só tentativas que falharam; login certo zera o contador.
@@ -510,6 +513,7 @@ export function createApp({ db, config, integrations, photoStorage, now }: AppDe
         planId: z.string().uuid(),
         nickname: z.string().trim().max(120).nullable().optional(),
         visitAt: z.string().datetime({ offset: true }),
+        visitPeriod: z.enum(["manha", "tarde"]).optional(),
         technician: z.string().trim().min(2).max(120),
         endereco: installAddressSchema.optional(),
       }),
@@ -535,12 +539,26 @@ export function createApp({ db, config, integrations, photoStorage, now }: AppDe
   /** Arrastar o card para outro dia ou editar data e técnico. */
   app.patch("/reservations/:id/visita", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));
-    const body = await parseBody(c, z.object({ visitAt: z.string().datetime({ offset: true }), technician: z.string().trim().min(2).max(120).optional() }));
-    await reschedule(db, c.get("user"), id, { visitAt: new Date(body.visitAt), technician: body.technician }, { ip: clientIp(c), now: now?.() });
+    const body = await parseBody(c, z.object({ visitAt: z.string().datetime({ offset: true }), visitPeriod: z.enum(["manha", "tarde"]).optional(), technician: z.string().trim().min(2).max(120).optional() }));
+    await reschedule(db, c.get("user"), id, { visitAt: new Date(body.visitAt), visitPeriod: body.visitPeriod, technician: body.technician }, { ip: clientIp(c), now: now?.() });
     return c.json({ installation: await getInstallation(db, c.get("user"), id) });
   });
 
-  app.get("/technicians", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json({ technicians: await listTechnicians(db, c.get("user")) }));
+  /** Preenche rua, bairro, cidade e UF a partir do CEP. Falha do serviço de CEP vira 502 e a tela deixa digitar à mão. */
+  app.get("/cep/:cep", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const cep = c.req.param("cep");
+    if (!/^\d{8}$/.test(cep)) throw new AppError(400, "dados_invalidos", "CEP com 8 dígitos.");
+    let found;
+    try {
+      found = await cepLookup(cep);
+    } catch {
+      throw new AppError(502, "cep_indisponivel", "Não consegui consultar o CEP agora. Preencha o endereço à mão.");
+    }
+    if (!found) throw new AppError(404, "cep_nao_encontrado", "CEP não encontrado.");
+    return c.json({ endereco: found });
+  });
+
+  app.get("/technicians",requireUser, requireRole("atendente", "supervisor"), async (c) => c.json({ technicians: await listTechnicians(db, c.get("user")) }));
 
   app.post("/reservations/:id/os/close", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));

@@ -113,6 +113,13 @@
       "when": 1792504321025,
       "tag": "0015_pedidos_de_vaga",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792539987022,
+      "tag": "0016_periodo_visita",
+      "breakpoints": true
     }
   ]
 }

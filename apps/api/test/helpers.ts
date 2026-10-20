@@ -12,6 +12,7 @@ import { hashPassword } from "../src/auth/password.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
 import { MemoryPhotoStorage } from "../src/storage/photos.js";
 import type { ActivationService, CustomerActions, NetworkMap, TicketService, ClientStatusService, ContractService } from "../src/integrations/types.js";
+import type { CepLookup } from "../src/services/cep.js";
 import { seed } from "../src/scripts/seed.js";
 
 export const PASSWORD = "senha12345a";
@@ -19,7 +20,7 @@ export const PASSWORD = "senha12345a";
 /** Dia fixo dos testes para validar a data da visita (as datas dos testes são relativas a ele). */
 export const TEST_NOW = new Date("2026-10-20T12:00:00-03:00");
 
-export async function setup(network: NetworkMap = new MockNetworkMap(), activation?: ActivationService, env: Record<string, string> = {}, actions?: CustomerActions, tickets?: TicketService, clientStatus?: ClientStatusService, contracts?: ContractService) {
+export async function setup(network: NetworkMap = new MockNetworkMap(), activation?: ActivationService, env: Record<string, string> = {}, actions?: CustomerActions, tickets?: TicketService, clientStatus?: ClientStatusService, contracts?: ContractService, cepLookup?: CepLookup) {
   const client = new PGlite();
   const db = drizzle(client, { schema }) as unknown as Db;
   await migrate(drizzle(client), { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
@@ -27,7 +28,7 @@ export async function setup(network: NetworkMap = new MockNetworkMap(), activati
 
   const config = loadConfig({ NODE_ENV: "test", ...env });
   const photoStorage = new MemoryPhotoStorage();
-  const app = createApp({ db, config, integrations: { network, activation, actions, tickets, clientStatus, contracts }, photoStorage, now: () => TEST_NOW });
+  const app = createApp({ db, config, integrations: { network, activation, actions, tickets, clientStatus, contracts }, photoStorage, now: () => TEST_NOW, cepLookup });
 
   async function login(email: string): Promise<string> {
     const res = await app.request("/api/auth/login", {

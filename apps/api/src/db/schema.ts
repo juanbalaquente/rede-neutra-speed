@@ -145,6 +145,8 @@ export const portReservations = pgTable(
     /** Nome do assinante final: só para busca e exibição no portal, nunca vai para o Voalle. */
     nickname: text("nickname"),
     visitAt: timestamp("visit_at", { withTimezone: true }),
+    /** manha | tarde. O `visitAt` guarda só um horário de referência do período (8h ou 14h). Nulo em visitas antigas. */
+    visitPeriod: text("visit_period"),
     technician: text("technician"),
     /** agendada | em_execucao | concluida | reagendada (etapa 4). */
     visitStatus: text("visit_status").notNull().default("agendada"),

@@ -144,3 +144,55 @@ describe("dados do cliente", () => {
     expect((await (await ctx.call(cookie, "GET", "/technicians")).json()).technicians).toEqual(["Carlos Técnico"]);
   });
 });
+
+describe("período da visita", () => {
+  const get = async (cookie: string, id: string) => (await (await ctx.call(cookie, "GET", `/installations/${id}`)).json()).installation;
+
+  it("guarda manhã ou tarde e fixa o horário de referência (8h e 14h)", async () => {
+    const { cookie, reservation } = await reserved();
+    const manha = await (await ctx.setCliente(cookie, reservation.id, { visitAt: "2026-10-22T19:00:00-03:00", visitPeriod: "manha" })).json();
+    expect(manha.installation.visitPeriod).toBe("manha");
+    expect(new Date(manha.installation.visitAt).toISOString()).toBe("2026-10-22T11:00:00.000Z");
+    const tarde = await (await ctx.call(cookie, "PATCH", `/reservations/${reservation.id}/visita`, { visitAt: "2026-10-22T08:00:00-03:00", visitPeriod: "tarde" })).json();
+    expect(tarde.installation).toMatchObject({ visitPeriod: "tarde", visitStatus: "reagendada" });
+    expect(new Date(tarde.installation.visitAt).toISOString()).toBe("2026-10-22T17:00:00.000Z");
+    expect((await ctx.setCliente(cookie, reservation.id, { visitPeriod: "noite" })).status).toBe(400);
+  });
+
+  it("trocar só o período no mesmo dia reagenda; repetir o mesmo não", async () => {
+    const { cookie, reservation } = await reserved();
+    await ctx.setCliente(cookie, reservation.id, { visitAt: "2026-10-22T10:00:00-03:00", visitPeriod: "manha" });
+    await ctx.setCliente(cookie, reservation.id, { visitAt: "2026-10-22T10:00:00-03:00", visitPeriod: "manha", nickname: "Outro" });
+    expect((await get(cookie, reservation.id)).visitStatus).toBe("agendada");
+    await ctx.setCliente(cookie, reservation.id, { visitAt: "2026-10-22T10:00:00-03:00", visitPeriod: "tarde" });
+    expect((await get(cookie, reservation.id)).visitStatus).toBe("reagendada");
+  });
+
+  it("visita antiga sem período aparece com o período da hora", async () => {
+    const { cookie, reservation } = await reserved();
+    await ctx.setCliente(cookie, reservation.id, { visitAt: "2026-10-21T15:30:00-03:00" });
+    expect((await get(cookie, reservation.id)).visitPeriod).toBe("tarde");
+    const agenda = await (await ctx.call(cookie, "GET", "/agenda?from=2026-10-19T00:00:00-03:00&to=2026-10-26T00:00:00-03:00")).json();
+    expect(agenda.visits[0].visitPeriod).toBe("tarde");
+  });
+});
+
+describe("consulta de CEP", () => {
+  it("devolve rua, bairro, cidade e UF; trata CEP inexistente e serviço fora do ar", async () => {
+    await ctx.close();
+    const found = { cep: "34505000", rua: "Rua Tomé de Souza", bairro: "Rosário", cidade: "Sabará", uf: "MG" };
+    ctx = await setup(new MockNetworkMap(), new MockActivationService(), {}, undefined, undefined, undefined, undefined, async (cep) => {
+      if (cep === "34505000") return found;
+      if (cep === "99999999") return null;
+      throw new Error("fora do ar");
+    });
+    const { cookie } = await reserved();
+    const ok = await ctx.call(cookie, "GET", "/cep/34505000");
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).endereco).toEqual(found);
+    expect((await ctx.call(cookie, "GET", "/cep/99999999")).status).toBe(404);
+    expect((await ctx.call(cookie, "GET", "/cep/11111111")).status).toBe(502);
+    expect((await ctx.call(cookie, "GET", "/cep/123")).status).toBe(400);
+    expect((await ctx.call(null, "GET", "/cep/34505000")).status).toBe(401);
+  });
+});

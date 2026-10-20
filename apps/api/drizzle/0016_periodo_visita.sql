@@ -1,0 +1,1 @@
+ALTER TABLE "port_reservations" ADD COLUMN "visit_period" text;

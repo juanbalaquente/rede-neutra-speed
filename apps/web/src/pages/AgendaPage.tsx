@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
-import { api, type AgendaVisit, type User } from "../api";
+import { api, type AgendaVisit, type User, type VisitPeriod } from "../api";
 import { useToast } from "../ui/Toast";
+import { PERIODS, periodLabel, toDateInput, visitInstant } from "../ui/visit";
 
 type View = "dia" | "semana" | "mes";
 
@@ -13,7 +14,6 @@ const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), 
 const startOfWeek = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const errMsg = (e: unknown, fb: string) => (e instanceof Error ? e.message : fb);
 
 function rangeFor(view: View, anchor: Date): { from: Date; to: Date; days: Date[] } {
@@ -50,7 +50,6 @@ const STATUS: Record<AgendaVisit["visitStatus"], { label: string; tone: string }
 const isLate = (v: AgendaVisit, now: Date) => v.visitStatus !== "concluida" && !v.osClosedAt && startOfDay(new Date(v.visitAt)) < startOfDay(now);
 
 function VisitCard({ v, now, compact, draggable, onOpen, onDragStart }: { v: AgendaVisit; now: Date; compact: boolean; draggable: boolean; onOpen: () => void; onDragStart: (e: DragEvent) => void }) {
-  const d = new Date(v.visitAt);
   const late = isLate(v, now);
   return (
     <button
@@ -61,7 +60,7 @@ function VisitCard({ v, now, compact, draggable, onOpen, onDragStart }: { v: Age
       onClick={onOpen}
       title={`${v.nickname ?? v.contract ?? "Sem contrato"} · ${v.technician ?? ""}`}
     >
-      <span className="t mono">{hhmm(d)}</span>
+      {compact && <span className="t">{periodLabel(v.visitPeriod)}</span>}
       <span className="n">{v.nickname ?? v.contract ?? "sem contrato"}</span>
       {!compact && <small>{v.technician}{v.partnerName ? ` · ${v.partnerName}` : ""}</small>}
       {late && <i className="late-dot" aria-label="Atrasada" />}
@@ -107,19 +106,18 @@ export function AgendaPage({ user, onOpenInstallation }: { user: User; onOpenIns
     else setAnchor(addDays(anchor, dir * (view === "semana" ? 7 : 1)));
   };
 
-  async function drop(e: DragEvent, day: Date) {
+  /** Solta o card num dia (e, nas visões de dia e semana, num período). Sem período, mantém o da visita. */
+  async function drop(e: DragEvent, day: Date, period?: VisitPeriod) {
     e.preventDefault();
     setDragOver(null);
     const id = e.dataTransfer.getData("text/plain");
     const v = (visits ?? []).find((x) => x.id === id);
     if (!v || isAdmin) return;
-    const old = new Date(v.visitAt);
-    if (sameDay(old, day)) return;
-    // Muda o dia e mantém a hora.
-    const next = new Date(day.getFullYear(), day.getMonth(), day.getDate(), old.getHours(), old.getMinutes());
+    const next = period ?? v.visitPeriod;
+    if (sameDay(new Date(v.visitAt), day) && v.visitPeriod === next) return;
     try {
-      await api.reschedule(id, { visitAt: next.toISOString() });
-      say(`Visita reagendada para ${next.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`);
+      await api.reschedule(id, { visitAt: visitInstant(toDateInput(day), next), visitPeriod: next });
+      say(`Visita reagendada para ${day.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}, ${periodLabel(next).toLowerCase()}`);
       load();
     } catch (err) {
       say(errMsg(err, "Falha ao reagendar."), "bad");
@@ -129,29 +127,57 @@ export function AgendaPage({ user, onOpenInstallation }: { user: User; onOpenIns
   const sel = shown.find((v) => v.id === selected) ?? null;
   const canDrag = (v: AgendaVisit) => !isAdmin && v.visitStatus !== "concluida" && !v.osClosedAt;
 
+  const card = (v: AgendaVisit, compact: boolean) => (
+    <VisitCard key={v.id} v={v} now={now} compact={compact} draggable={canDrag(v)} onOpen={() => setSelected(v.id)} onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; }} />
+  );
+
   const cell = (day: Date, compact: boolean, outside = false) => {
     const items = byDay.get(key(day)) ?? [];
     const k = key(day);
     const max = compact ? 3 : 99;
+    const head = view !== "dia" && (
+      <div className="ag-dh">
+        {view === "semana" && <span>{WEEKDAYS[(day.getDay() + 6) % 7]}</span>}
+        <b>{day.getDate()}</b>
+      </div>
+    );
+    const cls = `ag-day ${sameDay(day, now) ? "today" : ""} ${outside ? "out" : ""}`;
+    // Dia e semana: duas faixas, manhã e tarde, cada uma com o seu alvo de soltar.
+    if (!compact) {
+      return (
+        <div key={k} className={cls}>
+          {head}
+          {PERIODS.map((p) => {
+            const bk = `${k}-${p.id}`;
+            const list = items.filter((v) => v.visitPeriod === p.id);
+            return (
+              <div
+                key={p.id}
+                className={`ag-band ${dragOver === bk ? "over" : ""}`}
+                onDragOver={(e) => { if (!isAdmin) { e.preventDefault(); setDragOver(bk); } }}
+                onDragLeave={() => setDragOver((cur) => (cur === bk ? null : cur))}
+                onDrop={(e) => void drop(e, day, p.id)}
+              >
+                <span className="ag-bl">{p.label}</span>
+                {list.map((v) => card(v, false))}
+                {view === "dia" && list.length === 0 && <p className="empty">Nenhuma visita.</p>}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
     return (
       <div
         key={k}
-        className={`ag-day ${sameDay(day, now) ? "today" : ""} ${outside ? "out" : ""} ${dragOver === k ? "over" : ""}`}
+        className={`${cls} ${dragOver === k ? "over" : ""}`}
         onDragOver={(e) => { if (!isAdmin) { e.preventDefault(); setDragOver(k); } }}
         onDragLeave={() => setDragOver((cur) => (cur === k ? null : cur))}
         onDrop={(e) => void drop(e, day)}
       >
-        {view !== "dia" && (
-          <div className="ag-dh">
-            {view === "semana" && <span>{WEEKDAYS[(day.getDay() + 6) % 7]}</span>}
-            <b>{day.getDate()}</b>
-          </div>
-        )}
-        {items.slice(0, max).map((v) => (
-          <VisitCard key={v.id} v={v} now={now} compact={compact} draggable={canDrag(v)} onOpen={() => setSelected(v.id)} onDragStart={(e) => { e.dataTransfer.setData("text/plain", v.id); e.dataTransfer.effectAllowed = "move"; }} />
-        ))}
+        {head}
+        {items.slice(0, max).map((v) => card(v, true))}
         {items.length > max && <button type="button" className="linkbtn ag-more" onClick={() => { setAnchor(day); setView("dia"); }}>+{items.length - max} mais</button>}
-        {view === "dia" && items.length === 0 && <p className="empty">Nenhuma visita neste dia.</p>}
       </div>
     );
   };
@@ -161,7 +187,7 @@ export function AgendaPage({ user, onOpenInstallation }: { user: User; onOpenIns
       <div className="ph">
         <div>
           <h1>Agenda</h1>
-          <p>{isAdmin ? "Visitas de instalação de todos os parceiros." : "Visitas de instalação. Arraste um card para outro dia para reagendar."}</p>
+          <p>{isAdmin ? "Visitas de instalação de todos os parceiros." : "Visitas de instalação. Arraste um card para outro dia ou período para reagendar."}</p>
         </div>
       </div>
 
@@ -201,7 +227,7 @@ export function AgendaPage({ user, onOpenInstallation }: { user: User; onOpenIns
           <div className="ch">
             <div>
               <h3>{sel.nickname ?? (sel.contract ? `Contrato ${sel.contract}` : "Sem contrato ainda")}</h3>
-              <small>{new Date(sel.visitAt).toLocaleString("pt-BR", { weekday: "long", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" })}</small>
+              <small>{new Date(sel.visitAt).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {periodLabel(sel.visitPeriod)}</small>
             </div>
             <span className={`badge ${STATUS[sel.visitStatus].tone}`}>{STATUS[sel.visitStatus].label}</span>
           </div>

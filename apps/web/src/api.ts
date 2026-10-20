@@ -65,11 +65,15 @@ export interface ViabilityResult {
   plans: { id: string; name: string; speedMbps: number }[];
 }
 
+export type VisitPeriod = "manha" | "tarde";
+
 export interface Reservation {
   /** Dados do cliente (planejamento, etapa 3). Plano, visita e técnico são exigidos para liberar a ONU. */
   planId: string | null;
   nickname: string | null;
   visitAt: string | null;
+  /** Nulo em visitas antigas; use `periodOf`. */
+  visitPeriod?: VisitPeriod | null;
   technician: string | null;
   visitStatus: "agendada" | "em_execucao" | "concluida" | "reagendada";
   ctoId: string;
@@ -218,11 +222,12 @@ export const api = {
     request<{ activation: Activation }>("POST", `/activations/${id}/decision`, decision),
   plans: () => request<{ plans: { id: string; name: string; speedMbps: number }[] }>("GET", "/plans"),
   technicians: () => request<{ technicians: string[] }>("GET", "/technicians"),
-  saveCliente: (id: string, body: { planId: string; nickname: string | null; visitAt: string; technician: string; endereco?: Address }) =>
+  cep: (cep: string) => request<{ endereco: { cep: string; rua: string; bairro: string; cidade: string; uf: string } }>("GET", `/cep/${cep}`),
+  saveCliente: (id: string, body: { planId: string; nickname: string | null; visitAt: string; visitPeriod: VisitPeriod; technician: string; endereco?: Address }) =>
     request<{ installation: InstallationDetail }>("PATCH", `/reservations/${id}/cliente`, body),
 
   agenda: (from: string, to: string) => request<{ visits: AgendaVisit[] }>("GET", `/agenda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
-  reschedule: (id: string, body: { visitAt: string; technician?: string }) => request<{ installation: InstallationDetail }>("PATCH", `/reservations/${id}/visita`, body),
+  reschedule: (id: string, body: { visitAt: string; visitPeriod?: VisitPeriod; technician?: string }) => request<{ installation: InstallationDetail }>("PATCH", `/reservations/${id}/visita`, body),
 
   // ── Financeiro e painel do parceiro ──
   dashboard: () => request<Dashboard>("GET", "/dashboard"),
@@ -407,6 +412,7 @@ export interface Installation {
   planName: string | null;
   planMbps: number | null;
   visitAt: string | null;
+  visitPeriod: VisitPeriod | null;
   technician: string | null;
   visitStatus: "agendada" | "em_execucao" | "concluida" | "reagendada";
   activationState: ActivationState | null;
@@ -448,6 +454,7 @@ export interface AgendaVisit {
   planName: string | null;
   technician: string | null;
   visitAt: string;
+  visitPeriod: VisitPeriod;
   visitStatus: "agendada" | "em_execucao" | "concluida" | "reagendada";
   osClosedAt: string | null;
 }

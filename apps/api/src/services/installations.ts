@@ -56,6 +56,23 @@ export async function signalReference(db: Db, reservationId: string): Promise<{ 
 export const VISIT_PAST_TOLERANCE_MS = 24 * 3600_000;
 export const VISIT_MAX_AHEAD_MS = 366 * 24 * 3600_000;
 
+export type VisitPeriod = "manha" | "tarde";
+/** Horário de referência (Brasília) que o `visitAt` guarda para cada período. */
+const PERIOD_HOUR: Record<VisitPeriod, string> = { manha: "08", tarde: "14" };
+
+const spDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+const spHour = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23" });
+
+/** Período de uma visita antiga, só com data e hora: antes do meio-dia é manhã. */
+export function periodOf(visitAt: Date): VisitPeriod {
+  return Number(spHour.format(visitAt)) < 12 ? "manha" : "tarde";
+}
+
+/** Mesmo dia (em Brasília) no horário de referência do período. */
+export function atPeriod(visitAt: Date, period: VisitPeriod): Date {
+  return new Date(`${spDate.format(visitAt)}T${PERIOD_HOUR[period]}:00:00-03:00`);
+}
+
 export function assertVisitDate(visitAt: Date, now: Date) {
   if (Number.isNaN(visitAt.getTime())) throw new AppError(400, "dados_invalidos", "Data da visita inválida.");
   if (visitAt.getTime() < now.getTime() - VISIT_PAST_TOLERANCE_MS) {
@@ -193,6 +210,7 @@ export async function listInstallations(db: Db, user: SessionUser) {
     planName: planName ?? null,
     planMbps: planMbps ?? null,
     visitAt: r.visitAt,
+    visitPeriod: r.visitAt ? ((r.visitPeriod as VisitPeriod | null) ?? periodOf(r.visitAt)) : null,
     technician: r.technician,
     visitStatus: r.visitStatus,
     activationState: act.get(r.id)?.state ?? null,
@@ -229,6 +247,8 @@ export interface ClienteInput {
   /** Nome do assinante final: só para exibição e busca no portal. */
   nickname?: string | null;
   visitAt: Date;
+  /** Sem período, vale o da hora de `visitAt`. */
+  visitPeriod?: VisitPeriod;
   technician: string;
   /** Endereço da instalação; a criação do contrato usa o que ficou salvo aqui. */
   endereco?: ContractAddress;
@@ -254,17 +274,21 @@ export async function saveCliente(db: Db, user: SessionUser, reservationId: stri
     if (contract) throw new AppError(409, "contrato_criado", "O contrato desse cliente já foi pedido: o endereço não muda mais por aqui.");
   }
 
-  const moved = reservation.visitAt !== null && reservation.visitAt.getTime() !== input.visitAt.getTime();
+  const period = input.visitPeriod ?? periodOf(input.visitAt);
+  const visitAt = input.visitPeriod ? atPeriod(input.visitAt, input.visitPeriod) : input.visitAt;
+  // Visita antiga sem período: o que vale é o dia e o período derivado da hora; só muda se o parceiro trocar.
+  const moved = reservation.visitAt !== null && (reservation.visitAt.getTime() !== visitAt.getTime() || (reservation.visitPeriod ?? periodOf(reservation.visitAt)) !== period);
   const now = opts.now ?? new Date();
   // Só valida a data quando ela muda: editar o apelido de uma visita antiga não deve ser bloqueado.
-  if (reservation.visitAt === null || moved) assertVisitDate(input.visitAt, now);
+  if (reservation.visitAt === null || moved) assertVisitDate(visitAt, now);
   const [updated] = await db
     .update(portReservations)
     .set({
       ...(input.endereco ? { installAddress: input.endereco } : {}),
       planId: input.planId,
       nickname: input.nickname?.trim() || null,
-      visitAt: input.visitAt,
+      visitAt,
+      visitPeriod: period,
       technician: input.technician.trim(),
       visitStatus: moved ? "reagendada" : reservation.visitStatus,
       updatedAt: now,
@@ -278,7 +302,7 @@ export async function saveCliente(db: Db, user: SessionUser, reservationId: stri
     entity: "port_reservation",
     entityId: reservation.id,
     ip: opts.ip,
-    data: { planId: input.planId, visitAt: input.visitAt, technician: input.technician.trim(), de: moved ? reservation.visitAt : undefined },
+    data: { planId: input.planId, visitAt, visitPeriod: period, technician: input.technician.trim(), de: moved ? reservation.visitAt : undefined },
   });
   return updated!;
 }
@@ -331,26 +355,30 @@ export async function listAgenda(db: Db, user: SessionUser, range: { from: Date;
     planName: planName ?? null,
     technician: r.technician,
     visitAt: r.visitAt!,
+    visitPeriod: (r.visitPeriod as VisitPeriod | null) ?? periodOf(r.visitAt!),
     visitStatus: r.visitStatus,
     osClosedAt: r.osClosedAt,
   }));
 }
 
 /** Arrastar o card ou editar: muda a data (e, se vier, o técnico). Visita já marcada que muda de data vira "reagendada". */
-export async function reschedule(db: Db, user: SessionUser, reservationId: string, input: { visitAt: Date; technician?: string }, opts: { ip?: string | null; now?: Date } = {}) {
+export async function reschedule(db: Db, user: SessionUser, reservationId: string, input: { visitAt: Date; visitPeriod?: VisitPeriod; technician?: string }, opts: { ip?: string | null; now?: Date } = {}) {
   const reservation = await ownReservation(db, user, reservationId);
   if (reservation.status !== "ativa" && reservation.status !== "convertida") {
     throw new AppError(409, "reserva_indisponivel", "Essa reserva não está mais aberta.");
   }
   if (reservation.osClosedAt) throw new AppError(409, "os_ja_fechada", "A O.S. já foi fechada.");
   if (!reservation.visitAt) throw new AppError(409, "sem_visita", "Preencha os dados do cliente antes de reagendar.");
-  const changedDate = reservation.visitAt.getTime() !== input.visitAt.getTime();
+  const period = input.visitPeriod ?? periodOf(input.visitAt);
+  const visitAt = input.visitPeriod ? atPeriod(input.visitAt, input.visitPeriod) : input.visitAt;
+  const changedDate = reservation.visitAt.getTime() !== visitAt.getTime() || (reservation.visitPeriod ?? periodOf(reservation.visitAt)) !== period;
   const now = opts.now ?? new Date();
-  if (changedDate) assertVisitDate(input.visitAt, now);
+  if (changedDate) assertVisitDate(visitAt, now);
   const [updated] = await db
     .update(portReservations)
     .set({
-      visitAt: input.visitAt,
+      visitAt,
+      visitPeriod: period,
       technician: input.technician?.trim() || reservation.technician,
       visitStatus: changedDate ? "reagendada" : reservation.visitStatus,
       updatedAt: now,
@@ -365,7 +393,7 @@ export async function reschedule(db: Db, user: SessionUser, reservationId: strin
       entity: "port_reservation",
       entityId: reservation.id,
       ip: opts.ip,
-      data: { de: reservation.visitAt, para: input.visitAt, technician: updated!.technician },
+      data: { de: reservation.visitAt, para: visitAt, visitPeriod: period, technician: updated!.technician },
     });
   }
   return updated!;

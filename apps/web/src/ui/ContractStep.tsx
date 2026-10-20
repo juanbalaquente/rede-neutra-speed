@@ -49,13 +49,23 @@ const api = {
  * nascem do sistema da Speed (não são digitados). Desligada, não renderiza nada e a ativação pede o número à mão.
  */
 /** Sugere rua, número, cidade e UF a partir do endereço da consulta ("Rua A, 100, Sabará, MG"). Só preenche; o parceiro confere. */
-export function guessAddress(address: string): { rua: string; numero: string; cidade: string; uf: string } {
-  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
-  const uf = parts.length > 2 && /^[A-Za-z]{2}$/.test(parts[parts.length - 1]!) ? parts.pop()!.toUpperCase() : "";
+export function guessAddress(address: string): { rua: string; numero: string; bairro: string; cidade: string; uf: string; cep: string } {
+  // A consulta guarda uma linha só, como "Rua X, 123 - Bairro, Cidade - MG, 34505-000, Brasil".
+  const cepMatch = /\b(\d{5})-?(\d{3})\b/.exec(address);
+  const text = cepMatch ? address.replace(cepMatch[0], "") : address;
+  const parts = text.split(/,| - /).map((p) => p.trim()).filter((p) => p && !/^(brasil|brazil)$/i.test(p));
+  const uf = parts.length > 2 && /^[A-Z]{2}$/.test(parts[parts.length - 1]!) ? parts.pop()! : "";
   const numIdx = parts.findIndex((p, i) => i > 0 && /^\d{1,6}[A-Za-z]?$/.test(p));
   const numero = numIdx > 0 ? parts[numIdx]! : "";
   const rest = parts.filter((_, i) => i !== 0 && i !== numIdx);
-  return { rua: parts[0] ?? "", numero, cidade: rest[rest.length - 1] ?? "", uf };
+  return {
+    rua: parts[0] ?? "",
+    numero,
+    bairro: rest.length > 1 ? rest[0]! : "",
+    cidade: rest[rest.length - 1] ?? "",
+    uf,
+    cep: cepMatch ? cepMatch[1]! + cepMatch[2]! : "",
+  };
 }
 
 export function ContractStep({ reservationId, address, saved, onChange }: { reservationId: string; address?: string; /** Endereço já salvo com os dados do cliente. */ saved?: Address | null; onChange: (s: ContractStatus) => void }) {
