@@ -139,6 +139,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
                     <li key={s.nome} className={s.estado === "concluida" ? "done" : s.estado === "falhou" ? "bad" : ""}>
                       <i aria-hidden="true" />
                       {STEP_LABEL[s.nome] ?? s.nome}
+                      {s.estado === "aguardando_equipe" ? <small className="muted"> (com a equipe da Speed)</small> : null}
                       {s.motivo ? <small className="muted"> ({s.motivo})</small> : null}
                     </li>
                   ))}
