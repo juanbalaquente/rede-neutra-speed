@@ -82,7 +82,7 @@ export function PhotoSlots({ reservationId, onMedicao, onChanged }: { reservatio
               <button type="button" className="ph-pic" disabled={busy !== null} onClick={() => inputs.current[kind]?.click()} aria-label={p ? `Refazer a foto: ${label}` : `Tirar a foto: ${label}`}>
                 {p ? <img src={photoUrl(p.id)} alt={label} loading="lazy" /> : <span aria-hidden="true">{busy === kind ? "…" : "+"}</span>}
               </button>
-              <b>{label}{kind === "medicao" && <em> obrigatória</em>}</b>
+              <b>{label}{kind === "medicao" && !p && <em> obrigatória</em>}</b>
               <small>{busy === kind ? "Enviando…" : p ? `${fmtTime(p.createdAt)}${p.lat === null ? " · sem localização" : ""}` : hint}</small>
               <input
                 ref={(el) => { inputs.current[kind] = el; }}

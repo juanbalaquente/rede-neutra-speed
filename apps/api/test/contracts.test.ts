@@ -21,6 +21,7 @@ afterEach(async () => {
 });
 
 const ADDRESS = "Rua dos Testes, 100, Belo Horizonte";
+let addrSeq = 0;
 const ENDERECO = { cep: "34505000", rua: "Rua dos Testes", numero: "100", complemento: "", bairro: "Centro", cidade: "Sabará", uf: "mg" };
 
 async function partner(cnpj = "11111111000111", code = "JHV") {
@@ -29,8 +30,9 @@ async function partner(cnpj = "11111111000111", code = "JHV") {
 }
 
 async function reserved(cookie: string, withCliente = true) {
-  await ctx.call(cookie, "POST", "/viability", { address: ADDRESS });
-  const { reservation } = await (await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: ADDRESS })).json();
+  const addr = `${ADDRESS} ${++addrSeq}`; // endereço novo a cada reserva: o mesmo endereço na mesma CTO é barrado
+  await ctx.call(cookie, "POST", "/viability", { address: addr });
+  const { reservation } = await (await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: addr })).json();
   if (withCliente) await ctx.setCliente(cookie, reservation.id);
   return reservation.id as string;
 }

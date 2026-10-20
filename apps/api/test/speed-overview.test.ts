@@ -33,7 +33,7 @@ async function installed(cookie: string, contract: string, sinalFinal: number) {
   const { activation } = await (await ctx.call(cookie, "POST", "/activations", { reservationId: reservation.id, serial: "ZTEGC0000001", contrato: contract, sinalCtoDbm: -20 })).json();
   for (let i = 0; i < 5; i++) await ctx.call(cookie, "GET", `/activations/${activation.id}`);
   for (const kind of OS_REQUIRED_KINDS.filter((k) => k !== "medicao")) await ctx.upload(cookie, reservation.id, { kind });
-  const res = await ctx.call(cookie, "POST", `/reservations/${reservation.id}/os/close`, { sinalFinalDbm: sinalFinal, modeloOnu: "F670L", serialOnu: "ZTEGC0000001" });
+  const res = await ctx.call(cookie, "POST", `/reservations/${reservation.id}/os/close`, { sinalFinalDbm: sinalFinal, modeloOnu: "F670L", serialOnu: "ZTEGC0000001", justificativaSinal: "fibra longa, medição repetida" });
   expect(res.status).toBe(200);
   return reservation.id as string;
 }

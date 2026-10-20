@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, request, type Address } from "../api";
-import { AddressFields, addressPayload, addressValid, normalizeAddress } from "./AddressFields";
+import { AddressFields, addressPayload, addressProblem, addressValid, normalizeAddress } from "./AddressFields";
 import { newUuid } from "../uuid";
 import { useDraft } from "./useDraft";
 import { useToast } from "./Toast";
@@ -82,6 +82,15 @@ export function ContractStep({ reservationId, address, saved, onChange }: { rese
     api.get(reservationId).then((r) => alive && apply(r.enabled, r.contract)).catch(() => alive && apply(false, null));
     return () => { alive = false; };
   }, [reservationId, apply]);
+
+  // Segundos desde que o pedido ficou na fila sem nenhuma etapa: só depois de um tempo o "reenviar" faz sentido.
+  const queued = contract?.state === "recebida" && contract.steps.length === 0;
+  const [queuedFor, setQueuedFor] = useState(0);
+  useEffect(() => {
+    if (!queued) { setQueuedFor(0); return; }
+    const t = setInterval(() => setQueuedFor((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [queued]);
 
   // Acompanha enquanto a Wiki cria.
   const inProgress = contract !== null && IN_PROGRESS.includes(contract.state);
@@ -165,10 +174,14 @@ export function ContractStep({ reservationId, address, saved, onChange }: { rese
       ) : contract && !failed ? (
         <div style={{ display: "grid", gap: 6 }}>
           {contract.state === "recebida" && contract.steps.length === 0 ? (
-            <small>
-              O pedido está guardado, mas ainda não chegou ao sistema da Speed.{" "}
-              <button type="button" className="linkbtn" disabled={busy} onClick={() => void retry()}>Reenviar agora</button>
-            </small>
+            queuedFor < 30 ? (
+              <small className="muted">Enviando o pedido ao sistema da Speed…</small>
+            ) : (
+              <small>
+                O pedido está demorando para chegar ao sistema da Speed. Se continuar assim, reenvie: não cria outro contrato.{" "}
+                <button type="button" className="linkbtn" disabled={busy} onClick={() => void retry()}>Reenviar agora</button>
+              </small>
+            )
           ) : (
             <ul className="atv-steps" style={{ margin: 0 }}>
               {contract.steps.map((s) => (
@@ -195,6 +208,7 @@ export function ContractStep({ reservationId, address, saved, onChange }: { rese
             </>
           )}
           <div><button type="button" className="btn sec" disabled={!valid || busy} onClick={() => void submit()}>{busy ? "Enviando…" : "Criar contrato"}</button></div>
+          {!valid && !savedAddress && <p className="hint">{addressProblem(form)}</p>}
         </>
       )}
     </div>

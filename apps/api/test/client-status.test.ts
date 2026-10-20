@@ -18,6 +18,7 @@ afterEach(async () => {
 });
 
 const ADDRESS = "Rua dos Testes, 100, Belo Horizonte";
+let addrSeq = 0;
 const OS = { sinalFinalDbm: -21, modeloOnu: "F670L", serialOnu: "ZTEGC0000001" };
 
 async function partner(cnpj = "11111111000111", code = "JHV") {
@@ -27,8 +28,9 @@ async function partner(cnpj = "11111111000111", code = "JHV") {
 
 /** Reserva com ONU online (e, se pedido, O.S. fechada). */
 async function client(cookie: string, contract: string, closeOs = true) {
-  await ctx.call(cookie, "POST", "/viability", { address: ADDRESS });
-  const { reservation } = await (await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: ADDRESS })).json();
+  const addr = `${ADDRESS} ${++addrSeq}`; // endereço novo a cada reserva: o mesmo endereço na mesma CTO é barrado
+  await ctx.call(cookie, "POST", "/viability", { address: addr });
+  const { reservation } = await (await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: addr })).json();
   await ctx.setCliente(cookie, reservation.id);
   await ctx.upload(cookie, reservation.id, { kind: "medicao" });
   const { activation } = await (await ctx.call(cookie, "POST", "/activations", { reservationId: reservation.id, serial: "ZTEGC0000001", contrato: contract, sinalCtoDbm: -20 })).json();

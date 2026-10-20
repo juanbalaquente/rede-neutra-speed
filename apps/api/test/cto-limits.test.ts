@@ -25,9 +25,12 @@ const viabilityOf = async (cookie: string) => {
   const v = await (await ctx.call(cookie, "POST", "/viability", { address: ADDRESS })).json();
   return v.ctos.find((c: { ctoId: string }) => c.ctoId === CTO) as { vagas: number; blockedReason: string | null };
 };
+let addrSeq = 0;
 const reserve = async (cookie: string) => {
-  await ctx.call(cookie, "POST", "/viability", { address: ADDRESS });
-  return ctx.call(cookie, "POST", "/reservations", { ctoId: CTO, address: ADDRESS });
+  // Endereço novo a cada reserva: o mesmo endereço na mesma CTO é barrado como duplicidade.
+  const address = `${ADDRESS} ${++addrSeq}`;
+  await ctx.call(cookie, "POST", "/viability", { address });
+  return ctx.call(cookie, "POST", "/reservations", { ctoId: CTO, address });
 };
 
 describe("limite de ocupação por CTO", () => {

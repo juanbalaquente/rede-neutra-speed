@@ -126,7 +126,7 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
         })}
       </ol>
       {note && <p className={ended ? "error" : "muted"}>{note}{activation.snapshot?.motivo && state !== "cancelada" ? ` (${activation.snapshot.motivo})` : ""}</p>}
-      {activation.snapshot?.vlan && !["cancelada", "falhou"].includes(state) && (
+      {activation.snapshot?.vlan && ["provisionando", "online"].includes(state) && (
         <p className="atv-vlan">
           Configure a ONU do cliente com o login <span className="mono">{activation.pppLogin}</span> e a <b>VLAN <span className="mono">{activation.snapshot.vlan}</span></b>.
         </p>
@@ -216,6 +216,14 @@ export function ActivationPanel({
   const confirmed = serial !== "" && confirm.trim().toUpperCase() === tail.toUpperCase();
   const contractOk = contractStatus.enabled ? !!contractStatus.contract : /^\d{1,12}$/.test(contrato);
   const ready = sinalOk && contractOk && confirmed && !!pppSuffix && hasMedicao;
+  // O botão só libera com tudo certo; enquanto não, diz o que falta (um item por vez, na ordem da tela).
+  const blocker =
+    serial === "" ? "Escolha a ONU na lista."
+    : !confirmed ? `Digite os 4 últimos caracteres da etiqueta da ONU (${tail}).`
+    : !contractOk ? (contractStatus.enabled ? "Crie o contrato do cliente." : "Informe o número do contrato (só dígitos).")
+    : !sinalOk ? "Informe o sinal medido na CTO, entre -40 e 0 dBm."
+    : !hasMedicao ? "Falta a foto da medição na CTO."
+    : null;
 
   async function submit() {
     setBusy(true);
@@ -297,7 +305,7 @@ export function ActivationPanel({
             <PhotoSlots reservationId={reservation.id} onMedicao={setHasMedicao} />
             <div className="acts2">
               <button className="btn" disabled={!ready || busy} onClick={submit}>{busy ? "Enviando…" : "Liberar ONU"}</button>
-              {!hasMedicao && <small className="muted">Falta a foto da medição na CTO.</small>}
+              {blocker && <small className="muted">{blocker}</small>}
             </div>
           </>
         )}

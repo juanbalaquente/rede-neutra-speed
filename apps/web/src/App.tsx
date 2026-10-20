@@ -44,7 +44,7 @@ const TABS_BY_ROLE: Record<User["role"], Tab[]> = {
 
 /** Tela escolhida na barra de endereço (#/reservas); vale só se o perfil pode ver. */
 function tabFromHash(role: User["role"]): Tab | null {
-  const name = window.location.hash.replace(/^#/?/, "").split("/")[0] as Tab;
+  const name = window.location.hash.replace(/^#\/?/, "").split("/")[0] as Tab;
   return TABS_BY_ROLE[role].includes(name) ? name : null;
 }
 
