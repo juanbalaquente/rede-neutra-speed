@@ -31,6 +31,9 @@ export function UsersPanel({
   const [users, setUsers] = useState<PartnerUser[] | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: (partnerId ? "supervisor" : "atendente") as "atendente" | "supervisor" });
   const [busy, setBusy] = useState(false);
+  /** Senha recém-criada: fica na tela até a pessoa copiar, porque o servidor nunca a mostra de novo. */
+  const [fresh, setFresh] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(() => {
     api.users(partnerId).then((r) => setUsers(r.users)).catch((e) => say(errMsg(e, "Falha ao carregar usuários."), "bad"));
@@ -42,7 +45,9 @@ export function UsersPanel({
     setBusy(true);
     try {
       await api.createUser({ partnerId, ...form });
-      say(`${form.name} cadastrado. Envie a senha por um canal seguro.`);
+      say(`${form.name} cadastrado.`);
+      setFresh({ name: form.name, email: form.email, password: form.password });
+      setCopied(false);
       setForm({ name: "", email: "", password: "", role: "atendente" });
       load();
     } catch (err) {
@@ -84,7 +89,19 @@ export function UsersPanel({
         <small>{users ? (maxUsers !== null ? `${active} de ${maxUsers} ativos` : `${active} ativos`) : "carregando…"}</small>
       </div>
       {users && users.length === 0 && <p className="empty">{emptyHint}</p>}
+      {fresh && (
+        <div className="rv-soon" role="status" style={{ margin: "14px 18px 0", display: "grid", gap: 8 }}>
+          <div><b>{fresh.name} já pode entrar.</b> Anote a senha agora: ela não aparece de novo. Envie por um canal seguro.</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="mono" style={{ fontSize: 15, userSelect: "all" }}>{fresh.password}</span>
+            <button type="button" className="btn sec sm" onClick={() => { void navigator.clipboard?.writeText(`E-mail: ${fresh.email}
+Senha: ${fresh.password}`).then(() => setCopied(true)).catch(() => {}); }}>{copied ? "Copiado" : "Copiar e-mail e senha"}</button>
+            <button type="button" className="linkbtn" onClick={() => setFresh(null)}>Já anotei</button>
+          </div>
+        </div>
+      )}
       {users && users.length > 0 && (
+        <div className="tscroll">
         <table className="hist">
           <tbody>
             {users.map((u) => (
@@ -99,14 +116,15 @@ export function UsersPanel({
                   <span className={`badge ${u.active ? "b-ok" : "b-mute"}`}>{u.active ? "Ativo" : "Inativo"}</span>
                   {canReset && u.role === "supervisor" && <span className={`badge ${u.totpEnabled ? "b-ok" : "b-warn"}`} style={{ marginLeft: 6 }}>{u.totpEnabled ? "2FA" : "sem 2FA"}</span>}
                 </td>
-                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  {canReset && u.totpEnabled && <button className="btn sec sm" style={{ marginRight: 6 }} onClick={() => void reset2fa(u)}>Redefinir 2FA</button>}
+                <td style={{ textAlign: "right" }}>
+                  {canReset && u.totpEnabled && <button className="btn sec sm" style={{ marginRight: 6, marginBottom: 4 }} onClick={() => void reset2fa(u)}>Redefinir 2FA</button>}
                   {u.id !== meId && <button className="btn sec sm" onClick={() => toggle(u)}>{u.active ? "Desativar" : "Reativar"}</button>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       )}
       <form className="summary" onSubmit={create} style={{ borderTop: "1px solid var(--line)" }}>
         <b style={{ fontWeight: 500 }}>Novo usuário</b>

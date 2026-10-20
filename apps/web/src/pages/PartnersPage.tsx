@@ -436,6 +436,8 @@ export function PartnersPage() {
   const [list, setList] = useState<AdminPartner[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  /** Parceiro recém-cadastrado: o painel dele rola até o cadastro do supervisor. */
+  const [justCreated, setJustCreated] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -463,13 +465,6 @@ export function PartnersPage() {
         {!creating && <button className="btn" onClick={() => setCreating(true)}>Novo parceiro</button>}
       </div>
 
-      <SignalLimitCard />
-      <OsPhotosCard />
-      <SlaCard />
-      <CtoLimitsCard />
-      <ApprovalsCard />
-      <SpeedPricesCard />
-
       <div className="g11">
         <div className="card">
           <div className="ch"><h3>{list ? `${list.length} ${list.length === 1 ? "parceiro" : "parceiros"}` : "Carregando…"}</h3><small>clique para editar</small></div>
@@ -483,7 +478,7 @@ export function PartnersPage() {
                 {list.map((p) => (
                   <tr key={p.id} className={p.id === selectedId && !creating ? "on" : ""}>
                     <td style={{ fontFamily: "var(--font)" }}>
-                      <button className="rowbtn" onClick={() => { setCreating(false); setSelectedId(p.id); }}>
+                      <button className="rowbtn" onClick={() => { setCreating(false); setJustCreated(null); setSelectedId(p.id); }}>
                         {p.name}
                         {p.status === "bloqueado" && <span className="badge b-bad" style={{ marginLeft: 8 }}>Bloqueado</span>}
                       </button>
@@ -505,16 +500,30 @@ export function PartnersPage() {
             onCreated={(id) => {
               setCreating(false);
               setSelectedId(id);
+              setJustCreated(id);
               void load();
             }}
           />
         ) : selected ? (
           // key: ao trocar de parceiro, o formulário recomeça com os dados dele.
-          <PartnerEditor key={`${selected.id}-${selected.code}-${selected.status}-${selected.allowedRegions.join()}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} />
+          <PartnerEditor key={`${selected.id}-${selected.code}-${selected.status}-${selected.allowedRegions.join()}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} focusUsers={justCreated === selected.id} />
         ) : (
           list && <p className="note">Selecione um parceiro ou cadastre o primeiro.</p>
         )}
       </div>
+
+      {/* Regras que valem para todos os parceiros: raramente mudam, então ficam recolhidas abaixo da lista. */}
+      <details className="gen">
+        <summary>Configurações gerais <small>trava de sinal, fotos da O.S., prazos, limites por CTO, aprovações e valores</small></summary>
+        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+          <SignalLimitCard />
+          <OsPhotosCard />
+          <SlaCard />
+          <CtoLimitsCard />
+          <ApprovalsCard />
+          <SpeedPricesCard />
+        </div>
+      </details>
     </main>
   );
 }

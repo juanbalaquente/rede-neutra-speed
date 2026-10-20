@@ -91,7 +91,7 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .linkbtn { border: 0; background: none; color: var(--mute); padding: 4px 6px; border-radius: 6px; font-size: 12.5px; }
 .linkbtn:hover { color: var(--ink); background: var(--hover); }
 .main { min-width: 0; display: flex; flex-direction: column; }
-.top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 10px 24px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 10px 24px; background: var(--bg); border-bottom: 1px solid var(--line); }
 .crumb { display: flex; gap: 8px; align-items: center; color: var(--mute); white-space: nowrap; }
 .crumb b { color: var(--ink); font-weight: 500; }
 .sbtn { margin-left: auto; display: flex; align-items: center; gap: 10px; min-width: 0; width: min(380px, 40vw); border: 1px solid var(--line); background: var(--surf); border-radius: 9px; padding: 7px 10px; color: var(--mute); text-align: left; box-shadow: var(--shadow); transition: border-color 0.2s; }
@@ -525,3 +525,24 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
   a[href]::after { content: none !important; }
   table.hist { font-size: 11px; }
 }
+
+/* ── correções de uso (revisão de 20 out 2026) ── */
+/* Campos sem classe própria seguem o mesmo desenho dos demais; :where() deixa qualquer regra mais específica vencer. */
+:where(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"]), select, textarea) { border: 1px solid var(--line2); border-radius: 9px; padding: 8px 10px; background: var(--surf); color: var(--ink); }
+:where(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"]), select, textarea):focus { outline: none; border-color: var(--data); box-shadow: 0 0 0 3px var(--data-soft); }
+/* Tabelas dentro de cartões rolam na horizontal em vez de cortar botões. */
+.tscroll { overflow-x: auto; }
+/* Configurações gerais recolhidas na tela de parceiros. */
+.gen { border: 1px solid var(--line); border-radius: 14px; background: var(--surf); padding: 0; }
+.gen > summary { cursor: pointer; padding: 14px 18px; font-weight: 600; list-style: none; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.gen > summary::-webkit-details-marker { display: none; }
+.gen > summary::before { content: "▸"; color: var(--mute); transition: transform 0.2s; }
+.gen[open] > summary::before { transform: rotate(90deg); }
+.gen > summary small { color: var(--mute); font-weight: 400; font-size: 12.5px; }
+.gen > div { padding: 0 14px 14px; }
+/* Menu do celular: a borda direita esmaece para mostrar que há mais itens ao rolar. */
+@media (max-width: 900px) {
+  .side { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); scrollbar-width: none; }
+  .side .nav { padding-right: 36px; }
+}
+.hint { color: var(--mute); font-size: 12.5px; margin: 0; }
