@@ -92,6 +92,16 @@ export interface CreateReservationInput {
   lng?: number | null;
 }
 
+/** Endereço comparável: sem acento, minúsculo, espaços e pontuação colapsados. */
+function normalizeAddress(address: string): string {
+  return address
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 export async function createReservation(
   db: Db,
   network: NetworkMap,
@@ -152,6 +162,17 @@ export async function createReservation(
       .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.status, "ativa")));
     if (Number(active?.n ?? 0) >= partner.maxActiveReservations) {
       throw new AppError(409, "limite_reservas", `Limite de ${partner.maxActiveReservations} reservas simultâneas atingido.`);
+    }
+
+    // Mesmo endereço na mesma CTO já reservado por este parceiro: duplo clique ou venda repetida gastaria outra vaga.
+    // Serializado pela trava da linha do parceiro acima.
+    const wanted = normalizeAddress(input.address);
+    const mine = await tx
+      .select({ address: portReservations.address })
+      .from(portReservations)
+      .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.ctoId, input.ctoId), eq(portReservations.status, "ativa")));
+    if (mine.some((r) => normalizeAddress(r.address) === wanted)) {
+      throw new AppError(409, "reserva_duplicada", "Já existe uma reserva aberta para este endereço nesta CTO. Use a que já está em Reservas.");
     }
 
     // Lock por CTO: dois parceiros disputando a última vaga entram um de cada vez.

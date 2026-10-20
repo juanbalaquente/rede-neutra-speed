@@ -34,6 +34,34 @@ export interface OsInput {
   modeloOnu: string;
   serialOnu: string;
   observacao?: string | null;
+  /** Obrigatória quando o sinal final fica abaixo do mínimo aceitável (sinal da CTO menos o limite da ativação). */
+  justificativaSinal?: string | null;
+}
+
+/** Referência da trava de sinal da ativação concluída: o menor sinal aceitável na ONU. */
+export async function signalReference(db: Db, reservationId: string): Promise<{ sinalCtoDbm: number; limiteDb: number; minimoDbm: number } | null> {
+  const [a] = await db
+    .select({ sinalCtoDbm: activations.sinalCtoDbm, limiteDb: activations.limiteDb })
+    .from(activations)
+    .where(and(eq(activations.reservationId, reservationId), eq(activations.state, "online")))
+    .orderBy(desc(activations.createdAt))
+    .limit(1);
+  if (!a) return null;
+  return { sinalCtoDbm: a.sinalCtoDbm, limiteDb: a.limiteDb, minimoDbm: Number((a.sinalCtoDbm - a.limiteDb).toFixed(2)) };
+}
+
+/** Janela aceita para a data da visita: não pode ter passado há mais de um dia nem ficar a mais de um ano. */
+export const VISIT_PAST_TOLERANCE_MS = 24 * 3600_000;
+export const VISIT_MAX_AHEAD_MS = 366 * 24 * 3600_000;
+
+export function assertVisitDate(visitAt: Date, now: Date) {
+  if (Number.isNaN(visitAt.getTime())) throw new AppError(400, "dados_invalidos", "Data da visita inválida.");
+  if (visitAt.getTime() < now.getTime() - VISIT_PAST_TOLERANCE_MS) {
+    throw new AppError(422, "visita_no_passado", "A data da visita já passou. Escolha hoje ou uma data futura.");
+  }
+  if (visitAt.getTime() > now.getTime() + VISIT_MAX_AHEAD_MS) {
+    throw new AppError(422, "visita_distante", "A data da visita está longe demais (máximo de um ano).");
+  }
 }
 
 export interface OsData extends OsInput {
@@ -69,7 +97,24 @@ export async function closeServiceOrder(db: Db, user: SessionUser, reservationId
     }
   }
   const now = opts.now ?? new Date();
-  const data: OsData = { ...input, porta: input.porta?.trim() || null, observacao: input.observacao?.trim() || null, fechadaPor: user.id };
+  // Mesma régua da ativação: sinal final abaixo do mínimo só fecha com justificativa, que fica na O.S. e na auditoria.
+  const ref = await signalReference(db, reservation.id);
+  const justificativa = input.justificativaSinal?.trim() || null;
+  const foraDoLimite = ref !== null && input.sinalFinalDbm < ref.minimoDbm;
+  if (foraDoLimite && (!justificativa || justificativa.length < 10)) {
+    throw new AppError(
+      422,
+      "sinal_fora_do_limite",
+      `O sinal final (${input.sinalFinalDbm} dBm) está abaixo do mínimo aceitável (${ref!.minimoDbm} dBm). Refaça a medição ou explique o motivo (mínimo 10 caracteres).`,
+    );
+  }
+  const data: OsData = {
+    ...input,
+    porta: input.porta?.trim() || null,
+    observacao: input.observacao?.trim() || null,
+    justificativaSinal: foraDoLimite ? justificativa : null,
+    fechadaPor: user.id,
+  };
   const [closed] = await db
     .update(portReservations)
     .set({ osClosedAt: now, osClosedBy: user.id, osData: data, visitStatus: "concluida", updatedAt: now })
@@ -84,7 +129,13 @@ export async function closeServiceOrder(db: Db, user: SessionUser, reservationId
     entity: "port_reservation",
     entityId: reservation.id,
     ip: opts.ip,
-    data: { contract: reservation.contractNumber, sinalFinalDbm: input.sinalFinalDbm, serialOnu: input.serialOnu, porta: data.porta },
+    data: {
+      contract: reservation.contractNumber,
+      sinalFinalDbm: input.sinalFinalDbm,
+      serialOnu: input.serialOnu,
+      porta: data.porta,
+      ...(foraDoLimite ? { minimoDbm: ref!.minimoDbm, justificativaSinal: justificativa } : {}),
+    },
   });
   return closed;
 }
@@ -158,7 +209,14 @@ export async function getInstallation(db: Db, user: SessionUser, id: string) {
   if (!row) throw new AppError(404, "reserva_nao_encontrada", "Instalação não encontrada.");
   const [r] = await db.select({ osData: portReservations.osData }).from(portReservations).where(eq(portReservations.id, id));
   const missing = await missingPhotoKinds(db, id);
-  return { ...row, os: (r?.osData as OsData | null) ?? null, fotosFaltando: missing, fotosObrigatorias: await getOsPhotosRequired(db) };
+  const ref = await signalReference(db, id);
+  return {
+    ...row,
+    os: (r?.osData as OsData | null) ?? null,
+    fotosFaltando: missing,
+    fotosObrigatorias: await getOsPhotosRequired(db),
+    sinalMinimoDbm: ref?.minimoDbm ?? null,
+  };
 }
 
 // ── Dados do cliente (planejamento, etapa 3): plano, apelido, visita e técnico ──
@@ -195,6 +253,8 @@ export async function saveCliente(db: Db, user: SessionUser, reservationId: stri
 
   const moved = reservation.visitAt !== null && reservation.visitAt.getTime() !== input.visitAt.getTime();
   const now = opts.now ?? new Date();
+  // Só valida a data quando ela muda: editar o apelido de uma visita antiga não deve ser bloqueado.
+  if (reservation.visitAt === null || moved) assertVisitDate(input.visitAt, now);
   const [updated] = await db
     .update(portReservations)
     .set({
@@ -283,6 +343,7 @@ export async function reschedule(db: Db, user: SessionUser, reservationId: strin
   if (!reservation.visitAt) throw new AppError(409, "sem_visita", "Preencha os dados do cliente antes de reagendar.");
   const changedDate = reservation.visitAt.getTime() !== input.visitAt.getTime();
   const now = opts.now ?? new Date();
+  if (changedDate) assertVisitDate(input.visitAt, now);
   const [updated] = await db
     .update(portReservations)
     .set({

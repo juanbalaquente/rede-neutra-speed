@@ -56,6 +56,8 @@ async function parseBody<T extends z.ZodTypeAny>(c: Context, schema: T): Promise
   return parsed.data;
 }
 
+const BRAZIL_UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
+
 const installAddressSchema = z.object({
   cep: z.string().regex(/^\d{8}$/, "CEP com 8 dígitos"),
   rua: z.string().trim().min(2).max(120),
@@ -63,7 +65,12 @@ const installAddressSchema = z.object({
   complemento: z.string().trim().max(60).default(""),
   bairro: z.string().trim().min(2).max(80),
   cidade: z.string().trim().min(2).max(80),
-  uf: z.string().trim().length(2).transform((s) => s.toUpperCase()),
+  uf: z
+    .string()
+    .trim()
+    .length(2)
+    .transform((s) => s.toUpperCase())
+    .refine((s) => BRAZIL_UFS.includes(s), "UF inválida"),
 });
 
 export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
@@ -532,6 +539,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
         modeloOnu: z.string().trim().min(2).max(60),
         serialOnu: z.string().trim().min(6).max(40).regex(/^[A-Za-z0-9]+$/, "serial só com letras e números"),
         observacao: z.string().trim().max(1000).nullable().optional(),
+        justificativaSinal: z.string().trim().max(500).nullable().optional(),
       }),
     );
     await closeServiceOrder(db, c.get("user"), id, { ...body, serialOnu: body.serialOnu.toUpperCase() }, { ip: clientIp(c) });

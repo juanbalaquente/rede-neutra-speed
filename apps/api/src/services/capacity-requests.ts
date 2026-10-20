@@ -157,7 +157,9 @@ export async function decideCapacityRequest(
 ) {
   const now = opts.now ?? new Date();
   const note = input.note?.trim() || null;
-  if (input.decision === "recusar" && !note) throw new AppError(422, "motivo_obrigatorio", "Informe o motivo da recusa.");
+  if (input.decision === "recusar" && (!note || note.length < 10)) {
+    throw new AppError(422, "motivo_obrigatorio", "Informe o motivo da recusa (mínimo 10 caracteres): o parceiro vai lê-lo.");
+  }
 
   return db.transaction(async (tx) => {
     const [req] = await tx.select().from(capacityRequests).where(eq(capacityRequests.id, id)).for("update");

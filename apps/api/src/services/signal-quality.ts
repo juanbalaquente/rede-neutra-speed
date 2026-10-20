@@ -8,7 +8,8 @@ import { AppError } from "../lib/errors.js";
 /** O histórico da Wiki tem uma leitura a cada 6 h: consultar de novo antes disso só gasta chamadas. */
 const CACHE_MS = 10 * 60_000;
 const CONCURRENCY = 5;
-const cache = new Map<string, { at: number; value: SignalQuality }>();
+/** `sig` identifica quais clientes estavam na base: cliente novo ou cancelado invalida o cache na hora. */
+const cache = new Map<string, { at: number; sig: string; value: SignalQuality }>();
 
 export const clearSignalQualityCache = () => cache.clear();
 
@@ -55,8 +56,6 @@ export async function signalQuality(db: Db, svc: ClientStatusService | undefined
   if (![7, 30, 90].includes(days)) throw new AppError(400, "periodo_invalido", "Escolha 7, 30 ou 90 dias.");
   const now = opts.now ?? Date.now();
   const key = `${user.partnerId}:${days}`;
-  const hit = cache.get(key);
-  if (hit && now - hit.at < CACHE_MS) return hit.value;
 
   const [p] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, user.partnerId));
   if (!p?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código cadastrado.");
@@ -71,6 +70,11 @@ export async function signalQuality(db: Db, svc: ClientStatusService | undefined
   // Um login por reserva (a ativação mais recente).
   const seen = new Set<string>();
   const clients = rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+
+  // O cache poupa as chamadas à Wiki, mas só vale enquanto a base for a mesma.
+  const sig = clients.map((c) => c.id).sort().join(",");
+  const hit = cache.get(key);
+  if (hit && hit.sig === sig && now - hit.at < CACHE_MS) return hit.value;
 
   const measured = await inBatches(clients, CONCURRENCY, async (c): Promise<ClientSignal | null> => {
     try {
@@ -114,6 +118,6 @@ export async function signalQuality(db: Db, svc: ClientStatusService | undefined
     maisQuedas: ok.filter((m) => m.quedas > 0).sort((a, b) => b.quedas - a.quedas || (a.piorDbm ?? 0) - (b.piorDbm ?? 0)).slice(0, 10),
     abaixoDoMinimo: ok.filter((m) => m.abaixoDoMinimo).sort((a, b) => a.ultimoDbm! - a.minimoDbm - (b.ultimoDbm! - b.minimoDbm)).slice(0, 10),
   };
-  cache.set(key, { at: now, value });
+  cache.set(key, { at: now, sig, value });
   return value;
 }
