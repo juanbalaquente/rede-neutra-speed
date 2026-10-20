@@ -422,12 +422,16 @@ export interface OsInput {
   modeloOnu: string;
   serialOnu: string;
   observacao?: string | null;
+  /** Obrigatória quando o sinal final fica abaixo do mínimo aceitável. */
+  justificativaSinal?: string | null;
 }
 
 export interface InstallationDetail extends Installation {
   os: (OsInput & { fechadaPor: string }) | null;
   fotosFaltando: PhotoKind[];
   fotosObrigatorias: boolean;
+  /** Menor sinal aceitável na ONU (sinal da CTO menos o limite da ativação); null sem ativação concluída. */
+  sinalMinimoDbm: number | null;
 }
 
 export interface AgendaVisit {

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { auditLog, plans, portReservations } from "../src/db/schema.js";
 import { MockActivationService } from "../src/integrations/mock-activation.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
-import { setup } from "./helpers.js";
+import { setup, TEST_NOW } from "./helpers.js";
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 let ctx: Ctx;
@@ -60,6 +60,31 @@ describe("dados do cliente", () => {
     expect((await ctx.setCliente(cookie, reservation.id, { nickname: "Zé" })).status).toBe(200);
     const [kept] = await ctx.db.select().from(portReservations).where(eq(portReservations.id, reservation.id));
     expect(kept?.installAddress).toMatchObject({ cep: "34505000", numero: "507" });
+  });
+
+  it("recusa visita no passado ou a mais de um ano, mas aceita hoje e editar o resto de uma visita antiga", async () => {
+    const { cookie, reservation } = await reserved();
+    const past = await ctx.setCliente(cookie, reservation.id, { visitAt: "2020-01-01T10:00:00-03:00" });
+    expect(past.status).toBe(422);
+    expect((await past.json()).error).toBe("visita_no_passado");
+    const far = await ctx.setCliente(cookie, reservation.id, { visitAt: "9999-12-31T10:00:00Z" });
+    expect(far.status).toBe(422);
+    expect((await far.json()).error).toBe("visita_distante");
+    // Duas horas atrás ainda é "hoje" (tolerância de um dia para quem registra depois da visita).
+    expect((await ctx.setCliente(cookie, reservation.id, { visitAt: new Date(TEST_NOW.getTime() - 2 * 3600_000).toISOString() })).status).toBe(200);
+    // Visita antiga já gravada não impede trocar o apelido, desde que a data não mude.
+    await ctx.db.update(portReservations).set({ visitAt: new Date("2020-01-01T13:00:00Z") }).where(eq(portReservations.id, reservation.id));
+    expect((await ctx.setCliente(cookie, reservation.id, { visitAt: "2020-01-01T13:00:00Z", nickname: "Novo apelido" })).status).toBe(200);
+    // Reagendar para o passado é recusado, também pela agenda.
+    const res = await ctx.call(cookie, "PATCH", `/reservations/${reservation.id}/visita`, { visitAt: "2020-02-01T10:00:00Z" });
+    expect(res.status).toBe(422);
+  });
+
+  it("recusa UF que não existe", async () => {
+    const { cookie, reservation } = await reserved();
+    const endereco = { cep: "34505000", rua: "Rua Tomé de Souza", numero: "507", complemento: "", bairro: "Rosário", cidade: "Sabará", uf: "XX" };
+    expect((await ctx.setCliente(cookie, reservation.id, { endereco })).status).toBe(400);
+    expect((await ctx.setCliente(cookie, reservation.id, { endereco: { ...endereco, uf: "mg" } })).status).toBe(200);
   });
 
   it("recusa plano que não existe ou foi desativado", async () => {

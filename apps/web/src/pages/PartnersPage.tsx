@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api, type AdminPartner, type PartnerLimits } from "../api";
 import { useToast } from "../ui/Toast";
 import { parseBrl } from "../money";
+import { isValidCnpj, maskCnpj } from "../validators";
 import { UsersPanel } from "../ui/UsersPanel";
 import { CtoLimitsCard } from "../ui/CtoLimitsCard";
 import { ApprovalsCard } from "../ui/ApprovalsCard";
@@ -72,7 +73,7 @@ function CodeField({ value, onChange, valid }: { value: string; onChange: (v: st
   return (
     <label className="fld">
       <span>Código do provedor</span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} maxLength={8} placeholder="ex.: JHV" style={{ textTransform: "uppercase", maxWidth: 160 }} />
+      <input value={value} onChange={(e) => onChange(e.target.value.replace(/[^A-Za-z0-9]/g, ""))} maxLength={8} placeholder="ex.: JHV" style={{ textTransform: "uppercase", maxWidth: 160 }} />
       {!valid ? (
         <small className="error">De 2 a 8 letras ou números, sem hífen.</small>
       ) : (
@@ -99,8 +100,13 @@ function LimitsFields({ value, onChange }: { value: PartnerLimits; onChange: (v:
   );
 }
 
-function PartnerEditor({ partner, onChanged }: { partner: AdminPartner; onChanged: () => void }) {
+function PartnerEditor({ partner, onChanged, focusUsers }: { partner: AdminPartner; onChanged: () => void; focusUsers?: boolean }) {
   const say = useToast();
+  const usersRef = useRef<HTMLDivElement>(null);
+  // Parceiro recém-cadastrado: o próximo passo é o supervisor, que fica no fim do painel.
+  useEffect(() => {
+    if (focusUsers) usersRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusUsers]);
   const [regions, setRegions] = useState(partner.allowedRegions);
   const [code, setCode] = useState(partner.code ?? "");
   const [limits, setLimits] = useState<PartnerLimits>({
@@ -200,11 +206,14 @@ function PartnerEditor({ partner, onChanged }: { partner: AdminPartner; onChange
                 <button className="btn sm danger-solid" disabled={busy || !reason.trim()} onClick={() => setStatus("bloqueado")}>Confirmar bloqueio de {partner.name}</button>
                 <button className="btn sec sm" onClick={() => setBlocking(false)}>Voltar</button>
               </div>
+              {!reason.trim() && <small className="muted">Escreva o motivo para liberar o botão.</small>}
             </div>
           )}
         </div>
       </div>
-      <UsersPanel partnerId={partner.id} maxUsers={partner.maxUsers} meId="" emptyHint="Nenhum usuário ainda. Cadastre o supervisor do parceiro para ele entrar no portal." />
+      <div ref={usersRef}>
+        <UsersPanel partnerId={partner.id} maxUsers={partner.maxUsers} meId="" emptyHint="Nenhum usuário ainda. Cadastre o supervisor do parceiro para ele entrar no portal." />
+      </div>
     </div>
   );
 }
@@ -220,6 +229,9 @@ function NewPartnerForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   const digits = cnpj.replace(/\D/g, "");
   const codeNorm = code.trim().toUpperCase();
   const codeOk = codeNorm === "" || CODE_RE.test(codeNorm);
+  const cnpjOk = digits.length === 14 && isValidCnpj(digits);
+  // O botão só libera quando tudo está certo; enquanto não, diz o que falta.
+  const blocker = name.trim().length < 2 ? "Informe a razão social ou o nome." : digits.length !== 14 ? "Informe o CNPJ completo." : !cnpjOk ? "Confira o CNPJ: os dígitos verificadores não batem." : !codeOk ? "O código tem de 2 a 8 letras ou números, sem hífen." : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -243,17 +255,19 @@ function NewPartnerForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
           <label className="fld"><span>Razão social ou nome</span><input value={name} onChange={(e) => setName(e.target.value)} minLength={2} required autoFocus /></label>
           <label className="fld">
             <span>CNPJ</span>
-            <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" required />
+            <input value={cnpj} onChange={(e) => setCnpj(maskCnpj(e.target.value))} inputMode="numeric" placeholder="00.000.000/0000-00" required />
             {cnpj && digits.length !== 14 && <small className="error">O CNPJ tem 14 dígitos ({digits.length} agora).</small>}
+            {digits.length === 14 && !cnpjOk && <small className="error">CNPJ inválido: confira os dígitos.</small>}
           </label>
         </div>
         <CodeField value={code} onChange={setCode} valid={codeOk} />
         <RegionsInput value={regions} onChange={setRegions} />
         <LimitsFields value={limits} onChange={setLimits} />
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn sm" disabled={busy || digits.length !== 14 || name.trim().length < 2 || !codeOk}>{busy ? "Cadastrando…" : "Cadastrar parceiro"}</button>
+          <button className="btn sm" disabled={busy || blocker !== null}>{busy ? "Cadastrando…" : "Cadastrar parceiro"}</button>
           <button type="button" className="btn sec sm" onClick={onCancel}>Cancelar</button>
         </div>
+        {blocker && <small className="muted">{blocker}</small>}
       </div>
     </form>
   );

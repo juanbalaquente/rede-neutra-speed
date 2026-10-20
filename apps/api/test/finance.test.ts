@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { auditLog, plans } from "../src/db/schema.js";
+import { auditLog, plans, portReservations } from "../src/db/schema.js";
 import { MockActivationService } from "../src/integrations/mock-activation.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
 import { OS_REQUIRED_KINDS } from "../src/services/installations.js";
@@ -163,7 +163,9 @@ describe("painel do parceiro", () => {
     // Uma reserva só reservada e outra com a ONU online sem O.S. fechada.
     await ctx.call(ate, "POST", "/viability", { address: ADDRESS });
     const { reservation } = await (await ctx.call(ate, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: ADDRESS })).json();
-    await ctx.setCliente(ate, reservation.id, { visitAt: new Date(Date.now() - 3 * 24 * 3600_000).toISOString() });
+    await ctx.setCliente(ate, reservation.id);
+    // A API recusa visita no passado: a atrasada é forçada direto no banco.
+    await ctx.db.update(portReservations).set({ visitAt: new Date(Date.now() - 3 * 24 * 3600_000) }).where(eq(portReservations.id, reservation.id));
     const d = await (await ctx.call(ate, "GET", "/dashboard")).json();
     expect(d).toMatchObject({ portasAtivas: 1, reservasAbertas: 1, osPendentes: 0, instalacoesNoMes: 1, visitasAtrasadas: 1 });
     expect(d.serie).toHaveLength(6);

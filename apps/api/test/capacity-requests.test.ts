@@ -99,6 +99,8 @@ describe("pedido de vaga em CTO cheia", () => {
     expect((await ctx.call(cookie, "POST", `/admin/capacity-requests/${request.id}/decision`, { decision: "confirmar" })).status).toBe(403);
     const admin = await ctx.login("admin@speed.test");
     expect((await ctx.call(admin, "POST", `/admin/capacity-requests/${request.id}/decision`, { decision: "recusar" })).status).toBe(422);
+    // Motivo de uma letra não ajuda o parceiro: mínimo de 10 caracteres.
+    expect((await ctx.call(admin, "POST", `/admin/capacity-requests/${request.id}/decision`, { decision: "recusar", note: "x" })).status).toBe(422);
     const res = await ctx.call(admin, "POST", `/admin/capacity-requests/${request.id}/decision`, { decision: "recusar", note: "Sem projeto de extensão no bairro" });
     expect((await res.json()).request).toMatchObject({ status: "recusado", decisionNote: "Sem projeto de extensão no bairro" });
     expect(await ctx.db.select().from(portReservations)).toHaveLength(0);

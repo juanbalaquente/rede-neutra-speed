@@ -16,11 +16,14 @@ export function CommandPalette({
   onClose,
   commands,
   onAddress,
+  search,
 }: {
   open: boolean;
   onClose: () => void;
   commands: Command[];
   onAddress: ((address: string) => void) | null;
+  /** Busca em dados (contrato, cliente, parceiro): devolve resultados para o texto digitado. */
+  search?: (query: string) => Command[];
 }) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -48,8 +51,10 @@ export function CommandPalette({
         run: () => onAddress(query.trim()),
       });
     }
-    return [...list, ...found];
-  }, [query, commands, onAddress]);
+    // Dados primeiro quando o texto parece contrato, cliente ou parceiro; telas depois.
+    const data = search && q.length >= 2 ? search(q) : [];
+    return [...list, ...data, ...found];
+  }, [query, commands, onAddress, search]);
 
   if (!open) return null;
 
@@ -83,7 +88,7 @@ export function CommandPalette({
               setQuery(e.target.value);
               setCursor(0);
             }}
-            placeholder="Digite um endereço ou o nome de uma tela"
+            placeholder="Endereço, contrato, cliente ou nome de uma tela"
             aria-label="Buscar"
           />
           <kbd>Esc</kbd>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { clientStatusApi, type Fleet } from "./clientStatusApi";
 import { loadOverview, type Overview } from "./ui/SpeedOverview";
-import { api, type Dashboard, type MfaState, type Partner, type Reservation, type User } from "./api";
+import { api, type AdminPartner, type Dashboard, type Installation, type MfaState, type Partner, type Reservation, type User } from "./api";
 import { LoginPage } from "./pages/LoginPage";
 import { MfaSetupPage } from "./pages/MfaSetupPage";
 import { ConferirPage } from "./pages/ConferirPage";
@@ -34,6 +34,19 @@ const ROLE_LABEL: Record<User["role"], string> = {
 
 /** A partir de quanto tempo antes do vencimento o portal avisa o parceiro. */
 const EXPIRY_WARN_MS = 3 * 3600_000;
+
+const PARTNER_TABS: Tab[] = ["inicio", "viabilidade", "reservas", "instalacoes", "agenda", "chamados"];
+const TABS_BY_ROLE: Record<User["role"], Tab[]> = {
+  atendente: PARTNER_TABS,
+  supervisor: [...PARTNER_TABS, "financeiro", "equipe"],
+  admin_speed: ["viabilidade", "reservas", "instalacoes", "agenda", "chamados", "painel", "parceiros", "pedidos", "auditoria", "conferir"],
+};
+
+/** Tela escolhida na barra de endereço (#/reservas); vale só se o perfil pode ver. */
+function tabFromHash(role: User["role"]): Tab | null {
+  const name = window.location.hash.replace(/^#/?/, "").split("/")[0] as Tab;
+  return TABS_BY_ROLE[role].includes(name) ? name : null;
+}
 
 const TAB_LABEL: Record<Tab, string> = { inicio: "Painel", financeiro: "Financeiro", viabilidade: "Nova venda", reservas: "Reservas", instalacoes: "Instalações", agenda: "Agenda", chamados: "Chamados", conferir: "CTOs para conferir", pedidos: "Pedidos de vaga", parceiros: "Parceiros", painel: "Painel da rede", auditoria: "Auditoria", equipe: "Equipe" };
 
@@ -91,7 +104,20 @@ function Portal() {
 function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const { theme, choose } = useTheme();
   // O administrador Speed começa pela gestão; o parceiro, pela venda.
-  const [tab, setTab] = useState<Tab>(user.role === "admin_speed" ? "painel" : "inicio");
+  const home: Tab = user.role === "admin_speed" ? "painel" : "inicio";
+  const [tab, setTabState] = useState<Tab>(() => tabFromHash(user.role) ?? home);
+  // Cada tela tem endereço próprio: F5 fica na tela, o botão voltar do navegador volta de tela e dá para guardar o link.
+  const setTab = useCallback((next: Tab) => {
+    setTabState(next);
+    if (window.location.hash !== `#/${next}`) window.location.hash = `/${next}`;
+  }, []);
+  useEffect(() => {
+    if (window.location.hash !== `#/${tab}`) window.history.replaceState(null, "", `#/${tab}`);
+    const onHash = () => setTabState(tabFromHash(user.role) ?? home);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.role]);
   const [partner, setPartner] = useState<Partner | null>(null);
   const [reservations, setReservations] = useState<Reservation[] | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -166,6 +192,36 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
   useEffect(() => {
     if (tab !== "reservas") setClienteFor(null);
   }, [tab]);
+
+  // Dados da busca (Ctrl K): contratos e clientes de quem pode ver; parceiros só para a Speed. Carrega ao abrir a busca.
+  const [searchData, setSearchData] = useState<{ inst: Installation[]; partners: AdminPartner[] }>({ inst: [], partners: [] });
+  useEffect(() => {
+    if (!paletteOpen) return;
+    api.installations().then((r) => setSearchData((d) => ({ ...d, inst: r.installations }))).catch(() => {});
+    if (user.role === "admin_speed") api.adminPartners().then((r) => setSearchData((d) => ({ ...d, partners: r.partners }))).catch(() => {});
+  }, [paletteOpen, user.role]);
+  const searchData2 = useCallback(
+    (q: string): Command[] => {
+      const has = (v: string | null | undefined) => !!v && v.toLowerCase().includes(q);
+      const clients = searchData.inst
+        .filter((i) => has(i.contract) || has(i.nickname) || has(i.address) || has(i.ctoName) || has(i.onuSerial) || has(i.partnerName))
+        .slice(0, 8)
+        .map<Command>((i) => ({
+          id: `inst-${i.id}`,
+          group: "Contratos e clientes",
+          title: `${i.contract ?? "sem contrato"} · ${i.nickname ?? i.address}`,
+          hint: i.partnerName ?? i.ctoName,
+          icon: <ListIcon />,
+          run: () => { setInstId(i.id); setTab("instalacoes"); },
+        }));
+      const parceiros = searchData.partners
+        .filter((x) => has(x.name) || has(x.code) || has(x.cnpj))
+        .slice(0, 5)
+        .map<Command>((x) => ({ id: `par-${x.id}`, group: "Parceiros", title: x.name, hint: x.code ?? undefined, icon: <PeopleIcon />, run: () => setTab("parceiros") }));
+      return [...clients, ...parceiros];
+    },
+    [searchData, setTab],
+  );
 
   const activeCount = reservations?.filter((r) => r.status === "ativa").length ?? 0;
 
@@ -394,7 +450,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
         )}
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} onAddress={user.role === "admin_speed" ? null : consult} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} onAddress={user.role === "admin_speed" ? null : consult} search={searchData2} />
     </div>
   );
 }

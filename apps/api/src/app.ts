@@ -39,6 +39,8 @@ export interface AppDeps {
   config: Config;
   integrations: Integrations;
   photoStorage: PhotoStorage;
+  /** Relógio do servidor, só para validar datas de visita; os testes fixam o dia. */
+  now?: () => Date;
 }
 
 type Env = { Variables: { user: SessionUser; userRow: typeof users.$inferSelect } };
@@ -73,7 +75,7 @@ const installAddressSchema = z.object({
     .refine((s) => BRAZIL_UFS.includes(s), "UF inválida"),
 });
 
-export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
+export function createApp({ db, config, integrations, photoStorage, now }: AppDeps) {
   const app = new Hono<Env>().basePath("/api");
 
   // Conta só tentativas que falharam; login certo zera o contador.
@@ -501,7 +503,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
         endereco: installAddressSchema.optional(),
       }),
     );
-    await saveCliente(db, c.get("user"), id, { ...body, visitAt: new Date(body.visitAt) }, { ip: clientIp(c) });
+    await saveCliente(db, c.get("user"), id, { ...body, visitAt: new Date(body.visitAt) }, { ip: clientIp(c), now: now?.() });
     return c.json({ installation: await getInstallation(db, c.get("user"), id) });
   });
 
@@ -523,7 +525,7 @@ export function createApp({ db, config, integrations, photoStorage }: AppDeps) {
   app.patch("/reservations/:id/visita", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));
     const body = await parseBody(c, z.object({ visitAt: z.string().datetime({ offset: true }), technician: z.string().trim().min(2).max(120).optional() }));
-    await reschedule(db, c.get("user"), id, { visitAt: new Date(body.visitAt), technician: body.technician }, { ip: clientIp(c) });
+    await reschedule(db, c.get("user"), id, { visitAt: new Date(body.visitAt), technician: body.technician }, { ip: clientIp(c), now: now?.() });
     return c.json({ installation: await getInstallation(db, c.get("user"), id) });
   });
 

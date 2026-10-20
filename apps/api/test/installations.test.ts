@@ -62,6 +62,36 @@ describe("fechar a O.S.", () => {
     expect(detail.installation.fotosFaltando).toEqual(["cto_aberta", "etiqueta_porta", "medicao_onu", "sobra_fibra", "onu_instalada"]);
   });
 
+  it("sinal final abaixo do mínimo só fecha com justificativa, que fica na O.S. e na auditoria", async () => {
+    const { cookie, reservation } = await partnerReservation();
+    await toOnline(cookie, reservation.id);
+    await uploadAll(cookie, reservation.id);
+    const url = `/reservations/${reservation.id}/os/close`;
+    // CTO -20 dBm com limite de 1,5 dB: o mínimo é -21,5.
+    expect((await (await ctx.call(cookie, "GET", `/installations/${reservation.id}`)).json()).installation.sinalMinimoDbm).toBe(-21.5);
+    const semMotivo = await ctx.call(cookie, "POST", url, { ...OS, sinalFinalDbm: -25 });
+    expect(semMotivo.status).toBe(422);
+    const body = await semMotivo.json();
+    expect(body.error).toBe("sinal_fora_do_limite");
+    expect(body.message).toContain("-21.5");
+    expect((await ctx.call(cookie, "POST", url, { ...OS, sinalFinalDbm: -25, justificativaSinal: "curto" })).status).toBe(422);
+    const ok = await ctx.call(cookie, "POST", url, { ...OS, sinalFinalDbm: -25, justificativaSinal: "Conector refeito, cliente com fibra longa" });
+    expect(ok.status).toBe(200);
+    const { installation } = await ok.json();
+    expect(installation.os.justificativaSinal).toBe("Conector refeito, cliente com fibra longa");
+    const log = (await ctx.db.select().from(auditLog)).find((l) => l.action === "os.fechada");
+    expect(log?.data).toMatchObject({ minimoDbm: -21.5, justificativaSinal: "Conector refeito, cliente com fibra longa" });
+  });
+
+  it("sinal dentro do limite fecha sem justificativa e não guarda texto", async () => {
+    const { cookie, reservation } = await partnerReservation();
+    await toOnline(cookie, reservation.id);
+    await uploadAll(cookie, reservation.id);
+    const ok = await ctx.call(cookie, "POST", `/reservations/${reservation.id}/os/close`, { ...OS, justificativaSinal: "não precisava" });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).installation.os.justificativaSinal).toBeNull();
+  });
+
   it("fecha com tudo: guarda os dados, conclui a visita e audita", async () => {
     const { cookie, reservation } = await partnerReservation();
     await toOnline(cookie, reservation.id);

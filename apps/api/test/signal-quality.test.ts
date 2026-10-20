@@ -105,6 +105,16 @@ describe("qualidade do sinal da base", () => {
     expect((await ctx.call(sup, "GET", "/dashboard/sinal?days=45")).status).toBe(400);
   });
 
+  it("cliente novo aparece na hora, sem esperar os 10 min do cache", async () => {
+    const { sup, ate } = await partner();
+    expect((await quality(sup)).totais.clientes).toBe(0);
+    await installed(ate, "10001");
+    wiki.script.set("10001", { values: [-20], quedas: 0 });
+    const depois = await quality(sup);
+    expect(depois.totais.clientes).toBe(1);
+    expect(depois.totais.comLeitura).toBe(1);
+  });
+
   it("sem clientes não chama a Wiki; só o supervisor vê; um parceiro não mistura o outro", async () => {
     const mine = await partner();
     expect((await quality(mine.sup)).totais).toMatchObject({ clientes: 0, comLeitura: 0, mediaBaseDbm: null });
