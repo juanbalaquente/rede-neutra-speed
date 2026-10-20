@@ -19,7 +19,7 @@ O `POST /v3/contratos` **ainda não existe** na Wiki: o módulo de criação est
 | Estado do contrato recém-criado | **Medido:** `v_status` vem "Normal" antes de aprovar; a aprovação é outro campo. A Wiki combina e devolve `pendente_aprovacao`, `rejeitado` (novo), `ativo`, `bloqueado`, `suspenso`, `cancelado`. | **Feito:** `rejeitado` aparece como "Rejeitado". |
 | Repetir `parcial` com a mesma chave | Seguro: o número do contrato é gravado antes de seguir; `conexao_ajustada`, `endereco_gravado` e a aprovação podem se repetir. | Confirma o que o portal faz. |
 | Conexão ao cancelar | **Medido:** o Voalle apaga a conexão (login e senha) do cadastro e do RADIUS; o login fica só no histórico; o número de contrato não é reaproveitado. | Nada a fazer no portal. |
-| Tempo até aparecer no OLTCloud | Não medido. A ativação espera **até 2 h** pela sincronização. `client/create` fora do fluxo por enquanto. | **Feito:** a tela avisa que pode levar até 2 h e que não é para refazer o pedido. |
+| Tempo até aparecer no OLTCloud | **Medido (21 out 2026):** a sincronização automática está desligada no OLTCloud; a Wiki importa a conexão do Voalle na etapa `cliente_no_oltcloud` do próprio contrato. Contrato com as 4 etapas em **40 s**; ONU de "Liberar" a online em **1 min 12 s** (33721). O teto de 2 h da ativação fica só como rede de segurança. | **Feito:** o contrato sai no agendamento e o cartão mostra "Pronto para instalar"; a tela da ONU ainda avisa da espera se o cliente não estiver no OLTCloud. |
 | Limite de contratos por CNPJ | **Medido:** o maior cliente tem 107 contratos, sem problema. Sem limite documentado; reavaliar se passar de algumas centenas. | Nenhum. |
 
 **Mapeamento velocidade → serviço do Voalle (confirmado pela Wiki):**
