@@ -350,8 +350,9 @@ export interface PendingOnu {
 
 export interface ActivationSignal {
   ctoDbm: number;
-  onuDbm: number;
-  perdaDb: number;
+  /** Null até a Wiki ler o sinal da ONU. */
+  onuDbm: number | null;
+  perdaDb: number | null;
   limiteDb: number;
 }
 

@@ -49,6 +49,20 @@ describe("WikiActivationService (v2): código do parceiro e rotas desligadas", (
     expect(calls.map((c) => `${c.method} ${c.url.split("/v2")[1]} ${c.headers["X-RedeNeutra-Partner"]}`)).toEqual(["GET /ativacoes/a1 JHV", "POST /ativacoes/a1/decisao JHV"]);
   });
 
+  it("aceita a leitura antes da ONU ser medida: sinal com onuDbm e perdaDb nulos (aguardando_cliente, resposta real de 21 out 2026)", async () => {
+    const real = {
+      ativacaoId: "060e893a-cd5c-4f31-9732-13b023a5c40d",
+      estado: "aguardando_cliente",
+      serial: "HWTC6FE1FCB2",
+      sinal: { ctoDbm: -20, onuDbm: null, perdaDb: null, limiteDb: 1.5, mediaOltcloudDbm: null, amostras: 0 },
+      prazoDecisaoAte: null,
+      motivo: null,
+      atualizadoEm: "2026-10-21T01:27:45.522Z",
+    };
+    const snap = await build(() => json(real)).svc.get(real.ativacaoId, "JHV");
+    expect(snap).toMatchObject({ estado: "aguardando_cliente", sinal: { ctoDbm: -20, onuDbm: null, perdaDb: null } });
+  });
+
   it("os três 503 de v2 desligada viram ActivationRefused; outros 503 seguem como queda da Wiki", async () => {
     for (const code of ["chave_de_escrita_nao_configurada", "ativacao_desligada", "leitura_de_sinal_pendente"]) {
       const { svc } = build(() => json({ error: code }, 503));

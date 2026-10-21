@@ -35,8 +35,9 @@ const snapshotSchema = z.object({
   sinal: z
     .object({
       ctoDbm: z.number(),
-      onuDbm: z.number(),
-      perdaDb: z.number(),
+      // Antes da leitura da ONU (aguardando_cliente, autorizando) a Wiki manda null nos dois.
+      onuDbm: z.number().nullable().default(null),
+      perdaDb: z.number().nullable().default(null),
       limiteDb: z.number(),
       mediaOltcloudDbm: z.number().nullable().default(null),
       amostras: z.number().int().nullable().default(null),

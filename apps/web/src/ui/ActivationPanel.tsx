@@ -74,7 +74,7 @@ function Decision({ activation, onChange }: { activation: Activation; onChange: 
           Se não for possível medir, você pode prosseguir com justificativa (abre chamado para a Infra) ou cancelar a ativação.
         </p>
       )}
-      {sinal && (
+      {sinal && sinal.onuDbm !== null && sinal.perdaDb !== null && (
         <p>
           Na CTO você mediu <span className="mono">{fmtDb(sinal.ctoDbm)} dBm</span>; na ONU deu <span className="mono">{fmtDb(sinal.onuDbm)} dBm</span>.
           A perda é de <b>{fmtDb(sinal.perdaDb)} dB</b>, e o limite é {fmtDb(sinal.limiteDb)} dB.
@@ -135,7 +135,7 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
       {done && (
         <p>
           <span className="badge b-ok">ONU liberada</span>{" "}
-          {activation.snapshot?.sinal && <span className="muted">perda de {fmtDb(activation.snapshot.sinal.perdaDb)} dB</span>}
+          {activation.snapshot?.sinal?.perdaDb != null && <span className="muted">perda de {fmtDb(activation.snapshot.sinal.perdaDb)} dB</span>}
         </p>
       )}
     </div>
@@ -173,6 +173,7 @@ export function ActivationPanel({
   // A chave nasce com o formulário: reenviar o mesmo pedido (rede caiu) não duplica.
   const key = useRef(newUuid());
   const reportedDone = useRef(false);
+  const lastPollError = useRef("");
 
   const loadOnus = useCallback(() => {
     setOnus(null);
@@ -197,10 +198,15 @@ export function ActivationPanel({
   useEffect(() => {
     if (!activationId || !activationState || FINAL.includes(activationState)) return;
     const t = setInterval(() => {
-      api.activation(activationId).then((r) => setActivation(r.activation)).catch(() => {});
+      api.activation(activationId).then((r) => { lastPollError.current = ""; setActivation(r.activation); }).catch((e) => {
+        // Avisa uma vez por erro diferente (a consulta repete a cada 4 s): antes a falha sumia e a tela parecia parada.
+        const text = e instanceof Error ? e.message : "Falha ao consultar a ativação.";
+        if (text !== lastPollError.current) say(`Não consegui ler o andamento: ${text}`, "bad");
+        lastPollError.current = text;
+      });
     }, 4000);
     return () => clearInterval(t);
-  }, [activationId, activationState]);
+  }, [activationId, activationState, say]);
 
   useEffect(() => {
     if (activationState === "online" && !reportedDone.current) {

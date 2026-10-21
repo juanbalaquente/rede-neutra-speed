@@ -138,8 +138,9 @@ export interface ActivationSnapshot {
   serial: string;
   sinal: {
     ctoDbm: number;
-    onuDbm: number;
-    perdaDb: number;
+    /** Null até a Wiki ler o sinal da ONU. */
+    onuDbm: number | null;
+    perdaDb: number | null;
     limiteDb: number;
     mediaOltcloudDbm: number | null;
     amostras: number | null;
