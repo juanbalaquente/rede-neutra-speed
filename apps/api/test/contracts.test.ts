@@ -234,6 +234,13 @@ describe("WikiContractService (contrato v3, seção H)", () => {
     expect(pronto).toMatchObject({ estado: "concluida", resultado: { contrato: "33721", login: "33721-JHV" } });
   });
 
+  it("guarda o motivo da operação (sistema_externo_indisponivel) e aceita a resposta sem ele", async () => {
+    const com = await build(() => json({ operacaoId: "op1", tipo: "contrato", estado: "recebida", etapas: [], motivo: "sistema_externo_indisponivel: dns", atualizadoEm: "2026-10-21T10:30:00-03:00" })).svc.get("op1", "JHV");
+    expect(com!.motivo).toBe("sistema_externo_indisponivel: dns");
+    const sem = await build(() => json({ operacaoId: "op1", tipo: "contrato", estado: "recebida", etapas: [], atualizadoEm: "2026-10-21T10:30:00-03:00" })).svc.get("op1", "JHV");
+    expect(sem!.motivo).toBeNull();
+  });
+
   it("recusa de negócio vira OperationRefused; 404 é null; resposta torta é erro", async () => {
     await expect(build(() => json({ error: "parceiro_sem_cadastro" }, 422)).svc.create(REQ)).rejects.toMatchObject({ code: "parceiro_sem_cadastro", status: 422 });
     expect(await build(() => json({ error: "x" }, 404)).svc.get("nope", "JHV")).toBeNull();
@@ -362,6 +369,20 @@ describe("contratos com problema e abandono (Speed)", () => {
     // A tela consulta a cada 3 s e cada leitura regrava updated_at: o alerta conta desde o pedido.
     for (let i = 0; i < 3; i++) expect((await read(ate, id)).contract!.state).toBe("recebida");
     expect((await issues()).find((i) => i.reservationId === id)?.kind).toBe("parado");
+  });
+
+  it("sistema_externo_indisponivel da Wiki chega à tela do contrato e ao cartão, e some quando ela volta (21 out 2026)", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    wiki.outageMotivo = "sistema_externo_indisponivel: getaddrinfo EAI_AGAIN erp.speednettelecom.com.br";
+    await create(ate, id);
+    const lendo = (await read(ate, id)).contract!;
+    expect(lendo.reason).toMatch(/^sistema_externo_indisponivel/);
+    const listed = (await (await ctx.call(ate, "GET", "/reservations")).json()).reservations.find((r: { id: string }) => r.id === id);
+    expect(listed.contractRequest.reason).toMatch(/^sistema_externo_indisponivel/);
+    wiki.outageMotivo = null;
+    const done = await settle(ate, id);
+    expect(done).toMatchObject({ state: "concluida", reason: null });
   });
 
   it("abandonar cancela a reserva, devolve a vaga e registra o número do contrato para cancelar no Voalle", async () => {

@@ -149,7 +149,7 @@ async function refresh(db: Db, svc: ContractService, row: Row): Promise<Row> {
   }
   const [updated] = await db
     .update(contractRequests)
-    .set({ state: snap.estado, steps: snap.etapas, contract: result?.contrato ?? null, login: result?.login ?? null, reason: snap.estado === "falhou" ? "falha_na_wiki" : null, updatedAt: new Date() })
+    .set({ state: snap.estado, steps: snap.etapas, contract: result?.contrato ?? null, login: result?.login ?? null, reason: snap.estado === "falhou" ? "falha_na_wiki" : (snap.motivo ?? null), updatedAt: new Date() })
     .where(eq(contractRequests.id, row.id))
     .returning();
   if (snap.estado !== row.state) {

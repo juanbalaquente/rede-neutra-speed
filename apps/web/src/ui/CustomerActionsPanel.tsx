@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type CustomerOperation, type OperationState, type OperationType, type User } from "../api";
+import { outageText } from "./outage";
 import { useToast } from "./Toast";
 
 const TYPE_LABEL: Record<OperationType, string> = { bloqueio: "Bloqueio", desbloqueio: "Desbloqueio", reinicio: "Reinício da ONU", cancelamento: "Cancelamento" };
@@ -132,6 +133,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
               </div>
               {o.notSent && <small className="muted">O pedido não chegou ao sistema da Speed. Reenviar não duplica a operação.</small>}
               {o.reason && <small className="muted">{o.reason}</small>}
+              {outageText(o.wikiNote) && <small style={{ color: "var(--bad)" }}>{outageText(o.wikiNote)}</small>}
               {o.state === "recusada" && o.decisionReason && <small style={{ color: "var(--bad)" }}>Motivo da Speed: {o.decisionReason}</small>}
               {o.steps.length > 0 && (
                 <ol className="atv-steps ops-steps">

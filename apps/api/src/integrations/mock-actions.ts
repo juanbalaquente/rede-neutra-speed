@@ -17,6 +17,8 @@ const CANCEL_STEPS = ["contrato_encerrado", "onu_removida", "porta_devolvida"];
  * (fica "parcial" e a repetição continua de onde parou); ...-SEMACK faz o reinício terminar sem confirmação.
  */
 export class MockCustomerActions implements CustomerActions {
+  /** Motivo que a Wiki manda enquanto um sistema de origem não responde ("sistema_externo_indisponivel: ..."). */
+  outageMotivo: string | null = null;
   private readonly byId = new Map<string, Entry>();
   private readonly byKey = new Map<string, string>();
 
@@ -44,7 +46,7 @@ export class MockCustomerActions implements CustomerActions {
     if (!e) return null;
     if (e.estado === "recebida") e.estado = "executando";
     else if (e.estado === "executando") this.step(e);
-    return { operacaoId: id, tipo: e.req.tipo, login: e.req.login, estado: e.estado, etapas: e.etapas.map((s) => ({ ...s })), atualizadoEm: new Date().toISOString() };
+    return { operacaoId: id, tipo: e.req.tipo, login: e.req.login, estado: e.estado, etapas: e.etapas.map((s) => ({ ...s })), motivo: e.estado === "concluida" ? null : this.outageMotivo, atualizadoEm: new Date().toISOString() };
   }
 
   private step(e: Entry) {

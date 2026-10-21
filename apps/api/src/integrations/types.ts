@@ -200,6 +200,8 @@ export interface OperationSnapshot {
   login: string;
   estado: OperationState;
   etapas: OperationStep[];
+  /** "sistema_externo_indisponivel: <erro>": a Wiki segue tentando; some na primeira rodada que der certo. */
+  motivo?: string | null;
   atualizadoEm: string;
 }
 
@@ -243,6 +245,8 @@ export interface ContractSnapshot {
   etapas: OperationStep[];
   /** Só quando concluída. */
   resultado: { contrato: string; login: string } | null;
+  /** "sistema_externo_indisponivel: <erro>": a Wiki segue tentando; some na primeira rodada que der certo. */
+  motivo?: string | null;
   atualizadoEm: string;
 }
 

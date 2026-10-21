@@ -33,6 +33,8 @@ export class MockContractService implements ContractService {
   manualNext = false;
   /** Próximo pedido é aceito e nunca sai de "recebida" (fila da Wiki parada, 21 out 2026). */
   stuckNext = false;
+  /** Motivo que a Wiki manda enquanto um sistema de origem não responde ("sistema_externo_indisponivel: ..."). */
+  outageMotivo: string | null = null;
   readonly created: ContractRequest[] = [];
   private readonly scenario = new Map<string, "partial" | "hard" | "manual" | "stuck">();
 
@@ -123,6 +125,7 @@ export class MockContractService implements ContractService {
       estado: e.estado,
       etapas: e.etapas.map((s) => ({ ...s })),
       resultado: e.estado === "concluida" ? { contrato: e.contrato, login: `${e.contrato}-${e.req.partnerCode}` } : null,
+      motivo: e.estado === "concluida" ? null : this.outageMotivo,
       atualizadoEm: new Date().toISOString(),
     };
   }

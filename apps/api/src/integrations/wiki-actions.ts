@@ -18,6 +18,8 @@ const snapshotSchema = z.object({
   login: z.string().min(1),
   estado,
   etapas: z.array(z.object({ nome: z.string(), estado: z.enum(["pendente", "concluida", "falhou", "aguardando_equipe"]), motivo: z.string().nullable().optional() })).default([]),
+  /** Motivo da operação. "sistema_externo_indisponivel: <erro>" = a Wiki segue tentando sozinha (21 out 2026). */
+  motivo: z.string().nullable().default(null),
   atualizadoEm: z.string().datetime({ offset: true }),
 });
 

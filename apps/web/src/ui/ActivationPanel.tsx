@@ -4,6 +4,7 @@ import { newUuid } from "../uuid";
 import { PhotoSlots } from "./PhotoSlots";
 import { useDraft } from "./useDraft";
 import { ContractStep, type ContractStatus } from "./ContractStep";
+import { outageText } from "./outage";
 import { useToast } from "./Toast";
 
 const FINAL: ActivationState[] = ["online", "falha_provisionamento", "cancelada", "falhou"];
@@ -125,7 +126,11 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
           );
         })}
       </ol>
-      {note && <p className={ended ? "error" : "muted"}>{note}{activation.snapshot?.motivo && state !== "cancelada" ? ` (${activation.snapshot.motivo})` : ""}</p>}
+      {outageText(activation.snapshot?.motivo) && !ended ? (
+        <p className="error" role="alert">{outageText(activation.snapshot?.motivo)} Não refaça o pedido.</p>
+      ) : (
+        note && <p className={ended ? "error" : "muted"}>{note}{activation.snapshot?.motivo && state !== "cancelada" ? ` (${activation.snapshot.motivo})` : ""}</p>
+      )}
       {activation.snapshot?.vlan && ["provisionando", "online"].includes(state) && (
         <p className="atv-vlan">
           Configure a ONU do cliente com o login <span className="mono">{activation.pppLogin}</span> e a <b>VLAN <span className="mono">{activation.snapshot.vlan}</span></b>.

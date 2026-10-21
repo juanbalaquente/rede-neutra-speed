@@ -194,6 +194,20 @@ describe("cancelar o cliente e devolver a vaga", () => {
     expect((await ctx.call(p.sup, "POST", `/operations/${op.id}/retry`)).status).toBe(409);
   });
 
+  it("motivo sistema_externo_indisponivel da Wiki aparece na operação e some quando ela volta", async () => {
+    const p = await partner("77777777000177", "DNS");
+    const id = await installed(p.ate, "30005");
+    actions.outageMotivo = "sistema_externo_indisponivel: getaddrinfo EAI_AGAIN";
+    const op = (await (await start(p.sup, id, { type: "reinicio" })).json()).operation;
+    const lendo = (await (await ctx.call(p.sup, "GET", `/operations/${op.id}`)).json()).operation;
+    expect(lendo.wikiNote).toMatch(/^sistema_externo_indisponivel/);
+    actions.outageMotivo = null;
+    const fim = await settle(p.sup, op.id);
+    const depois = (await (await ctx.call(p.sup, "GET", `/installations/${id}/operations`)).json()).operations.find((o: { id: string }) => o.id === op.id);
+    expect(fim.state).not.toBe("recebida");
+    expect(depois.wikiNote ?? null).toBeNull();
+  });
+
   it("pedido que não chegou à Wiki (automação desligada lá, 21 out 2026) fica marcado para reenviar e reenvia sem duplicar", async () => {
     const p = await partner("66666666000166", "OFF");
     const id = await installed(p.ate, "30004");

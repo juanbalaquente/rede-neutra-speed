@@ -4,6 +4,7 @@ import { ActivationPanel } from "../ui/ActivationPanel";
 import { CapacityRequestsList } from "../ui/CapacityRequestsList";
 import { ClienteForm } from "../ui/ClienteForm";
 import { ContractStep, type ContractStatus } from "../ui/ContractStep";
+import { outageText } from "../ui/outage";
 import { useToast } from "../ui/Toast";
 import { fmtVisit } from "../ui/visit";
 
@@ -47,6 +48,7 @@ function ContractLine({ r }: { r: Reservation }) {
   }
   if (c.state === "aguardando_equipe") return <p className="rv-cli warn">Contrato esperando uma etapa da equipe da Speed.</p>;
   if (c.state === "falhou" || c.state === "parcial") return <p className="rv-cli warn">O contrato parou no meio. Abra o contrato para ver.</p>;
+  if (outageText(c.reason)) return <p className="rv-cli warn">{outageText(c.reason)} Não crie outro contrato.</p>;
   if (c.createdAt && Date.now() - new Date(c.createdAt).getTime() > 3 * 60_000) {
     return <p className="rv-cli warn">O sistema da Speed está demorando para criar o contrato. Não crie outro: ele continua sozinho.</p>;
   }

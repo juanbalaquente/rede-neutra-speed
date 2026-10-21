@@ -260,6 +260,8 @@ export const customerOperations = pgTable(
     /** recebida | executando | concluida | parcial | sem_confirmacao | aguardando_equipe | falhou */
     state: text("state").notNull().default("recebida"),
     steps: jsonb("steps"),
+    /** Motivo que a Wiki manda com a operação em andamento (ex.: sistema_externo_indisponivel). Some quando volta. */
+    wikiNote: text("wiki_note"),
     /** Aprovação da Speed (quando o tipo exige): quem decidiu, quando e o motivo da recusa. */
     decidedBy: uuid("decided_by").references(() => users.id),
     decidedAt: timestamp("decided_at", { withTimezone: true }),

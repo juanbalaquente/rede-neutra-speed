@@ -103,6 +103,8 @@ export interface ContractSummary {
   /** O cliente já está no sistema de rede: a ONU sai sem espera. */
   readyForOnu: boolean;
   createdAt?: string;
+  /** Recusa, falha ou sistema_externo_indisponivel enquanto a Wiki tenta de novo. */
+  reason?: string | null;
 }
 
 /** Endereço da instalação, no formato do contrato (CEP só com dígitos). */
@@ -542,6 +544,8 @@ export interface CustomerOperation {
   state: OperationState;
   /** O pedido não chegou à Wiki: a tela oferece reenviar (mesma chave). */
   notSent?: boolean;
+  /** Motivo da Wiki com a operação em andamento (ex.: sistema_externo_indisponivel). */
+  wikiNote?: string | null;
   steps: { nome: string; estado: "pendente" | "concluida" | "falhou" | "aguardando_equipe"; motivo?: string | null }[];
   createdAt: string;
   updatedAt: string;

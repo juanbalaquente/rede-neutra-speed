@@ -120,6 +120,13 @@
       "when": 1792539987022,
       "tag": "0016_periodo_visita",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792605935460,
+      "tag": "0017_observacao_da_wiki",
+      "breakpoints": true
     }
   ]
 }

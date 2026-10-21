@@ -3,6 +3,7 @@ import { ApiError, request, type Address } from "../api";
 import { AddressFields, addressPayload, addressProblem, addressValid, normalizeAddress } from "./AddressFields";
 import { newUuid } from "../uuid";
 import { useDraft } from "./useDraft";
+import { outageText } from "./outage";
 import { useToast } from "./Toast";
 
 export interface ContractView {
@@ -211,7 +212,11 @@ export function ContractStep({ reservationId, address, saved, onChange }: { rese
               ))}
             </ul>
           )}
-          {contract.createdAt && Date.now() - new Date(contract.createdAt).getTime() > SLOW_MS ? (
+          {outageText(contract.reason) ? (
+            <p className="error" role="alert" style={{ margin: 0 }}>
+              {outageText(contract.reason)} <b>Não crie outro contrato:</b> ele continua sozinho quando o sistema voltar.
+            </p>
+          ) : contract.createdAt && Date.now() - new Date(contract.createdAt).getTime() > SLOW_MS ? (
             // 21 out 2026: a Wiki aceitou e não processou por horas, e a tela só dizia "criando".
             <p className="error" role="alert" style={{ margin: 0 }}>
               O sistema da Speed recebeu o pedido, mas está demorando para criar o contrato. <b>Não crie outro:</b> ele continua sozinho quando o sistema responder. Se passar de 15 minutos, a Speed recebe um alerta.

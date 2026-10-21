@@ -26,6 +26,8 @@ export const operationView = (o: Row) => ({
   state: o.state as OperationState,
   /** Pedido que não chegou à Wiki (fora do ar ou automação desligada): reenviar com a mesma chave é seguro. */
   notSent: o.state === "recebida" && !o.wikiOperationId,
+  /** Motivo da Wiki com a operação em andamento (ex.: sistema_externo_indisponivel). */
+  wikiNote: o.wikiNote,
   steps: (o.steps as OperationSnapshot["etapas"] | null) ?? [],
   createdAt: o.createdAt,
   updatedAt: o.updatedAt,
@@ -163,7 +165,7 @@ export async function refreshOperation(db: Db, svc: CustomerActions, user: Sessi
   if (!snap) throw new AppError(502, "operacao_perdida", "A Wiki não reconhece essa operação. Fale com a Speed.");
   const [updated] = await db
     .update(customerOperations)
-    .set({ state: snap.estado, steps: snap.etapas, updatedAt: new Date() })
+    .set({ state: snap.estado, steps: snap.etapas, wikiNote: snap.motivo ?? null, updatedAt: new Date() })
     .where(eq(customerOperations.id, row.id))
     .returning();
   if (snap.estado !== row.state) {

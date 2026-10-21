@@ -19,6 +19,8 @@ const snapshotSchema = z.object({
   estado,
   etapas: z.array(z.object({ nome: z.string(), estado: z.enum(["pendente", "concluida", "falhou", "aguardando_equipe"]), motivo: z.string().nullable().optional() })).default([]),
   resultado: z.object({ contrato: z.string().min(1), login: z.string().min(1) }).nullable().default(null),
+  /** Motivo da operação. "sistema_externo_indisponivel: <erro>" = a Wiki segue tentando sozinha (21 out 2026). */
+  motivo: z.string().nullable().default(null),
   atualizadoEm: z.string().datetime({ offset: true }),
 });
 
@@ -78,6 +80,6 @@ export class WikiContractService implements ContractService {
     const { status, json } = await this.call("GET", `/operacoes/${encodeURIComponent(operacaoId)}`, partnerCode);
     if (status === 404) return null;
     const s = this.parse(snapshotSchema, json, "operação de contrato");
-    return { operacaoId: s.operacaoId, estado: s.estado, etapas: s.etapas, resultado: s.resultado, atualizadoEm: s.atualizadoEm };
+    return { operacaoId: s.operacaoId, estado: s.estado, etapas: s.etapas, resultado: s.resultado, motivo: s.motivo, atualizadoEm: s.atualizadoEm };
   }
 }
