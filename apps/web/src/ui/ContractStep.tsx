@@ -53,7 +53,8 @@ export function guessAddress(address: string): { rua: string; numero: string; ba
   // A consulta guarda uma linha só, como "Rua X, 123 - Bairro, Cidade - MG, 34505-000, Brasil".
   const cepMatch = /\b(\d{5})-?(\d{3})\b/.exec(address);
   const text = cepMatch ? address.replace(cepMatch[0], "") : address;
-  const parts = text.split(/,| - /).map((p) => p.trim()).filter((p) => p && !/^(brasil|brazil)$/i.test(p));
+  // "212-278" é a faixa de numeração da rua, não um número nem um bairro.
+  const parts = text.split(/,| - /).map((p) => p.trim()).filter((p) => p && !/^(brasil|brazil)$/i.test(p) && !/^\d+\s*-\s*\d+$/.test(p));
   const uf = parts.length > 2 && /^[A-Z]{2}$/.test(parts[parts.length - 1]!) ? parts.pop()! : "";
   const numIdx = parts.findIndex((p, i) => i > 0 && /^\d{1,6}[A-Za-z]?$/.test(p));
   const numero = numIdx > 0 ? parts[numIdx]! : "";
