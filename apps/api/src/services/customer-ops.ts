@@ -24,6 +24,8 @@ export const operationView = (o: Row) => ({
   login: o.login,
   reason: o.reason,
   state: o.state as OperationState,
+  /** Pedido que não chegou à Wiki (fora do ar ou automação desligada): reenviar com a mesma chave é seguro. */
+  notSent: o.state === "recebida" && !o.wikiOperationId,
   steps: (o.steps as OperationSnapshot["etapas"] | null) ?? [],
   createdAt: o.createdAt,
   updatedAt: o.updatedAt,

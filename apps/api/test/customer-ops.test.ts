@@ -9,9 +9,11 @@ import { setup } from "./helpers.js";
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 let ctx: Ctx;
+let actions: MockCustomerActions;
 
 beforeEach(async () => {
-  ctx = await setup(new MockNetworkMap(), new MockActivationService(), {}, new MockCustomerActions());
+  actions = new MockCustomerActions();
+  ctx = await setup(new MockNetworkMap(), new MockActivationService(), {}, actions);
 });
 afterEach(async () => {
   await ctx.close();
@@ -190,5 +192,26 @@ describe("cancelar o cliente e devolver a vaga", () => {
     expect(await vagas(p.ate)).toBe(before + 1);
     // Concluída não se repete.
     expect((await ctx.call(p.sup, "POST", `/operations/${op.id}/retry`)).status).toBe(409);
+  });
+
+  it("pedido que não chegou à Wiki (automação desligada lá, 21 out 2026) fica marcado para reenviar e reenvia sem duplicar", async () => {
+    const p = await partner("66666666000166", "OFF");
+    const id = await installed(p.ate, "30004");
+    const { IntegrationError } = await import("../src/integrations/types.js");
+    const original = actions.start.bind(actions);
+    actions.start = async () => {
+      throw new IntegrationError("wiki", "POST /operacoes 503", 503);
+    };
+    expect((await start(p.sup, id, { type: "cancelamento", reason: "teste de reenvio" })).status).toBeGreaterThanOrEqual(500);
+    const [op] = (await (await ctx.call(p.sup, "GET", `/installations/${id}/operations`)).json()).operations;
+    expect(op).toMatchObject({ state: "recebida", notSent: true });
+
+    actions.start = original;
+    const resent = await ctx.call(p.sup, "POST", `/operations/${op.id}/retry`);
+    expect(resent.status).toBe(200);
+    expect((await resent.json()).operation.notSent).toBe(false);
+    expect((await settle(p.sup, op.id)).state).toBe("concluida");
+    const ops = (await (await ctx.call(p.sup, "GET", `/installations/${id}/operations`)).json()).operations;
+    expect(ops).toHaveLength(1);
   });
 });

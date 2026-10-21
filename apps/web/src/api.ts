@@ -539,6 +539,8 @@ export interface CustomerOperation {
   login: string;
   reason: string | null;
   state: OperationState;
+  /** O pedido não chegou à Wiki: a tela oferece reenviar (mesma chave). */
+  notSent?: boolean;
   steps: { nome: string; estado: "pendente" | "concluida" | "falhou" | "aguardando_equipe"; motivo?: string | null }[];
   createdAt: string;
   updatedAt: string;
