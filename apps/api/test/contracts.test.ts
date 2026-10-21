@@ -352,6 +352,18 @@ describe("contratos com problema e abandono (Speed)", () => {
     expect(o.totais.contratosComProblema).toBe(4);
   });
 
+  it("pedido aceito pela Wiki e parado em recebida vira alerta, mesmo com a tela lendo sem parar (21 out 2026)", async () => {
+    const { ate } = await partner();
+    const id = await reserved(ate);
+    wiki.stuckNext = true;
+    await create(ate, id);
+    const { contractRequests } = await import("../src/db/schema.js");
+    await ctx.db.update(contractRequests).set({ createdAt: new Date(Date.now() - 20 * 60_000) }).where(eq(contractRequests.reservationId, id));
+    // A tela consulta a cada 3 s e cada leitura regrava updated_at: o alerta conta desde o pedido.
+    for (let i = 0; i < 3; i++) expect((await read(ate, id)).contract!.state).toBe("recebida");
+    expect((await issues()).find((i) => i.reservationId === id)?.kind).toBe("parado");
+  });
+
   it("abandonar cancela a reserva, devolve a vaga e registra o número do contrato para cancelar no Voalle", async () => {
     const { ate } = await partner();
     const id = await reserved(ate);

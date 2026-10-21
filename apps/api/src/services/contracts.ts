@@ -230,10 +230,13 @@ export async function contractIssues(db: Db, now = new Date()): Promise<Contract
   const out: ContractIssue[] = [];
   for (const { c, partnerName, status } of rows) {
     const age = Math.round((now.getTime() - c.updatedAt.getTime()) / 60_000);
+    // Pedido em andamento conta desde que foi feito: cada leitura da tela regrava updated_at e zerava o relógio.
+    const sinceCreated = Math.round((now.getTime() - c.createdAt.getTime()) / 60_000);
     const base = { reservationId: c.reservationId, partnerName, contract: c.contract, login: c.login, state: c.state, steps: ((c.steps as Step[] | null) ?? []), reason: c.reason, ageMinutes: age };
     let kind: ContractIssueKind | null = null;
-    if (c.state === "recebida" && !c.wikiOperationId && age >= STUCK_NOT_SENT_MIN) kind = "nao_enviado";
-    else if (c.state === "executando" && age >= STUCK_RUNNING_MIN) kind = "parado";
+    if (c.state === "recebida" && !c.wikiOperationId && sinceCreated >= STUCK_NOT_SENT_MIN) kind = "nao_enviado";
+    // Aceito pela Wiki e parado em "recebida" também é parado (21 out 2026: 4 h sem nenhuma etapa, na frente da diretoria).
+    else if ((c.state === "executando" || (c.state === "recebida" && c.wikiOperationId)) && sinceCreated >= STUCK_RUNNING_MIN) kind = "parado";
     else if (c.state === "parcial") kind = "parcial";
     else if (c.state === "aguardando_equipe") kind = "aguardando_equipe";
     else if (c.state === "falhou" && hasDoneStep(c)) kind = "falhou_no_meio";

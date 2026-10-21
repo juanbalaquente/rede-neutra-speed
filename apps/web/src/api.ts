@@ -102,6 +102,7 @@ export interface ContractSummary {
   login: string | null;
   /** O cliente já está no sistema de rede: a ONU sai sem espera. */
   readyForOnu: boolean;
+  createdAt?: string;
 }
 
 /** Endereço da instalação, no formato do contrato (CEP só com dígitos). */

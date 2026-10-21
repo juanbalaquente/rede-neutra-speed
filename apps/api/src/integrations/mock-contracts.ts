@@ -31,8 +31,10 @@ export class MockContractService implements ContractService {
   hardFailNext = false;
   /** Próximo pedido para na 2ª etapa esperando a equipe da Speed (etapa manual). */
   manualNext = false;
+  /** Próximo pedido é aceito e nunca sai de "recebida" (fila da Wiki parada, 21 out 2026). */
+  stuckNext = false;
   readonly created: ContractRequest[] = [];
-  private readonly scenario = new Map<string, "partial" | "hard" | "manual">();
+  private readonly scenario = new Map<string, "partial" | "hard" | "manual" | "stuck">();
 
   async create(req: ContractRequest) {
     if (this.failNext) {
@@ -55,7 +57,8 @@ export class MockContractService implements ContractService {
     if (this.partialNext) this.scenario.set(id, "partial");
     else if (this.hardFailNext) this.scenario.set(id, "hard");
     else if (this.manualNext) this.scenario.set(id, "manual");
-    this.partialNext = this.hardFailNext = this.manualNext = false;
+    else if (this.stuckNext) this.scenario.set(id, "stuck");
+    this.partialNext = this.hardFailNext = this.manualNext = this.stuckNext = false;
     this.byId.set(id, { req, estado: "recebida", etapas: STEPS.map((nome) => ({ nome, estado: "pendente" as const })), contrato: String(this.next++) });
     this.byKey.set(req.idempotencyKey, id);
     this.created.push(req);
@@ -93,7 +96,9 @@ export class MockContractService implements ContractService {
     const e = this.byId.get(id);
     if (!e) return null;
     if (e.cancel) return { operacaoId: id, estado: e.estado, etapas: e.etapas.map((s) => ({ ...s })), resultado: null, atualizadoEm: new Date().toISOString() };
-    if (e.estado === "recebida") e.estado = "executando";
+    if (e.estado === "recebida" && this.scenario.get(id) === "stuck") {
+      // A Wiki aceitou e não começou: nenhuma etapa anda.
+    } else if (e.estado === "recebida") e.estado = "executando";
     else if (e.estado === "executando") {
       const next = e.etapas.find((s) => s.estado === "pendente");
       const kind = this.scenario.get(id);

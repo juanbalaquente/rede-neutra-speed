@@ -14,7 +14,11 @@ export interface ContractView {
   reason: string | null;
   /** Falhou depois de criar algo no sistema da Speed: não dá para pedir de novo, a Speed conclui ou cancela. */
   needsSpeed?: boolean;
+  createdAt?: string;
 }
+
+/** Depois disso sem concluir, a tela deixa de dizer "criando" e avisa que o sistema da Speed está parado. */
+const SLOW_MS = 3 * 60_000;
 
 export interface ContractStatus {
   enabled: boolean;
@@ -207,7 +211,14 @@ export function ContractStep({ reservationId, address, saved, onChange }: { rese
               ))}
             </ul>
           )}
-          {contract.state !== "recebida" && <small className="muted">Criando o contrato…</small>}
+          {contract.createdAt && Date.now() - new Date(contract.createdAt).getTime() > SLOW_MS ? (
+            // 21 out 2026: a Wiki aceitou e não processou por horas, e a tela só dizia "criando".
+            <p className="error" role="alert" style={{ margin: 0 }}>
+              O sistema da Speed recebeu o pedido, mas está demorando para criar o contrato. <b>Não crie outro:</b> ele continua sozinho quando o sistema responder. Se passar de 15 minutos, a Speed recebe um alerta.
+            </p>
+          ) : (
+            <small className="muted">Criando o contrato…</small>
+          )}
         </div>
       ) : (
         <>

@@ -47,6 +47,9 @@ function ContractLine({ r }: { r: Reservation }) {
   }
   if (c.state === "aguardando_equipe") return <p className="rv-cli warn">Contrato esperando uma etapa da equipe da Speed.</p>;
   if (c.state === "falhou" || c.state === "parcial") return <p className="rv-cli warn">O contrato parou no meio. Abra o contrato para ver.</p>;
+  if (c.createdAt && Date.now() - new Date(c.createdAt).getTime() > 3 * 60_000) {
+    return <p className="rv-cli warn">O sistema da Speed está demorando para criar o contrato. Não crie outro: ele continua sozinho.</p>;
+  }
   return <p className="rv-cli">Criando o contrato no sistema da Speed…</p>;
 }
 

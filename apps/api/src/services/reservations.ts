@@ -281,7 +281,7 @@ export async function listReservations(db: Db, user: SessionUser, status?: strin
   const ids = rows.map((r) => r.id);
   const contracts = ids.length
     ? await db
-        .select({ reservationId: contractRequests.reservationId, state: contractRequests.state, steps: contractRequests.steps, contract: contractRequests.contract, login: contractRequests.login })
+        .select({ reservationId: contractRequests.reservationId, state: contractRequests.state, steps: contractRequests.steps, contract: contractRequests.contract, login: contractRequests.login, createdAt: contractRequests.createdAt })
         .from(contractRequests)
         .where(inArray(contractRequests.reservationId, ids))
         .orderBy(desc(contractRequests.createdAt))
@@ -289,7 +289,7 @@ export async function listReservations(db: Db, user: SessionUser, status?: strin
   const byReservation = new Map<string, ContractSummary>();
   for (const c of contracts) {
     if (byReservation.has(c.reservationId)) continue;
-    byReservation.set(c.reservationId, { state: c.state, contract: c.contract, login: c.login, readyForOnu: readyForOnu(c.state, c.steps) });
+    byReservation.set(c.reservationId, { state: c.state, contract: c.contract, login: c.login, readyForOnu: readyForOnu(c.state, c.steps), createdAt: c.createdAt });
   }
   return rows.map((r) => ({ ...r, contractRequest: byReservation.get(r.id) ?? null }));
 }
@@ -300,6 +300,8 @@ export interface ContractSummary {
   login: string | null;
   /** O cliente já está no sistema de rede (OLTCloud): a ONU pode ser liberada sem espera. */
   readyForOnu: boolean;
+  /** Hora do pedido: o cartão avisa quando a criação passa do normal. */
+  createdAt: Date;
 }
 
 /**
