@@ -267,7 +267,7 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
   // ── Reservas ──────────────────────────────────────────────────────────────
   app.get("/reservations", requireUser, async (c) => {
     const status = z.enum(["ativa", "convertida", "cancelada", "expirada"]).optional().parse(c.req.query("status") || undefined);
-    return c.json({ reservations: await listReservations(db, c.get("user"), status) });
+    return c.json({ reservations: await listReservations(db, c.get("user"), status), contractsEnabled: !!integrations.contracts });
   });
 
   app.post("/reservations", requireUser, requireRole("atendente", "supervisor"), async (c) => {

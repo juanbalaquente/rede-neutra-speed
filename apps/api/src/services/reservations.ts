@@ -271,10 +271,42 @@ export async function listReservations(db: Db, user: SessionUser, status?: strin
   const filters = [];
   if (user.role !== "admin_speed") filters.push(eq(portReservations.partnerId, user.partnerId!));
   if (status) filters.push(sql`${portReservations.status} = ${status}`);
-  return db
+  const rows = await db
     .select()
     .from(portReservations)
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(desc(portReservations.createdAt))
     .limit(200);
+  // Resumo do último pedido de contrato de cada reserva: o cartão mostra se o cliente já está pronto para a visita.
+  const ids = rows.map((r) => r.id);
+  const contracts = ids.length
+    ? await db
+        .select({ reservationId: contractRequests.reservationId, state: contractRequests.state, steps: contractRequests.steps, contract: contractRequests.contract, login: contractRequests.login })
+        .from(contractRequests)
+        .where(inArray(contractRequests.reservationId, ids))
+        .orderBy(desc(contractRequests.createdAt))
+    : [];
+  const byReservation = new Map<string, ContractSummary>();
+  for (const c of contracts) {
+    if (byReservation.has(c.reservationId)) continue;
+    byReservation.set(c.reservationId, { state: c.state, contract: c.contract, login: c.login, readyForOnu: readyForOnu(c.state, c.steps) });
+  }
+  return rows.map((r) => ({ ...r, contractRequest: byReservation.get(r.id) ?? null }));
+}
+
+export interface ContractSummary {
+  state: string;
+  contract: string | null;
+  login: string | null;
+  /** O cliente já está no sistema de rede (OLTCloud): a ONU pode ser liberada sem espera. */
+  readyForOnu: boolean;
+}
+
+/**
+ * Pronto para a ONU = contrato concluído com a etapa `cliente_no_oltcloud` (proposta à Wiki em 21 out 2026).
+ * Sem essa etapa, concluído só garante o contrato e o PPPoE; o cliente ainda pode estar a caminho do OLTCloud.
+ */
+export function readyForOnu(state: string, steps: unknown): boolean {
+  if (state !== "concluida") return false;
+  return ((steps as { nome: string; estado: string }[] | null) ?? []).some((s) => s.nome === "cliente_no_oltcloud" && s.estado === "concluida");
 }

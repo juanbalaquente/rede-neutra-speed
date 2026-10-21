@@ -92,6 +92,16 @@ export interface Reservation {
   expiresAt: string | null;
   createdAt: string;
   cancelReason: string | null;
+  /** Último pedido de contrato da reserva; null = ainda não pedido. */
+  contractRequest?: ContractSummary | null;
+}
+
+export interface ContractSummary {
+  state: string;
+  contract: string | null;
+  login: string | null;
+  /** O cliente já está no sistema de rede: a ONU sai sem espera. */
+  readyForOnu: boolean;
 }
 
 /** Endereço da instalação, no formato do contrato (CEP só com dígitos). */
@@ -183,7 +193,7 @@ export const api = {
   conferir: (days: number) => request<{ days: number; rows: ConferirRow[] }>("GET", `/admin/cto-conferir?days=${days}`),
   partner: () => request<{ partner: Partner | null }>("GET", "/partner"),
   viability: (address: string) => request<ViabilityResult>("POST", "/viability", { address }),
-  reservations: () => request<{ reservations: Reservation[] }>("GET", "/reservations"),
+  reservations: () => request<{ reservations: Reservation[]; contractsEnabled?: boolean }>("GET", "/reservations"),
   reserve: (input: { ctoId: string; address: string; lat?: number | null; lng?: number | null }) =>
     request<{ reservation: Reservation }>("POST", "/reservations", input),
   cancel: (id: string, reason?: string) => request<{ reservation: Reservation }>("POST", `/reservations/${id}/cancel`, { reason }),
