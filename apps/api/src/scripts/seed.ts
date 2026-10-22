@@ -29,7 +29,7 @@ export async function seed(db: Db, opts: { adminEmail: string; adminPassword: st
 
   const [partner] = await db
     .insert(partners)
-    .values({ name: "Parceiro Demonstração", cnpj: "00000000000191" })
+    .values({ name: "Parceiro Demonstração", cnpj: "00000000000191", allowedRegions: ["R1", "ITA", "FAT"] })
     .onConflictDoNothing({ target: partners.cnpj })
     .returning();
   if (!partner) return;

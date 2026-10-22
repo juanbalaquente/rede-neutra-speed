@@ -1,19 +1,35 @@
-import { and, count, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt, notExists, notInArray, sql } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { partners, portReservations } from "../db/schema.js";
-import type { NetworkMap } from "../integrations/types.js";
-import { AppError, isUniqueViolation } from "../lib/errors.js";
+import { activations, contractRequests, partners, portReservations, viabilityQueries } from "../db/schema.js";
+import { IntegrationError, type NetworkMap } from "../integrations/types.js";
+import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
+import { effectiveMaxPct } from "./cto-limits.js";
+import { isStale } from "./freshness.js";
 
 export const LIVE_STATUSES = ["ativa", "convertida"] as const;
 
-/** Expira reservas vencidas e devolve a porta ao pool. Idempotente. */
+/** Por quanto tempo uma consulta de viabilidade autoriza reservar as CTOs que listou. */
+const VIABILITY_VALID_MS = 24 * 3600_000;
+
+/** Expira reservas vencidas e devolve a vaga ao pool. Idempotente. */
 export async function expireOverdueReservations(db: Db, now = new Date()): Promise<number> {
+  // Reserva com ativação de ONU em andamento não expira: o técnico está em campo e a vaga é dele até a ativação terminar.
+  const inProgress = db
+    .select({ one: sql`1` })
+    .from(activations)
+    .where(and(eq(activations.reservationId, portReservations.id), notInArray(activations.state, ["cancelada", "falhou"])));
+  // Planejamento, etapa 2: ao criar o contrato a reserva deixa de ter prazo. Expirar uma reserva com contrato já criado
+  // no Voalle deixaria um contrato órfão (e a vaga seria vendida de novo).
+  const withContract = db
+    .select({ one: sql`1` })
+    .from(contractRequests)
+    .where(and(eq(contractRequests.reservationId, portReservations.id), sql`${contractRequests.state} <> 'falhou'`));
   const expired = await db
     .update(portReservations)
     .set({ status: "expirada", updatedAt: now })
-    .where(and(eq(portReservations.status, "ativa"), lt(portReservations.expiresAt, now)))
+    .where(and(eq(portReservations.status, "ativa"), lt(portReservations.expiresAt, now), notExists(inProgress), notExists(withContract)))
     .returning({ id: portReservations.id, partnerId: portReservations.partnerId });
   for (const r of expired) {
     await recordAudit(db, {
@@ -27,51 +43,63 @@ export async function expireOverdueReservations(db: Db, now = new Date()): Promi
   return expired.length;
 }
 
-/** Portas com reserva viva (de qualquer parceiro), por CTO. */
-export async function livePortsByCto(db: Db, ctoNames: string[]): Promise<Map<string, Set<number>>> {
-  const map = new Map<string, Set<number>>();
-  if (ctoNames.length === 0) return map;
+/** Reservas vivas por CTO, de todos os parceiros: cada uma ocupa uma vaga. */
+export async function liveReservationsByCto(db: Db, ctoIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (ctoIds.length === 0) return map;
   const rows = await db
-    .select({ ctoName: portReservations.ctoName, port: portReservations.port })
+    .select({ ctoId: portReservations.ctoId, n: count() })
     .from(portReservations)
-    .where(and(inArray(portReservations.ctoName, ctoNames), inArray(portReservations.status, [...LIVE_STATUSES])));
-  for (const r of rows) {
-    if (!map.has(r.ctoName)) map.set(r.ctoName, new Set());
-    map.get(r.ctoName)!.add(r.port);
-  }
+    .where(and(inArray(portReservations.ctoId, ctoIds), inArray(portReservations.status, [...LIVE_STATUSES])))
+    .groupBy(portReservations.ctoId);
+  for (const r of rows) map.set(r.ctoId, Number(r.n));
   return map;
 }
 
-/** Quantas portas o parceiro ocupa (reserva viva ou ativação) em cada CTO. */
-export async function partnerUsageByCto(db: Db, partnerId: string, ctoNames: string[]): Promise<Map<string, number>> {
+/** Quantas vagas o parceiro ocupa (reserva viva ou ativação) em cada CTO. */
+export async function partnerUsageByCto(db: Db, partnerId: string, ctoIds: string[]): Promise<Map<string, number>> {
   const map = new Map<string, number>();
-  if (ctoNames.length === 0) return map;
+  if (ctoIds.length === 0) return map;
   const rows = await db
-    .select({ ctoName: portReservations.ctoName, n: count() })
+    .select({ ctoId: portReservations.ctoId, n: count() })
     .from(portReservations)
     .where(
       and(
         eq(portReservations.partnerId, partnerId),
-        inArray(portReservations.ctoName, ctoNames),
+        inArray(portReservations.ctoId, ctoIds),
         inArray(portReservations.status, [...LIVE_STATUSES]),
       ),
     )
-    .groupBy(portReservations.ctoName);
-  for (const r of rows) map.set(r.ctoName, Number(r.n));
+    .groupBy(portReservations.ctoId);
+  for (const r of rows) map.set(r.ctoId, Number(r.n));
   return map;
 }
 
-/** Máximo de portas que o parceiro pode ocupar numa CTO, pelo limite em %. */
-export function maxPortsForPartner(totalPorts: number, maxPct: number): number {
-  return Math.floor((totalPorts * maxPct) / 100);
+/** Máximo de vagas que o parceiro pode ocupar numa CTO, pelo limite em % do total de vagas. */
+export function maxVagasForPartner(totalVagas: number, maxPct: number): number {
+  return Math.floor((totalVagas * maxPct) / 100);
+}
+
+/** A CTO está na área liberada ao parceiro? Sigla ausente (nome fora do padrão) nunca está. */
+export function isRegionAllowed(allowed: string[], regiao: string | null): boolean {
+  return regiao !== null && allowed.some((a) => a.toUpperCase() === regiao.toUpperCase());
 }
 
 export interface CreateReservationInput {
-  ctoName: string;
-  port: number;
+  ctoId: string;
   address: string;
   lat?: number | null;
   lng?: number | null;
+}
+
+/** Endereço comparável: sem acento, minúsculo, espaços e pontuação colapsados. */
+function normalizeAddress(address: string): string {
+  return address
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 export async function createReservation(
@@ -81,74 +109,115 @@ export async function createReservation(
   input: CreateReservationInput,
   opts: { hours: number; ip?: string | null; now?: Date },
 ) {
-  if (!user.partnerId) throw new AppError(403, "somente_parceiro", "Só usuários de parceiro reservam portas.");
+  if (!user.partnerId) throw new AppError(403, "somente_parceiro", "Só usuários de parceiro reservam vagas.");
   const now = opts.now ?? new Date();
   await expireOverdueReservations(db, now);
 
-  // Confere a porta na fonte da verdade antes de travar.
-  const cto = await network.getCtoPorts(input.ctoName);
-  if (!cto) throw new AppError(404, "cto_nao_encontrada", "CTO não encontrada.");
-  const port = cto.ports.find((p) => p.port === input.port);
-  if (!port) throw new AppError(422, "porta_inexistente", "Essa porta não existe nessa CTO.");
-  if (port.occupied) throw new AppError(409, "porta_ocupada", "Essa porta já está ocupada na rede.");
+  // A vaga só pode vir de uma consulta de viabilidade recente do próprio parceiro,
+  // para este endereço, que tenha listado esta CTO. Sem isso, qualquer CTO da rede seria reservável.
+  const [listed] = await db
+    .select({ result: viabilityQueries.result })
+    .from(viabilityQueries)
+    .where(
+      and(
+        eq(viabilityQueries.partnerId, user.partnerId),
+        eq(viabilityQueries.address, input.address.trim()),
+        gte(viabilityQueries.createdAt, new Date(now.getTime() - VIABILITY_VALID_MS)),
+        sql`${viabilityQueries.result} -> 'ctos' @> ${JSON.stringify([{ ctoId: input.ctoId }])}::jsonb`,
+      ),
+    )
+    .orderBy(desc(viabilityQueries.createdAt))
+    .limit(1);
+  if (!listed) {
+    throw new AppError(422, "viabilidade_necessaria", "Consulte a viabilidade deste endereço antes de reservar (a consulta vale por 24 horas).");
+  }
+  // A consulta mais recente marcou a CTO para conferência (dado fraco).
+  const entry = (listed.result as { ctos?: { ctoId: string; blocked: string | null; location?: { lat: number; lng: number } | null }[] } | null)?.ctos?.find((c) => c.ctoId === input.ctoId);
+  if (entry?.blocked === "conferir") {
+    throw new AppError(409, "vaga_nao_confirmada", "Não foi possível confirmar as vagas dessa CTO. A Speed precisa conferir antes de vender.");
+  }
+
+  // Na reserva a leitura é fresca (só aquela caixa), não o snapshot da viabilidade.
+  const cto = await network.getCtoVagas(input.ctoId, { fresh: true });
+  // Caixa recriada com outro id não é "CTO sumiu": a Speed confere.
+  if (!cto) throw new AppError(409, "vaga_nao_confirmada", "Não encontramos essa CTO na leitura atual da rede. A Speed precisa conferir antes de vender.");
+  if (cto.ctoId !== input.ctoId) throw new IntegrationError("rede", "a fonte devolveu outro id de CTO");
+  if (cto.confidence === "conferir" || isStale(cto.updatedAt)) {
+    throw new AppError(409, "vaga_nao_confirmada", "Não foi possível confirmar as vagas dessa CTO. A Speed precisa conferir antes de vender.");
+  }
 
   const partnerId = user.partnerId;
-  try {
-    return await db.transaction(async (tx) => {
-      // Trava a linha do parceiro: serializa reservas simultâneas dele.
-      const [partner] = await tx.select().from(partners).where(eq(partners.id, partnerId)).for("update");
-      if (!partner || partner.status !== "ativo") throw new AppError(403, "parceiro_bloqueado", "Parceiro bloqueado.");
+  return db.transaction(async (tx) => {
+    // Trava a linha do parceiro: serializa reservas simultâneas dele.
+    const [partner] = await tx.select().from(partners).where(eq(partners.id, partnerId)).for("update");
+    if (!partner || partner.status !== "ativo") throw new AppError(403, "parceiro_bloqueado", "Parceiro bloqueado.");
+    // A área liberada vale no servidor, com a sigla da leitura fresca, não só na tela.
+    if (!isRegionAllowed(partner.allowedRegions, cto.regiao)) {
+      throw new AppError(422, "fora_da_area", "Essa CTO está fora da área liberada para o seu contrato.");
+    }
 
-      const [active] = await tx
-        .select({ n: count() })
-        .from(portReservations)
-        .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.status, "ativa")));
-      if (Number(active?.n ?? 0) >= partner.maxActiveReservations) {
-        throw new AppError(
-          409,
-          "limite_reservas",
-          `Limite de ${partner.maxActiveReservations} reservas simultâneas atingido.`,
-        );
-      }
+    const [active] = await tx
+      .select({ n: count() })
+      .from(portReservations)
+      .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.status, "ativa")));
+    if (Number(active?.n ?? 0) >= partner.maxActiveReservations) {
+      throw new AppError(409, "limite_reservas", `Limite de ${partner.maxActiveReservations} reservas simultâneas atingido.`);
+    }
 
-      const usage = (await partnerUsageByCto(tx as Db, partnerId, [cto.name])).get(cto.name) ?? 0;
-      if (usage + 1 > maxPortsForPartner(cto.totalPorts, partner.maxCtoOccupancyPct)) {
-        throw new AppError(409, "limite_ocupacao_cto", "Limite de ocupação dessa CTO para o parceiro atingido.");
-      }
+    // Mesmo endereço na mesma CTO já reservado por este parceiro: duplo clique ou venda repetida gastaria outra vaga.
+    // Serializado pela trava da linha do parceiro acima.
+    const wanted = normalizeAddress(input.address);
+    const mine = await tx
+      .select({ address: portReservations.address })
+      .from(portReservations)
+      .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.ctoId, input.ctoId), eq(portReservations.status, "ativa")));
+    if (mine.some((r) => normalizeAddress(r.address) === wanted)) {
+      throw new AppError(409, "reserva_duplicada", "Já existe uma reserva aberta para este endereço nesta CTO. Use a que já está em Reservas.");
+    }
 
-      const expiresAt = new Date(now.getTime() + opts.hours * 3600_000);
-      const [created] = await tx
-        .insert(portReservations)
-        .values({
-          partnerId,
-          userId: user.id,
-          ctoName: cto.name,
-          port: input.port,
-          totalPorts: cto.totalPorts,
-          address: input.address,
-          lat: input.lat ?? null,
-          lng: input.lng ?? null,
-          status: "ativa",
-          expiresAt,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-      await recordAudit(tx as Db, {
+    // Lock por CTO: dois parceiros disputando a última vaga entram um de cada vez.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${input.ctoId}))`);
+    const live = (await liveReservationsByCto(tx as Db, [input.ctoId])).get(input.ctoId) ?? 0;
+    if (live + 1 > cto.vagasLivres) throw new AppError(409, "sem_vaga", "Não há mais vagas livres nessa CTO.");
+
+    const usage = (await partnerUsageByCto(tx as Db, partnerId, [input.ctoId])).get(input.ctoId) ?? 0;
+    const limit = (await effectiveMaxPct(tx as Db, partnerId, [input.ctoId], partner.maxCtoOccupancyPct)).get(input.ctoId)!;
+    if (usage + 1 > maxVagasForPartner(cto.totalVagas, limit.pct)) {
+      throw new AppError(409, "limite_ocupacao_cto", "Limite de ocupação dessa CTO para o parceiro atingido.");
+    }
+
+    const expiresAt = new Date(now.getTime() + opts.hours * 3600_000);
+    const [created] = await tx
+      .insert(portReservations)
+      .values({
         partnerId,
         userId: user.id,
-        action: "reserva.criada",
-        entity: "port_reservation",
-        entityId: created!.id,
-        ip: opts.ip,
-        data: { cto: cto.name, port: input.port, expiresAt },
-      });
-      return created!;
+        ctoId: input.ctoId,
+        ctoName: cto.name,
+        port: null,
+        totalPorts: cto.totalVagas,
+        address: input.address,
+        lat: input.lat ?? null,
+        lng: input.lng ?? null,
+        ctoLat: entry?.location?.lat ?? null,
+        ctoLng: entry?.location?.lng ?? null,
+        status: "ativa",
+        expiresAt,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    await recordAudit(tx as Db, {
+      partnerId,
+      userId: user.id,
+      action: "reserva.criada",
+      entity: "port_reservation",
+      entityId: created!.id,
+      ip: opts.ip,
+      data: { ctoId: input.ctoId, cto: cto.name, regiao: cto.regiao, vagasLivres: cto.vagasLivres, expiresAt },
     });
-  } catch (e) {
-    if (isUniqueViolation(e)) throw new AppError(409, "porta_reservada", "Essa porta acabou de ser reservada.");
-    throw e;
-  }
+    return created!;
+  });
 }
 
 export async function cancelReservation(
@@ -165,9 +234,20 @@ export async function cancelReservation(
   const scope = isAdmin
     ? eq(portReservations.id, id)
     : and(eq(portReservations.id, id), eq(portReservations.partnerId, user.partnerId!));
+  // Contrato já pedido ou criado no Voalle: cancelar a reserva o deixaria órfão. Enquanto a Wiki não tiver a rota de
+  // cancelamento de contrato não aprovado, a Speed resolve (a trava só existe com CONTRACT_MODE ligado, pois só então há contrato).
+  const [existing] = await db.select({ partnerId: portReservations.partnerId }).from(portReservations).where(and(scope, eq(portReservations.status, "ativa")));
+  if (existing) {
+    const [contract] = await db
+      .select({ id: contractRequests.id })
+      .from(contractRequests)
+      .where(and(eq(contractRequests.reservationId, id), sql`${contractRequests.state} <> 'falhou'`))
+      .limit(1);
+    if (contract) throw new AppError(409, "contrato_criado", "Esse cliente já tem contrato criado no sistema da Speed. Fale com a Speed para cancelar.");
+  }
   const [updated] = await db
     .update(portReservations)
-    .set({ status: "cancelada", cancelReason: reason, cancelledBy: user.id, updatedAt: now })
+    .set({ status: "cancelada", cancelReason: reason, cancelledBy: user.id, cancelledAt: now, updatedAt: now })
     .where(and(scope, eq(portReservations.status, "ativa")))
     .returning();
   if (!updated) {
@@ -191,10 +271,46 @@ export async function listReservations(db: Db, user: SessionUser, status?: strin
   const filters = [];
   if (user.role !== "admin_speed") filters.push(eq(portReservations.partnerId, user.partnerId!));
   if (status) filters.push(sql`${portReservations.status} = ${status}`);
-  return db
+  const rows = await db
     .select()
     .from(portReservations)
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(desc(portReservations.createdAt))
     .limit(200);
+  // Resumo do último pedido de contrato de cada reserva: o cartão mostra se o cliente já está pronto para a visita.
+  const ids = rows.map((r) => r.id);
+  const contracts = ids.length
+    ? await db
+        .select({ reservationId: contractRequests.reservationId, state: contractRequests.state, steps: contractRequests.steps, contract: contractRequests.contract, login: contractRequests.login, createdAt: contractRequests.createdAt, reason: contractRequests.reason })
+        .from(contractRequests)
+        .where(inArray(contractRequests.reservationId, ids))
+        .orderBy(desc(contractRequests.createdAt))
+    : [];
+  const byReservation = new Map<string, ContractSummary>();
+  for (const c of contracts) {
+    if (byReservation.has(c.reservationId)) continue;
+    byReservation.set(c.reservationId, { state: c.state, contract: c.contract, login: c.login, readyForOnu: readyForOnu(c.state, c.steps), createdAt: c.createdAt, reason: c.reason });
+  }
+  return rows.map((r) => ({ ...r, contractRequest: byReservation.get(r.id) ?? null }));
+}
+
+export interface ContractSummary {
+  state: string;
+  contract: string | null;
+  login: string | null;
+  /** O cliente já está no sistema de rede (OLTCloud): a ONU pode ser liberada sem espera. */
+  readyForOnu: boolean;
+  /** Hora do pedido: o cartão avisa quando a criação passa do normal. */
+  createdAt: Date;
+  /** Motivo do pedido (recusa, falha ou sistema_externo_indisponivel enquanto a Wiki tenta de novo). */
+  reason: string | null;
+}
+
+/**
+ * Pronto para a ONU = contrato concluído com a etapa `cliente_no_oltcloud` (proposta à Wiki em 21 out 2026).
+ * Sem essa etapa, concluído só garante o contrato e o PPPoE; o cliente ainda pode estar a caminho do OLTCloud.
+ */
+export function readyForOnu(state: string, steps: unknown): boolean {
+  if (state !== "concluida") return false;
+  return ((steps as { nome: string; estado: string }[] | null) ?? []).some((s) => s.nome === "cliente_no_oltcloud" && s.estado === "concluida");
 }

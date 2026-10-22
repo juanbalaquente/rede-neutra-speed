@@ -1,0 +1,1 @@
+ALTER TABLE "customer_operations" ADD COLUMN "wiki_note" text;

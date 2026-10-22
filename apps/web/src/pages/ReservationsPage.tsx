@@ -1,93 +1,336 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Reservation, type User } from "../api";
+import { api, request, type Activation, type Partner, type Reservation, type User } from "../api";
+import { ActivationPanel } from "../ui/ActivationPanel";
+import { CapacityRequestsList } from "../ui/CapacityRequestsList";
+import { ClienteForm } from "../ui/ClienteForm";
+import { ContractStep, type ContractStatus } from "../ui/ContractStep";
+import { outageText } from "../ui/outage";
+import { useToast } from "../ui/Toast";
+import { fmtVisit } from "../ui/visit";
 
-const STATUS_LABEL: Record<Reservation["status"], string> = {
-  ativa: "Ativa",
-  convertida: "Virou contrato",
-  cancelada: "Cancelada",
-  expirada: "Expirada",
+const STATUS: Record<Reservation["status"], { label: string; tone: string }> = {
+  ativa: { label: "Ativa", tone: "b-data" },
+  convertida: { label: "Virou contrato", tone: "b-ok" },
+  cancelada: { label: "Cancelada", tone: "b-mute" },
+  expirada: { label: "Expirada", tone: "b-mute" },
 };
 
-function timeLeft(expiresAt: string | null, now: number): string {
-  if (!expiresAt) return "";
-  const ms = new Date(expiresAt).getTime() - now;
-  if (ms <= 0) return "expirando";
-  const h = Math.floor(ms / 3600_000);
-  const m = Math.floor((ms % 3600_000) / 60_000);
-  return `${h}h ${m}min restantes`;
+const RC = 2 * Math.PI * 36;
+const HOUR = 3600_000;
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+function fmtLeft(ms: number): string {
+  if (ms <= 0) return "0 min";
+  if (ms < HOUR) return `${Math.max(1, Math.floor(ms / 60_000))} min`;
+  const h = Math.floor(ms / HOUR);
+  return ms < 10 * HOUR ? `${h}h${pad(Math.floor((ms % HOUR) / 60_000))}` : `${h}h`;
 }
 
-export function ReservationsPage({ user }: { user: User }) {
-  const [items, setItems] = useState<Reservation[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+function ringState(ms: number): "" | "warn" | "bad" {
+  return ms < 3 * HOUR ? "bad" : ms < 12 * HOUR ? "warn" : "";
+}
 
-  const load = useCallback(() => {
-    api.reservations().then((r) => setItems(r.reservations)).catch((e) => setError(e.message));
+/** Contrato em andamento na Wiki: o cartão acompanha até concluir. */
+const CONTRACT_RUNNING = ["recebida", "executando", "parcial", "aguardando_equipe"];
+
+/** Linha do cartão com o estado do contrato. O contrato sai no agendamento para o técnico não esperar em campo. */
+function ContractLine({ r }: { r: Reservation }) {
+  const c = r.contractRequest && r.contractRequest.state !== "abandonada" ? r.contractRequest : null;
+  if (!c) return <p className="rv-cli warn">Contrato ainda não criado. Crie agora para a ONU sair sem espera na visita.</p>;
+  if (c.state === "concluida") {
+    return (
+      <p className="rv-cli">
+        <span className={`badge ${c.readyForOnu ? "b-ok" : "b-data"}`}>{c.readyForOnu ? "Pronto para instalar" : "Contrato criado"}</span>{" "}
+        <span className="mono" style={{ whiteSpace: "nowrap" }}>{c.login}</span>
+      </p>
+    );
+  }
+  if (c.state === "aguardando_equipe") return <p className="rv-cli warn">Contrato esperando uma etapa da equipe da Speed.</p>;
+  if (c.state === "falhou" || c.state === "parcial") return <p className="rv-cli warn">O contrato parou no meio. Abra o contrato para ver.</p>;
+  if (outageText(c.reason)) return <p className="rv-cli warn">{outageText(c.reason)} Não crie outro contrato.</p>;
+  if (c.createdAt && Date.now() - new Date(c.createdAt).getTime() > 3 * 60_000) {
+    return <p className="rv-cli warn">O sistema da Speed está demorando para criar o contrato. Não crie outro: ele continua sozinho.</p>;
+  }
+  return <p className="rv-cli">Criando o contrato no sistema da Speed…</p>;
+}
+
+function Ring({ left, total }: { left: number; total: number }) {
+  // Começa vazio e enche depois do primeiro desenho, para o anel "entrar" animado.
+  const [drawn, setDrawn] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setDrawn(true));
+    return () => cancelAnimationFrame(id);
   }, []);
+  const frac = Math.min(1, Math.max(0, left / total));
+  return (
+    <div className={`ring ${ringState(left)}`}>
+      <svg viewBox="0 0 84 84" aria-hidden="true">
+        <circle className="bg" cx="42" cy="42" r="36" />
+        <circle className="fg" cx="42" cy="42" r="36" strokeDasharray={RC} strokeDashoffset={drawn ? RC * (1 - frac) : RC} />
+      </svg>
+      <div>
+        <b>{fmtLeft(left)}</b>
+        <small>restantes</small>
+      </div>
+    </div>
+  );
+}
+
+export function ReservationsPage({
+  user,
+  partner,
+  items,
+  reload,
+  openClienteFor,
+  contractsEnabled = false,
+}: {
+  user: User;
+  partner: Partner | null;
+  items: Reservation[] | null;
+  reload: () => Promise<void>;
+  openClienteFor?: string | null;
+  contractsEnabled?: boolean;
+}) {
+  const say = useToast();
+  const isAdmin = user.role === "admin_speed";
+  const [now, setNow] = useState(Date.now());
+  const [asking, setAsking] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  // null = recurso desligado (ou ainda carregando); a tela de reservas funciona igual.
+  const [acts, setActs] = useState<Activation[] | null>(null);
+  const [releasing, setReleasing] = useState<string | null>(null);
+  const [editingCliente, setEditingCliente] = useState<string | null>(openClienteFor ?? null);
+  const [contracting, setContracting] = useState<string | null>(null);
+  // Contrato concluído no painel: o cartão passa a mostrar o login.
+  const onContract = useCallback((s: ContractStatus) => { if (s.contract) void reload(); }, [reload]);
+
+  // Contratos em andamento fora do painel: a leitura por reserva atualiza o estado pela Wiki; a lista recarrega depois.
+  const running = (items ?? []).filter((r) => r.status === "ativa" && r.contractRequest && CONTRACT_RUNNING.includes(r.contractRequest.state) && r.id !== contracting).map((r) => r.id);
+  const runningKey = running.join(",");
+  useEffect(() => {
+    if (isAdmin || !contractsEnabled || !runningKey) return;
+    const t = setInterval(() => {
+      void Promise.all(runningKey.split(",").map((id) => request("GET", `/reservations/${id}/contract`).catch(() => null))).then(() => reload());
+    }, 10_000);
+    return () => clearInterval(t);
+  }, [isAdmin, contractsEnabled, runningKey, reload]);
+
+  const loadActs = useCallback(() => {
+    if (isAdmin) return;
+    api.activations().then((r) => setActs(r.activations)).catch(() => setActs(null));
+  }, [isAdmin]);
 
   useEffect(() => {
-    load();
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, []);
+  useEffect(loadActs, [loadActs]);
+
+  /** Ativação ainda aberta da reserva (as canceladas e falhas liberam um novo pedido). */
+  const openActivation = (reservationId: string) =>
+    acts?.find((a) => a.reservationId === reservationId && a.state !== "cancelada" && a.state !== "falhou") ?? null;
 
   async function cancel(r: Reservation) {
-    const isAdmin = user.role === "admin_speed";
-    const reason = isAdmin ? prompt("Motivo do cancelamento (obrigatório):") : null;
-    if (isAdmin && !reason?.trim()) return;
-    if (!isAdmin && !confirm(`Cancelar a reserva da porta ${r.port} da ${r.ctoName}? A porta volta a ficar livre.`)) return;
+    if (isAdmin && !reason.trim()) return;
+    setBusy(true);
     try {
-      await api.cancel(r.id, reason ?? undefined);
-      load();
+      await api.cancel(r.id, isAdmin ? reason.trim() : undefined);
+      say(`Vaga liberada na ${r.ctoName}`);
+      setAsking(null);
+      setReason("");
+      await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha ao cancelar.");
+      say(e instanceof Error ? e.message : "Falha ao cancelar.", "bad");
+    } finally {
+      setBusy(false);
     }
   }
 
+  if (items === null) return <main className="page"><p className="muted">Carregando…</p></main>;
+
+  const active = items.filter((r) => r.status === "ativa");
+  const past = items.filter((r) => r.status !== "ativa");
+  const max = partner?.maxActiveReservations ?? null;
+  const expiring = active.filter((r) => r.expiresAt && new Date(r.expiresAt).getTime() - now < 3 * HOUR && !openActivation(r.id));
+
   return (
-    <section>
-      <h1>Reservas</h1>
-      {error && <p className="error">{error}</p>}
-      {items.length === 0 ? (
-        <p className="muted">Nenhuma reserva ainda.</p>
+    <main className="page fade-page">
+      <div className="ph">
+        <div>
+          <h1>Reservas</h1>
+          <p>Cada vaga fica guardada por 48 horas. O anel mostra quanto tempo falta.</p>
+        </div>
+      </div>
+
+      {expiring.length > 0 && (
+        <div className="rv-soon" role="alert">
+          <div>
+            <b>{expiring.length === 1 ? "Uma reserva vence em menos de 3 horas." : `${expiring.length} reservas vencem em menos de 3 horas.`}</b>{" "}
+            {expiring.map((r) => `${r.ctoName} (${fmtLeft(new Date(r.expiresAt!).getTime() - now)})`).join(", ")}. Se não houver ativação em andamento, a vaga volta para a rede quando vencer.
+          </div>
+        </div>
+      )}
+
+      {max !== null && (
+        <div className="card" style={{ padding: "16px 18px" }}>
+          <div className="cap">
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <b style={{ fontWeight: 500 }}>Reservas abertas</b>
+              <span className="mono">{active.length} de {max}</span>
+            </div>
+            <div className="tr" aria-hidden="true">
+              {max <= 20 ? (
+                Array.from({ length: max }, (_, i) => <i key={i} className={i < active.length ? "on" : ""} />)
+              ) : (
+                <span className="fill" style={{ width: `${Math.min(100, (active.length / max) * 100)}%` }} />
+              )}
+            </div>
+            <small>Seu contrato permite até {max} reservas ao mesmo tempo.</small>
+          </div>
+        </div>
+      )}
+
+      {!isAdmin && <CapacityRequestsList onChanged={() => void reload()} />}
+
+      {/* Procura em todas as reservas: ao ficar online ela deixa de ser ativa, e o painel segue aberto com a confirmação. */}
+      {editingCliente && active.some((r) => r.id === editingCliente) && (
+        <ClienteForm
+          key={editingCliente}
+          reservation={active.find((r) => r.id === editingCliente)!}
+          onSaved={() => { setEditingCliente(null); void reload(); }}
+          onClose={() => setEditingCliente(null)}
+        />
+      )}
+
+      {contracting && active.some((r) => r.id === contracting) && (() => {
+        const r = active.find((x) => x.id === contracting)!;
+        return (
+          <div className="card atv">
+            <div className="ch">
+              <div>
+                <h3>Contrato antes da visita</h3>
+                <small className="mono">{r.ctoName}</small>
+              </div>
+              <button className="btn sec sm" onClick={() => { setContracting(null); void reload(); }}>Fechar</button>
+            </div>
+            <div className="summary">
+              <p className="muted" style={{ margin: 0 }}>Crie o contrato ao agendar. Quando o técnico chegar, o cliente já está no sistema da Speed e a ONU sai em cerca de um minuto.</p>
+              <ContractStep key={r.id} reservationId={r.id} address={r.address} saved={r.installAddress} onChange={onContract} />
+            </div>
+          </div>
+        );
+      })()}
+
+      {releasing && items.some((r) => r.id === releasing) && (
+        <ActivationPanel
+          key={releasing}
+          reservation={items.find((r) => r.id === releasing)!}
+          existing={openActivation(releasing)}
+          pppSuffix={partner?.code ?? null}
+          onClose={() => { setReleasing(null); loadActs(); }}
+          onDone={() => { loadActs(); void reload(); }}
+        />
+      )}
+
+      {active.length === 0 ? (
+        <p className="note">Nenhuma reserva aberta. Comece por uma nova venda.</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>CTO / porta</th>
-              <th>Endereço</th>
-              <th>Situação</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((r) => {
-              const left = r.status === "ativa" ? timeLeft(r.expiresAt, now) : "";
-              const soon = r.status === "ativa" && r.expiresAt && new Date(r.expiresAt).getTime() - now < 6 * 3600_000;
-              return (
+        <div className="rgrid">
+          {active.map((r) => {
+            const expires = r.expiresAt ? new Date(r.expiresAt).getTime() : now;
+            const total = r.expiresAt ? expires - new Date(r.createdAt).getTime() : 48 * HOUR;
+            return (
+              <div className="card rcard" key={r.id}>
+                <Ring left={expires - now} total={total} />
+                <div>
+                  <h4>{r.ctoName}</h4>
+                  <p>{r.address}</p>
+                  {r.planId && r.visitAt ? (
+                    <p className="rv-cli">
+                      {r.nickname ? <b>{r.nickname}</b> : null}{r.nickname ? " · " : ""}
+                      visita {fmtVisit(r.visitAt, r.visitPeriod)} · {r.technician}
+                    </p>
+                  ) : (
+                    <p className="rv-cli warn">Falta preencher os dados do cliente.</p>
+                  )}
+                  {contractsEnabled && !isAdmin && r.planId && r.visitAt && r.technician && <ContractLine r={r} />}
+                  {asking !== r.id && (
+                    <div className="acts2">
+                      <button className={`btn sm ${r.planId && r.visitAt && r.technician ? "sec" : ""}`} onClick={() => setEditingCliente(r.id)}>
+                        {r.planId && r.visitAt && r.technician ? "Dados do cliente" : "Preencher dados"}
+                      </button>
+                      {contractsEnabled && !isAdmin && (() => {
+                        const ready = !!(r.planId && r.visitAt && r.technician);
+                        const none = !r.contractRequest || r.contractRequest.state === "abandonada";
+                        // Concluído: o cartão já mostra o login, e o painel da ONU traz o contrato. Botão só para criar ou acompanhar.
+                        if (r.contractRequest?.state === "concluida") return null;
+                        return (
+                          <button
+                            className={`btn sm ${none && ready ? "" : "sec"}`}
+                            disabled={!ready}
+                            title={!ready ? "Preencha plano, visita e técnico antes de criar o contrato" : undefined}
+                            onClick={() => setContracting(r.id)}
+                          >
+                            {none ? "Criar contrato" : "Ver contrato"}
+                          </button>
+                        );
+                      })()}
+                      {acts !== null && (
+                        <button
+                          className="btn sm"
+                          disabled={!openActivation(r.id) && !(r.planId && r.visitAt && r.technician)}
+                          title={!openActivation(r.id) && !(r.planId && r.visitAt && r.technician) ? "Preencha plano, visita e técnico antes de liberar a ONU" : undefined}
+                          onClick={() => setReleasing(r.id)}
+                        >
+                          {openActivation(r.id) ? "Acompanhar ONU" : "Liberar ONU"}
+                        </button>
+                      )}
+                      <button className="btn sec sm" onClick={() => { setAsking(r.id); setReason(""); }}>Cancelar reserva</button>
+                    </div>
+                  )}
+                </div>
+                {asking === r.id && (
+                  <div className="ask">
+                    <span>{isAdmin ? "Informe o motivo. Ele fica registrado na auditoria." : "A vaga volta a ficar livre na hora."}</span>
+                    {isAdmin && <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo do cancelamento" aria-label="Motivo do cancelamento" />}
+                    <div className="acts2">
+                      <button className="btn sm" disabled={busy || (isAdmin && !reason.trim())} onClick={() => cancel(r)}>
+                        {busy ? "Cancelando…" : "Sim, liberar a vaga"}
+                      </button>
+                      <button className="btn sec sm" onClick={() => setAsking(null)}>Voltar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <div className="card">
+          <div className="ch"><h3>Histórico</h3><small>últimas {past.length}</small></div>
+          <table className="hist">
+            <thead>
+              <tr><th>CTO</th><th>Endereço</th><th>Situação</th></tr>
+            </thead>
+            <tbody>
+              {past.map((r) => (
                 <tr key={r.id}>
-                  <td>
-                    <strong>{r.ctoName}</strong> · porta {r.port}
-                  </td>
+                  <td>{r.ctoName}{r.port !== null ? ` · porta ${pad(r.port)}` : ""}</td>
                   <td>{r.address}</td>
                   <td>
-                    <span className={`status ${r.status}`}>{STATUS_LABEL[r.status]}</span>
-                    {left && <small className={soon ? "warn" : "muted"}> {left}</small>}
-                  </td>
-                  <td>
-                    {r.status === "ativa" && (
-                      <button className="link" onClick={() => cancel(r)}>
-                        Cancelar
-                      </button>
-                    )}
+                    <span className={`badge ${STATUS[r.status].tone}`}>{STATUS[r.status].label}</span>
+                    {r.cancelReason && <small className="muted"> {r.cancelReason}</small>}
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-    </section>
+    </main>
   );
 }

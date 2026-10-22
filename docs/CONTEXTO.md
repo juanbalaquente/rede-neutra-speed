@@ -1,0 +1,215 @@
+# Speed Rede Neutra — contexto completo
+
+Documento para quem chega agora ao projeto, em especial um Claude que está trabalhando no repositório da **SpeedWiki** (`juanbalaquente/SpeedWiki`) e precisa entender o Rede Neutra para integrar os dois. Atualizado em 6 out 2026.
+
+Arquivos que acompanham este documento, na mesma pasta `docs/`:
+
+- [`planejamento.pdf`](planejamento.pdf): especificação funcional original (19 páginas, @Guilherme, 5 out 2026). É a fonte das regras de negócio.
+- [`prototipo/modelo-4.html`](prototipo/modelo-4.html): protótipo visual aprovado. Arquivo único, abre direto no navegador, só dados de exemplo.
+
+---
+
+## 1. O que é
+
+Portal web onde um **provedor parceiro** vende e opera os próprios clientes usando a fibra da Speed, sem nunca acessar Voalle, OLTCloud ou Codemaps. Modelo de rede neutra parecido com o da V.tal, mas com toda a infraestrutura da Speed (CTO, fibra, OLT, concentrador, RADIUS). O parceiro paga **por porta ativada**, sem pacote fechado.
+
+O portal é uma **camada de orquestração**: consome os sistemas da Speed por API, executa automações e devolve ao parceiro só o recorte que ele precisa. Não substitui nenhum sistema.
+
+O que é dado próprio do portal: reservas de porta, fotos, preços de venda do parceiro, auditoria e conferência financeira. O resto vive nos sistemas de origem.
+
+Piloto com **um parceiro** (um cliente que já compra link da Speed), mas multi-parceiro com isolamento total desde o primeiro dia.
+
+## 2. Conceitos e regras de negócio
+
+- **Chave única = número do contrato Voalle**, padrão `CONTRATO-PRIMEIRONOME`, em que o nome é o do **provedor parceiro** (decisão do Juan, 9 out 2026: o login PPPoE é o próprio código do contrato; parceiro do piloto **JHV**, ex.: `12345-JHV`). Nenhum nome de assinante entra no identificador. O mesmo código identifica a porta na CTO, o registro no Codemaps, o cadastro no OLTCloud e o usuário PPPoE. Toda busca parte dele.
+- **Contratos no nome do parceiro.** Juridicamente o cliente da Speed é o parceiro. O portal tem um campo livre de *apelido* para o nome do assinante final, que nunca vai para o Voalle.
+- **Perfis:**
+  - *Atendente* (do parceiro): viabilidade, reserva, contrato, agenda, liberação de ONU, chamado, bloqueio/desbloqueio.
+  - *Supervisor* (do parceiro): tudo do atendente + dashboards, financeiro, preços de venda, gestão dos próprios usuários. Deve ter segundo fator.
+  - *Administrador Speed*: cadastra parceiros, define limites e preços, vê auditoria, bloqueia um parceiro inteiro.
+- **Fluxo de um cliente (etapas do PDF):**
+  1. Viabilidade no Codemaps (CTOs próximas, portas livres de verdade, planos). Toda consulta é registrada, mesmo sem viabilidade (mostra demanda reprimida).
+  2. Reserva de **vaga** na CTO por **48 h** (decisão de 7 out 2026: o número da porta não importa; qualquer saída de splitter pode ir para cliente), só no banco do portal (o Codemaps não tem reserva). Expira sozinha, pode ser cancelada, tem limite de reservas simultâneas.
+  3. Contrato no Voalle por automação: cria no nome do parceiro, vincula CTO/porta, gera PPPoE, **preenche o ponto de acesso (concentrador)** e devolve o número do contrato. O parceiro dá o aceite no portal, a automação aprova no Voalle e o portal mostra PPPoE e senha.
+  4. Agenda de visita (calendário) e envio do roteiro ao técnico por WhatsApp (módulo opcional, instância separada do parceiro, não usa o Omni da Speed).
+  5. Liberação da ONU pelo OLTCloud: técnico busca a SN entre as não autorizadas, o portal valida o sinal, autoriza, mostra a VLAN e confirma que a ONU subiu e o PPPoE autenticou. **Trava de sinal:** se o sinal medido diferir mais de **1,5** da média da CTO, só prossegue com justificativa, que abre chamado automático para a Infra. **Atualização (Juan, 9 out 2026):** a referência da trava é o sinal que o técnico **mede na CTO ao chegar, com foto obrigatória**, e não a média do OLTCloud. O sinal na ONU pode ser no máximo **1,5 dB pior** que o da CTO. O limite é um parâmetro editável pela Speed (pode mudar).
+  6. Fotos (CTO aberta, etiqueta da porta, medição, sobra de fibra, ONU instalada) com data, hora, GPS e contrato, e fechamento da O.S.
+- **Tela do cliente (semáforo de 3 estados):** Fibra (OLTCloud), Autenticação PPPoE (Voalle/RADIUS) e Situação do contrato (Voalle). Fibra verde com PPPoE vermelho é cadastro; fibra vermelha é problema físico.
+- **Automações sobre o cliente:** bloqueio por inadimplência (bloqueio administrativo no Voalle é o preferido), desbloqueio, reinício de ONU, cancelamento (encerra contrato, remove ONU, devolve porta).
+- **Proteção da rede:** limite de ocupação por CTO por parceiro (sugerido **50%**), limite de reservas simultâneas, auditoria de tudo que mexe na rede ou no cadastro.
+- **Preços (referência):** 600 Mega, Speed recebe R$ 40,00, parceiro vende a R$ 99,90. Tabela fixa por plano é a recomendação do PDF.
+
+## 3. Fases
+
+- **Fase 1 (MVP, primeiro cliente de ponta a ponta):** login e perfis, viabilidade, reserva, contrato Voalle com ponto de acesso, liberação de ONU com trava de sinal, tela do cliente, painel admin básico.
+- **Fase 2 (operação diária):** calendário, fotos e O.S., histórico de sinal e alarmes, bloqueio/desbloqueio/reinício, **chamados para a SpeedWiki**, preços de venda e dashboard operacional.
+- **Fase 3:** financeiro e relatórios, módulo WhatsApp, limites por CTO configuráveis, segundo parceiro.
+
+**Caminho crítico:** validar por API, em ambiente de teste, a criação de contrato no Voalle com ponto de acesso e a liberação de ONU no OLTCloud. Se alguma das duas não existir, o desenho muda.
+
+## 4. Decisões já tomadas (6 out 2026)
+
+- **Projeto separado da SpeedWiki**, com repositório, banco e deploy próprios. Vai conversar com a Wiki por integração, nunca morar dentro dela.
+- **Começar direto pelo código.** Stack da mesma família da Wiki para facilitar a integração (ver seção 5).
+- **Integração no modelo do SpeedParceiros:** serviço separado + rotas `/proxy/<algo>/*` na SpeedWiki com chave de API dedicada.
+- **Reserva vive só no portal**; o Codemaps só é atualizado na ativação (opção mais simples sugerida pelo PDF).
+- **Identidade visual própria**, sem herdar a SpeedWiki nem o Speed Parceiros (ver seção 7). Isso substitui a linha "segue a identidade da Speed, laranja e azul-marinho" do PDF: a marca Speed aparece, mas o produto tem cara própria.
+- **App mobile no futuro:** React Native + Expo, focado no técnico (câmera, GPS, assinatura, push), um app só da Speed com login por parceiro. Antes disso, o portal pode virar PWA. A Speed já tem contas de desenvolvedor na Apple e na Play Store.
+
+## 5. Stack e estrutura do repositório
+
+Repositório `juanbalaquente/rede-neutra-speed` (privado), branch `main`.
+
+- Monorepo npm workspaces, TypeScript.
+- `apps/api`: Node + **Hono**, Postgres + **Drizzle**, sessão em cookie httpOnly (jose), senhas com bcrypt, validação com zod. Imports relativos com extensão `.js` (build NodeNext).
+- `apps/web`: React 19 + Vite. Hoje três telas simples (login, viabilidade, reservas), ainda sem o visual aprovado.
+- Testes: vitest + **PGlite** (Postgres em memória), ponta a ponta na API. `npm test` precisa passar antes de qualquer push.
+- Docker Compose: `docker compose up -d --build` sobe banco, API e web em http://localhost:8088. O banco não expõe porta no PC; `docker-compose.dev.yml` expõe para desenvolvimento.
+
+Arquivos que valem a leitura primeiro:
+
+| Arquivo | O que tem |
+|---|---|
+| `CLAUDE.md` | regras do repositório (isolamento por `partner_id`, 404 em vez de 403, auditoria, nunca escrever nos sistemas de origem sem validação) |
+| `apps/api/src/db/schema.ts` | tabelas: `partners`, `users`, `plans`, `viability_queries`, `port_reservations`, `audit_log`, `api_call_log` |
+| `apps/api/src/app.ts` | todas as rotas HTTP |
+| `apps/api/src/integrations/types.ts` | interfaces que o portal espera dos sistemas da Speed |
+| `apps/api/src/integrations/{codemaps,oltcloud,voalle}.ts` | clientes reais, só leitura, mesmo login e endpoints que a SpeedWiki usa |
+| `apps/api/src/scripts/validate-integrations.ts` | validação do caminho crítico, só leitura |
+
+Rotas da API hoje: `/health`, `/auth/login|logout|me`, `POST /viability`, `GET|POST /reservations`, `POST /reservations/:id/cancel`, `GET /plans`, `GET|POST /users`, `POST /users/:id/active`, e sob `/admin`: `GET|POST /partners`, `PATCH /partners/:id`, `GET /audit`.
+
+Variáveis de integração (`.env.example`): `INTEGRATIONS_MODE` (`mock` ou `real`), `CODEMAPS_TOKEN`, `CODEMAPS_SECRET`, `OLTCLOUD_BASE`, `OLTCLOUD_USER`, `OLTCLOUD_PASS`, `VOALLE_ERP_URL`, `VOALLE_CLIENT_ID`, `VOALLE_CLIENT_SECRET`, `VOALLE_SYNDATA`. São as mesmas credenciais que a SpeedWiki já usa.
+
+## 6. Estado do código
+
+**Primeiro cliente JHV de ponta a ponta e contrato no agendamento (21 out 2026, autorizado pelo Juan, ONU de bancada da Speed):** produção com todos os modos em `wiki`. O contrato 33720-JHV saiu pelo portal (3 etapas), a Wiki importou o cliente no OLTCloud **à mão** e a ativação da ONU HWTC6FE1FCB2 ficou online na primeira tentativa (perda 0,75 dB, autorização e provisionamento automáticos). A primeira tentativa (33719) falhou porque a CTO reservada era de outra PON que a ONU (o OLTCloud recusa o vínculo): reservar sempre uma CTO da mesma PON. O 33719 foi abandonado pela Speed e cancelado no Voalle. Dois ajustes no código: a leitura da ativação aceita `onuDbm`/`perdaDb` nulos (antes o portal recusava a resposta em `aguardando_cliente` e a tela ficava parada em "Pedido na fila") e o painel avisa quando a consulta falha. **A espera pelo cliente no OLTCloud (até 2 h, hoje manual) não pode cair sobre o técnico em campo:** o contrato passou a ser criado **no agendamento**, pelo botão "Criar contrato" no cartão da reserva (o painel de liberar ONU ainda cria, se ninguém criou antes); o cartão mostra o estado e o login; o sino avisa visita de hoje ou amanhã sem contrato concluído; e foi pedida à Wiki a 4ª etapa `cliente_no_oltcloud` (contrato v3, seção H), com a qual o cartão passa a dizer "Pronto para instalar". **A Wiki entregou a etapa no mesmo dia** (importa a conexão do Voalle no OLTCloud; a sincronização automática está desligada no OLTCloud, então a importação manual deixa de existir), e o portal passou a aceitar etapa em `aguardando_equipe` (antes recusava a resposta inteira, nos contratos e nas ações do cliente). O mock já tem as 4 etapas. **Tempos medidos no contrato 33721 (21 out, ONU de bancada, CTO_05 da PON 1/15):** contrato com as 4 etapas, incluindo o cliente no OLTCloud, em **40 s**; do clique em "Liberar ONU" até online em **1 min 12 s**. Antes (33720, importação manual) a ONU levou 4 min 6 s, quase tudo esperando a importação. O cancelamento de cliente pelo portal também foi provado de ponta a ponta no 33720 (ONU desautorizada sozinha e de volta aos pendentes; contrato e porta concluídos pela equipe da Wiki); quando a automação da Wiki está desligada o pedido fica "não enviado" e a tela oferece Reenviar. **Demonstração para a diretoria (21 out, contrato 33726, CTO_05_P1_P15_R1, ONU de bancada):** contrato com as 4 etapas em **9,5 s**, ONU online **62 s** depois do clique (perda de 0,65 dB), e no Voalle a conexão `33726-JHV` (SPEED STANDARD 600Mb, CE HUAWEI_NE40, PE OLT_BACKBONE_CENTRAL) conferida na tela. A VLAN configurada na ONU estava correta no equipamento; o `vlan: null` do snapshot é só campo que a Wiki não preenche (a tela já esconde a instrução de VLAN nesse caso). Na mesma manhã a Wiki ficou horas com o DNS fora e um pedido aceito parado em `recebida`: ela agora manda o `motivo` `sistema_externo_indisponivel` e o portal mostra "Sistema da Speed indisponível no momento, tentando de novo automaticamente", com alerta para a Speed depois de 15 min. **ONU X9 de Fátima (OLT_FATIMA 1/13) não serve ao fluxo:** a FAT não tem CTO na PON 13.
+
+**Visita por período e endereço enxuto (20 out 2026, migration 0016):** a visita deixou de ter hora: o parceiro escolhe **dia + Manhã (8h às 12h) ou Tarde (13h às 18h)**. A coluna `visit_period` (`manha|tarde`) guarda a escolha e o `visit_at` guarda só o horário de referência (8h ou 14h de Brasília), então financeiro e painel seguem iguais; visita antiga sem período mostra o da hora (antes do meio-dia é manhã). Trocar só o período no mesmo dia conta como reagendamento. A **Agenda** (dia e semana) ganhou duas faixas por dia, e arrastar o card muda dia e período. O formulário do cliente só pede **CEP, número e complemento**: rua, bairro, cidade e UF vêm do CEP por `GET /cep/:cep` (ViaCEP, chamado pela API porque o CSP do navegador só aceita o próprio domínio; cache de 24 h; falha vira 502 e a tela abre os campos para digitar). "Editar endereço" abre todos. `guessAddress` agora tira "Brasil" e o CEP da linha da consulta.
+
+**Revisão de bugs e usabilidade pela interface (20 out 2026, tudo em `mock`, ambiente local):** do cadastro do provedor ao fechamento da O.S., o teste achou e corrigiu: **servidor** aceita visita só de até 1 dia atrás a 1 ano à frente (`visita_no_passado`, `visita_distante`; só valida quando a data muda) e UF real (27); fechar a O.S. com sinal final abaixo do mínimo (sinal da CTO menos o limite da ativação) exige justificativa de 10+ caracteres (`sinal_fora_do_limite`), que fica na O.S. e na auditoria, e o detalhe devolve `sinalMinimoDbm` e `sinalOnuLidoDbm` (sugestão); mesmo endereço na mesma CTO não reserva duas vezes (`reserva_duplicada`); recusa de pedido de vaga pede 10+ caracteres; o cache da qualidade de sinal agora vale só para a mesma lista de clientes (antes escondia o cliente novo por 10 min); `GET /auth/session` responde 200 com `user: null` sem login (some o 401 no console da entrada). O `createApp` aceita `now` (relógio), que os testes fixam em 20/10/2026. **Interface:** cada tela tem endereço (`#/reservas`), F5 e voltar funcionam; Ctrl K acha contrato, cliente, endereço e (Speed) parceiro; botões desabilitados dizem o motivo; CNPJ com máscara e dígitos conferidos (só no navegador), código do provedor sem hífen, UF em lista, CEP com máscara; Parceiros mostra a lista primeiro e recolhe as configurações gerais; senha do usuário novo fica na tela até copiar; mensagens de validação em português; linha de Instalações clicável e o detalhe rola até a vista; pedido de vaga e recusa pedem confirmação. **Fica para depois:** o modelo da ONU ainda é digitado no fechamento da O.S. (o portal não guarda o modelo da lista de pendentes) e os testes não cobrem a interface (só a API).
+
+**Teste de bancada JHV, contrato e ativação reais (20 out 2026, autorizado pelo Juan, ONU X9 da própria Speed, nenhum cliente real):** o `POST /v3/contratos` (valor 0, CTO 32066, sigla SIS liberada ao JHV) criou o contrato 33718 com login `33718-JHV`; a primeira tentativa falhou na etapa `contrato_criado` por ciclo de faturamento errado enviado pela Wiki (2 em vez de 2.1), e a Wiki reabriu a **mesma** operação com a mesma chave, sem criar segundo contrato. Com `location` nulo a última etapa (`endereco_gravado`) vai para a equipe e o login não sai: **sempre mandar coordenadas**. Depois, `GET /v2/onus/pendentes` e `POST /v2/ativacoes` (corpo com `pppLogin` e `alias` iguais a `<contrato>-JHV`, `sinalCtoDbm` -9.0, `limiteDb` 3.0) deixaram a ONU online com PPPoE no NE40. A ativação passou por `aguardando_cliente` (o cliente ainda não estava no OLTCloud; a Wiki disparou a importação). **O que não foi provado:** a trava de sinal (sem leitura da ONU) e a autorização automática, porque a CTO 32066 fica em outra PON e a Wiki concluiu a etapa final à mão. Falta um segundo teste com ONU numa CTO real. O disparo saiu de um script no servidor do portal (um pedido por execução, chave idempotente guardada), não pelas telas: o portal só cria contrato a partir de uma reserva com plano, visita e técnico.
+
+**Pedido de vaga em CTO cheia (20 out 2026, decisão dos donos: "não vamos perder vendas"), 267 testes, migration 0015:** CTO sem vaga livre, no limite do parceiro ou em "conferir" (dentro do raio de 300 m e da área liberada) ganha o botão "Pedir vaga nesta CTO". O pedido (`capacity_requests`) **não ocupa vaga nem passa pela trava**; o administrador Speed decide na tela "Pedidos de vaga" (sino e menu avisam). **Confirmar** cria uma reserva normal de 48 h para o parceiro (a Speed estende a rede se precisar); **recusar** exige motivo. O parceiro acompanha em Reservas e só depois da confirmação segue para contrato e agenda. Limite de pedidos em espera = limite de reservas do parceiro. Tudo auditado (`pedido_vaga.*`). A confirmação é pelo portal; a ligação com um chamado na Wiki fica para depois.
+
+**Liberação de ONU (9 out 2026, teste da Wiki em produção, autorizado pelo Juan, numa ONU da própria Speed):** funciona por automação a partir da Wiki. Desautorizar e autorizar pela rota do **painel** do OLTCloud (sessão web, a mesma que a Wiki usa para criar usuário; campos `onu` = onu_hash da lista de pendentes, `id_olt_id`, `id_cliente_id`, `alias`, `xgspon`, `id_cto_porta_id` opcional), depois provisionar pela API (`POST /api/v2/ftth/equipment/{id}/{script}/script` com `alias` e `ppp_login`, script "AUTENTICADOR (OLT_X)"). ONU voltou Online em ~50 s com o mesmo PPPoE e VLANs. A rota de autorização da **API** existe, mas recusou o corpo (não documentado). Para o portal: identificar a ONU sempre pela **serial** (o id muda a cada reautorização); o IP de gerência muda a cada provisionamento; a saída do script traz a senha PPPoE em texto puro e **nunca** é exibida nem guardada (só sucesso/falha). A escrita continua passando pela Wiki (contrato v2, escrita), com validação do Juan antes de ligar.
+
+**Ciclo de vida do cliente (16 out 2026):** bloquear, desbloquear, reiniciar a ONU e **cancelar** (supervisor; encerra o contrato, remove a ONU e **devolve a vaga**), em operações assíncronas e idempotentes (`customer_operations`, migration 0008) executadas pela Wiki conforme o [contrato v3](CONTRATO-WIKI-V3-CLIENTES.md), atrás de `AUTOMATION_MODE=off|mock|wiki` (desligado por padrão). Operação parcial (falha numa etapa) fica visível e repetir com a mesma chave continua de onde parou; a vaga só volta quando a operação conclui. Bloqueio mantém porta e cobrança. Cliente cancelado continua na lista de Instalações como histórico.
+
+**Respostas da Wiki sobre o contrato (18 out 2026):** valor zero funciona (medido), a Wiki **aprova na criação** (contrato não aprovado não autentica), o cancelamento antes da instalação foi combinado (`POST /v3/contratos/{id}/cancelamento`, com a etapa do Voalle feita pela equipe) e já é chamado ao abandonar, o estado `rejeitado` existe, e a ativação espera até 2 h pela sincronização com o OLTCloud. A suspensão ainda não serve de bloqueio automático (teste pendente). O `POST /v3/contratos` só sai quando o Voalle estiver configurado.
+
+**Contrato sem valor (Juan, 18 out 2026):** o contrato no Voalle **não cobra nada**. Ele existe só para **identificar o cliente** (o número do contrato é a chave) e **gerar a conexão PPPoE** (login `<contrato>-<CÓDIGO>`, ponto de acesso, perfil de velocidade no RADIUS). O parceiro **paga direto ao dono da Speed, fora do ERP**, pelo fechamento do portal (portas ativas × valor fixo por plano). Consequências: o portal manda `valorMensal: 0`; a aprovação do contrato não é mais decisão de cobrança; a suspensão do Voalle serve para o bloqueio (se cortar o PPPoE); a regra de "fatura em aberto" sai do cancelamento; e **o fechamento do mês do portal passa a ser a base da cobrança do parceiro** (ver [`FLUXO-CONTRATO-E-CONEXAO.md`](FLUXO-CONTRATO-E-CONEXAO.md)).
+
+**Ativação de ONU na Wiki, teste real (16 out 2026):** a Wiki testou a v2 ponta a ponta numa ONU da Speed (cerca de 70 s: autorizar, ler o sinal na janela "Inativo", provisionar, online com PPPoE no NE40). O sinal aparece logo após autorizar (leitura forçada na OLT, mediana de 3); sem leitura em 2 min a decisão vem com `sem_leitura_de_sinal`. Rotas de leitura ativas; `POST /ativacoes` e `/decisao` ligam com o primeiro cliente real do piloto (depende do contrato no Voalle com login `<contrato>-JHV`).
+
+**Ativação de ONU na Wiki (16 out 2026):** a Wiki construiu a v2, **desligada** (503 até a chave e a validação da leitura de sinal ao vivo). O portal envia `X-RedeNeutra-Partner` em todas as chamadas, trata `chave_de_escrita_nao_configurada`, `ativacao_desligada` e `leitura_de_sinal_pendente` como "ainda não liberada" (503 `ativacao_indisponivel`, com o pedido guardado), mostra `serial_em_ativacao` e `login_fora_do_padrao`, e não manda `porta`. Detalhes no [contrato v2](CONTRATO-WIKI-V2-ATIVACAO.md).
+
+**Pendências do PDF fechadas no portal (16 out 2026), 220+ testes, migration 0011:** (1) **limite de ocupação por CTO**, por parceiro ou para todos, que vale no lugar do percentual do parceiro naquela caixa; 100% libera um parceiro caso a caso, 0% fecha a CTO; tudo com motivo e auditoria (`cto_limits`, tela em Parceiros). (2) **Painel da Speed por parceiro**: portas ativas, receita mensal (valor fixo por porta), reservas, bloqueados, chamados abertos e atrasados, e instalações com o sinal final abaixo do medido na CTO menos o limite. (3) **Alerta de chamados repetidos**: 3 ou mais chamados do mesmo parceiro na mesma CTO em 30 dias aparecem no painel e no sino da Speed, e a auditoria registra no momento em que cruza. (4) **Aprovação de operações pela Speed**, configurável por tipo (bloqueio, desbloqueio, reinício, cancelamento), **desligada por padrão**: a operação espera em `aguardando_aprovacao`, a Speed aprova (segue para a Wiki com a mesma chave) ou recusa com motivo. (5) **Ações em lote** (bloquear, desbloquear, reiniciar até 50 clientes; cancelamento fica de fora de propósito), cada cliente com as mesmas regras e o resultado por cliente. (6) **Relatórios**: filtros por plano, CTO e situação (contrato ou pagamento) nas telas e planilhas, e impressão em PDF pelo navegador. (7) **Abrir chamado da tela do cliente**, e **links de rota** até a CTO e o cliente. (8) **Qualidade do sinal da base** (supervisor): sinal médio, clientes abaixo do mínimo e com mais quedas, lendo o histórico de cada cliente na Wiki (resultado guardado por 10 min); pede-se à Wiki uma rota em lote para isso.
+
+**Criação de contrato pela Wiki (16 out 2026), contra mock:** a Wiki propôs `POST /v3/contratos` (contrato v3, seção H), que cria o contrato no nome do parceiro no Voalle, ajusta a conexão PPPoE para `<contrato>-<CÓDIGO>` e grava o endereço da instalação. No portal, a etapa "Contrato do cliente" da liberação da ONU pede o **endereço estruturado** (CEP, rua, número, complemento, bairro, cidade, UF), cria o pedido (`contract_requests`, migration 0010, um por reserva salvo se falhou), acompanha as três etapas e, ao concluir, grava o número e o login. **Com `CONTRACT_MODE` ligado a ativação ignora o número digitado** e usa o login do contrato criado (`contrato_nao_criado` enquanto não concluir); desligado, tudo segue como antes. O valor mensal enviado é o que a Speed cobra do parceiro pelo plano; nenhum nome de assinante vai. Atrás de `CONTRACT_MODE=off|mock|wiki` (padrão off). **Em aberto (Juan):** a aprovação do contrato (e portanto a cobrança) quando a ONU fica online, e a proporcionalidade do primeiro mês. **Falta combinar com a Wiki:** o cancelamento do contrato não aprovado quando a reserva é cancelada antes da ativação (o portal ainda não chama nada nesse caso).
+
+**Wiki v1.1 e v3 de leitura no ar (16 out 2026):** o mapa por sigla (`/v1/regioes/{sigla}/ctos`, 798 CTOs com posição) alimenta o cartão "Rede inteira por sigla" no Painel da rede (admin); as rotas de status e sinal do cliente (`/v3/clientes/...`) estão publicadas, mas o PPPoE ainda vem "não disponível" até a Wiki incluir a rede neutra no poller do NE40. Para ligar a tela do cliente em produção: `CLIENT_STATUS_MODE=wiki` (só leitura, usa `WIKI_API_KEY`); precisa de uma ONU com alias igual ao login para o 404 `login_desconhecido` dar lugar a dado real.
+
+**Tela do cliente (16 out 2026), 181 testes passando:** na Instalação com O.S. fechada, o painel "Situação na rede" mostra o **semáforo de fibra (OLTCloud), PPPoE (NE40) e contrato (Voalle)**, a ONU, desde quando está no ar, a idade de cada leitura (**dado velho** acima de 15 min na fibra e 30 min no PPPoE) e o **sinal da ONU em 7, 30 ou 90 dias** com a linha do mínimo aceitável (medido na CTO menos o limite que valeu na ativação) e as quedas; "Consultar de novo" pede leitura ao vivo. O painel do parceiro ganhou **fibra online e PPPoE conectado lado a lado** (do snapshot, nunca ao vivo, lote de até 200 logins) e a lista de clientes em alarme (sem sinal, offline, sem energia, PPPoE caído; cliente bloqueado sem PPPoE não alarma), que também aparece no sino. Só leitura, atrás de `CLIENT_STATUS_MODE=off|mock|wiki` (padrão off; wiki usa `WIKI_API_KEY`). Cada fonte responde por si e falha vira "sem leitura"/502 sem derrubar a tela. O alarme hoje é o **estado atual** do snapshot, não a transição (o contrato v3 prevê comparar ciclos; fica para quando a Wiki entregar e houver snapshot guardado). Mock: o último dígito do contrato escolhe o cenário (3 = loss, 7 = offline, 9 = bloqueado).
+
+**Chamados de infraestrutura (16 out 2026), 164 testes passando:** o parceiro abre chamado para a Infra (CTO com problema, porta off, conferência de porta, sinal fora do padrão na CTO, rompimento regional), com cliente (herda CTO e login), sinal e descrição, acompanha o histórico e responde pelo portal; a Speed vê todos, só leitura (`tickets` e `ticket_messages`, migration 0009). O chamado **sempre nasce no portal** (estado `recebido`) e depois é entregue à Wiki conforme o [contrato v3, seção D](CONTRATO-WIKI-V3-CLIENTES.md); Wiki fora do ar ou desligada deixa o chamado guardado e "Reenviar" repete com a mesma chave, sem duplicar. Só as mensagens da Infra voltam da Wiki (dedupe por hash); as do parceiro e do sistema já estão no portal. **SLA por tipo** é parâmetro da Speed (Parceiros, "Prazo dos chamados", auditado em `config.sla`); os valores padrão são **provisórios** até a diretoria definir. O prazo vai à Wiki como `slaHoras`; chamado vencido e aberto vira "atrasado" (sino, KPI do painel). **Trava de sinal:** `prosseguir` com justificativa abre sozinho um chamado `trava_sinal` (origem `sistema`, com as duas medições e a foto da medição); falha nele nunca derruba a decisão do técnico. Atrás de `AUTOMATION_MODE=off|mock|wiki`, como as ações do cliente. Fotos no formulário de chamado ainda não têm tela (a API aceita `photoIds`).
+
+**Instalação, agenda e financeiro (15 out 2026, noite), 143 testes passando:** a reserva ganhou plano, apelido, visita, técnico e dados da O.S. (migrations 0006 e 0007). Páginas novas: **Painel** do parceiro, **Instalações** (galeria, link assinado, fechamento da O.S.), **Agenda** (dia/semana/mês, arrastar para reagendar) e **Financeiro** (supervisor: preços de venda, custo, lucro, pagamento manual, planilhas CSV). A ONU só é liberada com plano, visita e técnico; a O.S. só fecha com ONU online e as 6 fotos (interruptor da Speed). Porta ativa = reserva convertida com O.S. fechada. Sino de avisos, faixa de rede fora do ar para a Speed, rascunho dos formulários e proteção contra tela branca. `/api/health` devolve `rede` (cacheado 30 s). Ver `docs/CONFORMIDADE-PLANEJAMENTO.md`.
+
+**Segundo fator (15 out 2026), 112 testes passando:** TOTP (RFC 6238, SHA-1, 6 dígitos, 30 s) obrigatório em produção para supervisor e administrador Speed (`MFA_REQUIRED`, `TOTP_KEY`). Login em duas etapas: a senha certa devolve só um desafio de 5 min (sem cookie); o código do aplicativo ou um código de recuperação (10, uso único, só o hash no banco) troca por sessão. Segredo cifrado com AES-256-GCM, replay bloqueado por intervalo, bloqueio após 10 erros. Quem ainda não configurou só alcança `/api/auth/*` (403 `mfa_obrigatorio`). O administrador redefine o 2FA de outro usuário pela tela (auditado); o próprio administrador usa `node dist/scripts/reset-2fa.js <e-mail>` no servidor.
+
+**Fotos de campo (15 out 2026), 96 testes passando:** cinco tipos (medição na CTO, CTO aberta, etiqueta da porta, sobra de fibra, ONU instalada), enviadas pelo celular do técnico com a imagem reduzida (lado maior 1600 px, JPEG) e o GPS do aparelho quando permitido. Metadados na tabela `photos` (contrato, hora do servidor, hora do aparelho, GPS, sha256); o arquivo fica no volume `photos-data` (`PHOTO_DIR`), atrás de uma interface `PhotoStorage` (trocar por S3/MinIO é implementar duas funções), e só sai pela API com checagem de parceiro (404 para foto de outro). O formato é conferido pelos bytes, não pelo tipo declarado. **A foto da medição é obrigatória para pedir a ativação** (`foto_medicao_obrigatoria`). Link assinado para a Infra sem conta: `POST /photos/:id/link`, validade de 1 a 48 h, HMAC com o segredo da sessão, acesso registrado na auditoria. O backup (`deploy/backup-db.sh`) espelha as fotos junto do dump do banco.
+
+**Atualização de 7 out 2026 (sessão do portal), 67 testes passando:**
+
+- **Modelo de vagas (decisões do Juan, 7 out 2026):** reserva por vaga, não por porta. Vaga = saída de splitter livre no diagrama do Codemaps, descontando clientes que o OLTCloud tem a mais; só Codemaps e OLTCloud entram na conta (Voalle e as caixas "nativas" ficam fora). CTO sem caixa no OLTCloud ou com dado velho (mais de 1 h) é "conferir". **Área do piloto por sigla no nome da CTO:** R1 (Backbone Central), ITA (Itacolomi) e FAT (Fátima); o administrador Speed define as siglas liberadas por parceiro (`allowedRegions`, vazio = nada é oferecido).
+- **Integração por interface:** `NetworkMap` usa `ctoId` (id do Codemaps) e `getCtoVagas`. Modo `INTEGRATIONS_MODE=wiki` (`integrations/wiki.ts`), só leitura, valida a resposta contra [`CONTRATO-WIKI-V1.md`](CONTRATO-WIKI-V1.md). A Wiki implementou e publicou as três rotas v1 (14 out 2026), mas está **bloqueada pelo Codemaps** (o IP de saída novo, 189.112.67.129, ainda recebe "dns not authorized"; chamado aberto com o suporte). Enquanto isso o portal segue em `INTEGRATIONS_MODE=mock` e `/health` devolve `ok:false`, o que é esperado.
+- **Reserva por id:** a trava é `(cto_id, port)` (migration 0001). Reservar exige uma viabilidade do mesmo parceiro, para o mesmo endereço, nas últimas 24 h que tenha listado a CTO.
+- **Painel da rede, auditoria e equipe:** o administrador Speed entra no Painel da rede (consultas de parceiros por dia, com viabilidade, sem viabilidade e fora da área; mapa de calor de ocupação das CTOs vistas, por sigla; visão em tabela) e tem Auditoria com nome de quem fez, parceiro e filtros. O supervisor do parceiro gerencia a própria Equipe. O mapa mostra só as CTOs que apareceram em consultas; o mapa completo por sigla depende de uma rota da Wiki (proposta no contrato).
+- **Gestão de parceiros (administrador Speed):** tela "Parceiros" com uso atual (reservas abertas, usuários ativos), siglas liberadas (atalho para o piloto R1, ITA, FAT), limites, bloqueio com motivo obrigatório e reativação, e usuários do parceiro (cadastro do primeiro supervisor com senha gerada, desativar e reativar respeitando o limite). Telas conferidas em Chrome headless, claro, escuro e celular.
+- **Reserva:** a trava virou contagem sob lock por CTO (reservas vivas de todos os parceiros + 1 ≤ vagas livres), com limite de 50% de `totalVagas` por parceiro, leitura `?fresh=true` e área conferida de novo no servidor. Migration 0002.
+- **Front:** o visual do modelo 4 já está em Nova venda e Reservas (casca, Ctrl K, tema, anéis). As demais telas do protótipo ainda não existem. **Não foi verificado em navegador nesta sessão**; só typecheck e build.
+- **Cobertura real:** os testes cobrem viabilidade, reserva, isolamento entre parceiros, login, cliente da Wiki e `/partner`. Não cobrem criação de parceiro e de usuário com limite, nem `GET /admin/audit`.
+- **Pendências do portal:** trava de sinal (depende da média por CTO vinda da Wiki), limpeza do contador de login em memória, `clientIp` confiando em `x-forwarded-for`, ciclo de vida da reserva `convertida`.
+
+**Pronto e testado até 6 out (18 testes):**
+
+- Login, sessão, três perfis, trava de tentativas de login.
+- Isolamento por `partner_id` validado no servidor; recurso de outro parceiro responde 404.
+- Viabilidade: CTOs próximas, portas livres descontando reservas do portal, planos. Toda consulta registrada.
+- Reserva 48 h com trava real no banco (índice único parcial em `cto_name + port` para status `ativa`/`convertida`), expiração, cancelamento pelo parceiro e pela Speed com motivo, limite de reservas simultâneas, limite de 50% por CTO.
+- Supervisor cria e desativa os próprios atendentes dentro do limite.
+- Admin Speed (só API): parceiros, limites, bloqueio do parceiro inteiro, auditoria.
+- `audit_log` em toda ação e `api_call_log` em toda chamada a sistema de origem.
+- Clientes reais de Codemaps (endereço → CTOs), OLTCloud (ocupação porta a porta) e Voalle (só autenticação), **nunca testados contra os sistemas reais**, porque eles liberam acesso por IP e só o servidor da SpeedWiki está liberado.
+
+**Ainda não feito:**
+
+- Contrato no Voalle com ponto de acesso, aceite e PPPoE.
+- Liberação de ONU no OLTCloud com trava de sinal.
+- Telas de admin e de gestão de usuários (a API existe).
+- Visual do protótipo aplicado ao código.
+- Aviso de reserva, agenda, fotos e O.S., chamados, financeiro, dashboards e segundo fator já existem (rodando contra mock onde dependem da Wiki).
+
+## 7. Identidade visual
+
+O dono do projeto quer o portal com **cara de produto feito com intenção**, "sem cara de vibe code", com identidade própria e animações que não sejam o fade genérico.
+
+- **Quem usa:** donos de provedor (parceiros) e técnicos de campo.
+- **Sensação:** rapidez e confiança, com um toque de tecnologia atual. Referências: Apple, Cloudflare, Supabase.
+- **O dono da Speed adora gráficos que "enchem os olhos"**: o painel precisa ser rico em gráficos.
+- **Histórico:** três direções (Fibra, Editorial, NOC) foram rejeitadas. Da segunda rodada, ele amou a barra de busca do modelo "busca primeiro", a sidebar do modelo estilo Linear e gostou por completo do painel claro estilo Vercel/Stripe, mas achou "frágil".
+- **Modelo 4 (aprovado):** síntese das três: base clara reforçada, sidebar com grupos e contadores, busca com Ctrl K, tema claro e escuro. Fonte **Geist** (Geist Mono para números técnicos) no desktop; no celular, fonte do sistema (SF Pro / Roboto) para parecer app nativo.
+- **Telas no protótipo** (só visual, sem função): painel com gráfico de área com crosshair, donut de saúde da base, mapa de calor de ocupação de CTO, barras por atendente e feed ao vivo; nova venda com mapa e portas; reservas com anéis de contagem regressiva; mapa da rede com "simular falha"; clientes com semáforo e sinal de 30 dias; chamados com rastreio estilo entrega; financeiro com receita acumulada vs meta; resumo do mês em formato stories; avisos com toasts e sino; celular do técnico com abas, medidor de sinal, trava de sinal, fotos e assinatura.
+- **Tokens principais** (tema claro): fundo `#f6f7f9`, superfície `#ffffff`, tinta `#0b0d12`, dado `#2563eb`, marca `#ff5a1f`, status `--c-ok #14864a`, `--c-warn #c98a00`, `--c-bad #cf2f2f`. O tema escuro tem valores próprios no protótipo.
+- **Tema Azul Speed (pedido do dono, 19 out 2026):** terceira opção ao lado de claro e escuro, mais próxima da identidade da Speed: fundo azul-marinho (`#091733`, superfície `#0e2048`), dado `#7fb0ff` e o **laranja da marca (`#ff5a1f`) nos botões principais**. Só por escolha do usuário (o padrão segue o sistema, claro ou escuro), no seletor do cabeçalho ou no Ctrl K; fica salvo no navegador (`rn-theme = blue`).
+- **Evitar:** cards todos iguais com emoji no menu, gradiente roxo, KPI com ícone em cima, fade em tudo.
+
+## 8. SpeedWiki e como os dois vão conversar
+
+O que se sabe da SpeedWiki (lido do repositório em 6 out 2026; o `CLAUDE.md` dela é a fonte detalhada):
+
+- Portal interno de operações da Speed, produção em `speedwiki.speednettelecom.com.br` (VM 179.106.108.48).
+- React 18 + Vite + TS, Supabase self-hosted (Postgres 15, RLS por role), proxy Node + Hono (`deploy/proxy/server.js`), Caddy, deploy por GitHub Actions no push em `main`.
+- **Já integrado e reaproveitável:** Codemaps (viabilidade por endereço via `equipment/nearbyaddress`, diagrama de splitters), OLTCloud (API REST v2: ONUs, `box/list` com ocupação porta a porta, `box/attenuations` com média de sinal por CTO, reboot via ACS), Voalle (API thirdparty com token cacheado + Postgres read-only), Zabbix, Evolution (WhatsApp), Kanban externo.
+- **Não existe ainda na Wiki:** autorização/liberação de ONU no OLTCloud, criação de contrato e ponto de acesso no Voalle, endpoint externo para abrir incidente/chamado (incidentes de infra ficam na tabela `incidents`).
+- **Modelo de integração a seguir:** o SpeedParceiros (repo próprio, servidor 179.106.108.58) consome rotas `/proxy/parceiros/*` da Wiki com header de API key.
+
+**O que o Rede Neutra vai precisar da SpeedWiki** (proposta, ainda não implementada em nenhum dos lados):
+
+1. **Abrir chamado de infraestrutura** marcado como rede neutra, com parceiro, contrato, CTO, motivo, sinal medido e fotos. Motivos: CTO com problema, porta off, conferência de porta após divergência, sinal fora do padrão na CTO, rompimento/queda regional. Inclui os chamados automáticos da trava de sinal.
+2. **Consultar status e histórico** desse chamado, para o parceiro acompanhar pelo portal (ele nunca vê a Wiki).
+3. **SLA configurável por tipo de chamado** (prazos ainda a definir pela diretoria).
+4. Possivelmente, **passar pelo servidor da Wiki** para alcançar Codemaps, OLTCloud e Voalle, já que esses sistemas liberam acesso por IP. Alternativa: liberar o IP do servidor do Rede Neutra nesses sistemas. Ainda não decidido.
+
+Formato sugerido: rotas `/proxy/redeneutra/*` no proxy Hono da Wiki, protegidas por uma chave dedicada (por exemplo header `X-RedeNeutra-Key`), espelhando o que já existe para o SpeedParceiros. Do lado do portal, a integração entra atrás de uma interface nova em `apps/api/src/integrations/types.ts`, com um mock para testes.
+
+**Primeiro passo prático com a Wiki em mãos:** rodar, no servidor da SpeedWiki e com as credenciais dela, o script só de leitura:
+
+```bash
+INTEGRATIONS_MODE=real npm run validate:integrations -w apps/api -- "Rua X, 100, Cidade"
+```
+
+Ele confere login e leitura nos três sistemas, cruza a CTO do Codemaps com a ocupação do OLTCloud e procura no schema da API do OLTCloud rotas de autorização de ONU. A resposta decide como fica a liberação de ONU.
+
+## 9. Regras que não podem ser quebradas
+
+- **Nunca escrever em Voalle, OLTCloud ou Codemaps sem validação explícita do Juan.** São produção.
+- Toda rota de dado do parceiro filtra por `partner_id` da sessão no servidor; recurso de outro parceiro responde 404.
+- Toda ação que mexe na rede ou no cadastro grava em `audit_log`.
+- Credenciais dos sistemas de origem só no servidor, nunca no navegador.
+- Senha PPPoE: **decidido que o portal nunca vê nem exibe** (16 out 2026). A Speed usa a mesma senha padrão para a rede neutra, gravada pela Wiki ao criar o contrato e entregue ao parceiro pelo canal comercial. Não há rota, tela nem ação de trocar senha.
+
+## 10. Decisões em aberto
+
+**Da diretoria:** SLA dos chamados por tipo; o que fazer quando a porta reservada não funciona em campo (o PDF recomenda registrar na O.S. com validação e alerta à Logística); fotos obrigatórias ou opcionais; tabela de preços fixa ou degressiva; limite por CTO (sugerido 50%); módulo de WhatsApp no piloto; indicadores do painel da Speed.
+
+**Técnicas:** como agrupar os contratos do parceiro no Voalle para faturamento consolidado; limite prático de contratos sob o mesmo CNPJ; regra que define o concentrador correto por OLT e região; se a API do OLTCloud permite autorizar ONU; por onde o portal acessa os sistemas liberados por IP.
+
+## 11. Próximos passos sugeridos
+
+1. Rodar o `validate:integrations` no servidor da SpeedWiki (só leitura) e registrar o resultado.
+2. Desenhar com a Wiki as rotas `/proxy/redeneutra/*` para chamados.
+3. Levar o visual do modelo 4 para `apps/web`, começando por viabilidade e reservas, que já têm API.
+4. Em paralelo, investigar só lendo como criar contrato com ponto de acesso no Voalle e autorizar ONU no OLTCloud.
