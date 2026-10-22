@@ -270,6 +270,54 @@ A Wiki já tem a criação de contrato no Voalle construída e desligada: `contr
 - **Chamados:** Kanban externo com `external_ref = chamadoId`, `source: "redeneutra"` serve. **[DECIDIR - Juan]** qual board e quais colunas valem como `em_atendimento` e `resolvido`, e confirmar que a Wiki baixa as fotos na criação (o link expira em 48 h). Trava de sinal: a Wiki não abre card próprio no `prosseguir`. SLA: a Wiki só guarda e mostra.
 - **Ordem na Wiki:** PPPoE no snapshot + incidente por CTO; criação de contrato (assim que o Voalle estiver configurado, testada primeiro num contrato da Speed); chamados; reinício, ativação (v2), bloqueio e cancelamento. Toda escrita continua desligada até a validação do Juan.
 
+## I. Diagnóstico da ONU para o suporte do parceiro (pedido do portal, 22 out 2026)
+
+**Para quê:** a tela "ONUs" do portal, onde o suporte ou o dono do provedor vê todas as ONUs dos seus clientes e diagnostica um chamado do assinante sem ligar para a Speed. O semáforo da seção A diz *se* o cliente está no ar; isto diz *por quê* não está (luz chegando, energia, distância, porta inteira caída, Wi-Fi ruim dentro de casa). Tudo é leitura do que a Wiki já consulta no OLTCloud para a própria tela "Consultar ONU" (`equipment/list`, `ftth/pons/attenuations`, `acs/{id}/rssi_analysis`).
+
+### `GET /clientes/{login}/onu` (leitura, `X-RedeNeutra-Key`, `X-RedeNeutra-Partner` obrigatório)
+Leitura **ao vivo** do OLTCloud, uma ONU por vez (o portal chama quando o suporte abre a ONU e no botão "Atualizar", no máximo a cada 60 s por tela aberta). Mesmas regras de sempre: `403 login_de_outro_parceiro`, `404 login_desconhecido` (corpo JSON com esse `error`; o portal trata 404 sem esse corpo como "rota ainda não publicada"), `429` com `Retry-After` se precisar enfileirar.
+
+```json
+{
+  "login": "12345-JHV",
+  "lidoEm": "2026-10-22T15:04:00-03:00",
+  "onu": {
+    "serial": "HWTC6FE1FCB2",
+    "modelo": "EG8145X6",
+    "estado": "online",
+    "olt": "OLT_BACKBONE_CENTRAL",
+    "slot": 1,
+    "pon": 15,
+    "rxDbm": -21.4,
+    "txDbm": 2.1,
+    "rxOltDbm": -24.8,
+    "temperaturaC": 48.0,
+    "distanciaM": 1830,
+    "ligadaDesde": "2026-10-20T09:12:00-03:00",
+    "ultimaQuedaEm": "2026-10-19T22:40:00-03:00",
+    "sinalLidoEm": "2026-10-22T15:01:00-03:00"
+  },
+  "pon": { "onus": 42, "offline": 3, "mediaRxDbm": -20.9 },
+  "wifi": {
+    "online": true,
+    "lidoEm": "2026-10-22T15:03:00-03:00",
+    "dispositivos": [
+      { "nome": "Galaxy-A54", "mac": "AA:BB:CC:DD:EE:01", "banda": "5GHz", "ssid": "CASA", "rssiDbm": -58, "online": true }
+    ]
+  }
+}
+```
+- **`onu`:** campos do `equipment/list` (`device_rx`, `device_tx`, `olt_rx`, `temperature`, `distance` em metros, `uptime_since`, `last_disconnection`, `last_signal_update`). `estado` com os mesmos valores de `fibra.estado` da seção A. Sentinela `-99.99` vira `null`; qualquer campo que o OLTCloud não tenha vem `null`.
+- **`pon`:** a porta inteira da OLT (todas as ONUs dessa `olt`/`slot`/`pon`, de todos os clientes da Speed, só a contagem): total, quantas fora de Online e a média de RX da porta (`avg_rx_onu` do `pons/attenuations`). É o que separa "problema do cliente" de "falha na rede". Nunca vem lista de ONUs nem nome de outro cliente. `null` se não der para ler.
+- **`wifi`:** do módulo ACS (`rssi_analysis`, tentando a serial e os MACs como a Wiki já faz). `dispositivos` são os aparelhos ligados no roteador do assinante (nome do aparelho, MAC, banda, SSID, RSSI médio). `null` quando a ONU não tem roteador no ACS ou o ACS não responde. **Nunca a senha do Wi-Fi.**
+- Cada bloco responde por si: `pon` ou `wifi` fora do ar vêm `null` e a rota segue `200`.
+
+### Pedido junto: `sinalDbm` no lote
+No `POST /clientes/status`, mandar também `sinalDbm` (o `device_rx` do snapshot, `null` sem leitura). A lista da tela "ONUs" mostra o sinal de cada cliente sem abrir um por um. Opcional: sem o campo, a lista mostra "—".
+
+### No portal (pronto contra mock, 22 out 2026)
+Tela **ONUs** (atendente e supervisor do parceiro): lista de todas as ONUs com O.S. fechada, do snapshot (`POST /clientes/status`), com busca e filtro "com problema"; ao abrir uma, `GET /clientes/{login}/onu` e um **diagnóstico em português** calculado pelo portal (porta inteira caída, sem luz, sem energia, sinal abaixo do mínimo da instalação, PPPoE caído com fibra boa, Wi-Fi com aparelhos de sinal ruim). Ações que já existem (reiniciar, abrir chamado) ficam na mesma tela. Enquanto a rota não existir, o detalhe mostra só o semáforo da seção A e avisa que o diagnóstico completo ainda não está disponível.
+
 ## G. No portal
 - Interfaces novas em `integrations/types.ts`: `CustomerStatusService`, `TicketService` e `CustomerActions`, cada uma com **mock** e cliente real da Wiki que valida a resposta contra este contrato.
 - Escrita (`bloqueio`, `reinicio`, `cancelamento`, `chamados`) atrás de `AUTOMATION_MODE=off|mock|wiki`, **desligado por padrão**, como o `ACTIVATION_MODE`. Só liga com a validação explícita do Juan.

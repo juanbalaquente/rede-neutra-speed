@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Http } from "./http.js";
-import { IntegrationError, type ClientStatus, type ClientStatusService, type ClientSummary, type SignalSeries } from "./types.js";
+import { IntegrationError, type ClientStatus, type ClientStatusService, type ClientSummary, type OnuDetail, type SignalSeries } from "./types.js";
 
 /**
  * Leitura do estado dos clientes na SpeedWiki (/proxy/redeneutra/v3/clientes, contrato v3 seção A).
@@ -54,8 +54,47 @@ const signalSchema = z.object({
 });
 
 const summarySchema = z.object({
-  clientes: z.array(z.object({ login: z.string().min(1), fibra: fibraEstado, autenticacao: authEstado, contrato: contratoEstado, fibraEm: when, autenticacaoEm: when, bloqueio })),
+  clientes: z.array(
+    z.object({ login: z.string().min(1), fibra: fibraEstado, autenticacao: authEstado, contrato: contratoEstado, fibraEm: when, autenticacaoEm: when, bloqueio, sinalDbm: z.number().nullable().default(null) }),
+  ),
 });
+
+const num = z.number().nullable().default(null);
+const int = z.number().int().nullable().default(null);
+const text = z.string().nullable().default(null);
+
+const onuSchema = z.object({
+  login: z.string().min(1),
+  lidoEm: when,
+  onu: z.object({
+    serial: z.string(),
+    modelo: text,
+    estado: fibraEstado,
+    olt: text,
+    slot: int,
+    pon: int,
+    rxDbm: num,
+    txDbm: num,
+    rxOltDbm: num,
+    temperaturaC: num,
+    distanciaM: num,
+    ligadaDesde: when,
+    ultimaQuedaEm: when,
+    sinalLidoEm: when,
+  }),
+  pon: z.object({ onus: z.number().int(), offline: z.number().int(), mediaRxDbm: num }).nullable().default(null),
+  wifi: z
+    .object({
+      online: z.boolean(),
+      lidoEm: when,
+      dispositivos: z.array(z.object({ nome: text, mac: z.string(), banda: text, ssid: text, rssiDbm: num, online: z.boolean().default(true) })).default([]),
+    })
+    .nullable()
+    .default(null),
+});
+
+/** Sentinela -99.99 (sem leitura óptica) nunca vira dBm. */
+const dbm = (n: number | null) => (n !== null && n <= SENTINEL ? null : n);
 
 const SENTINEL = -99;
 
@@ -115,8 +154,28 @@ export class WikiClientStatus implements ClientStatusService {
     const out: ClientSummary[] = [];
     for (let i = 0; i < logins.length; i += 200) {
       const { json } = await this.call("POST", "/clientes/status", partnerCode, { logins: logins.slice(i, i + 200) });
-      out.push(...this.parse(summarySchema, json, "lote de clientes").clientes);
+      out.push(...this.parse(summarySchema, json, "lote de clientes").clientes.map((c) => ({ ...c, sinalDbm: dbm(c.sinalDbm) })));
     }
     return out;
+  }
+
+  async onu(login: string, partnerCode: string): Promise<OnuDetail | null> {
+    const path = `/clientes/${encodeURIComponent(login)}/onu`;
+    const res = await this.http(`${this.root}${path}`, {
+      headers: { "X-RedeNeutra-Key": this.apiKey, "X-RedeNeutra-Partner": partnerCode, Accept: "application/json" },
+    });
+    const json: unknown = await res.json().catch(() => null);
+    if (res.status === 404) {
+      // Só o 404 com corpo do contrato é login desconhecido; o 404 do roteador da Wiki é rota que ainda não existe.
+      if ((json as { error?: unknown } | null)?.error === "login_desconhecido") return null;
+      throw new IntegrationError("wiki", `GET ${path} 404 (rota ainda não publicada)`, 404);
+    }
+    if (!res.ok) throw new IntegrationError("wiki", `GET ${path} ${res.status}`, res.status);
+    const d = this.parse(onuSchema, json, "diagnóstico da ONU");
+    return {
+      ...d,
+      onu: { ...d.onu, rxDbm: dbm(d.onu.rxDbm), txDbm: d.onu.txDbm, rxOltDbm: dbm(d.onu.rxOltDbm) },
+      pon: d.pon && { ...d.pon, mediaRxDbm: dbm(d.pon.mediaRxDbm) },
+    };
   }
 }

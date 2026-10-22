@@ -4,9 +4,9 @@ import { clientStatusApi, type AutenticacaoEstado, type ClientStatusView, type C
 import { SignalChart } from "./SignalChart";
 import { useToast } from "./Toast";
 
-type Tone = "ok" | "warn" | "bad" | "mute";
+export type Tone = "ok" | "warn" | "bad" | "mute";
 
-const FIBRA: Record<FibraEstado, { label: string; tone: Tone }> = {
+export const FIBRA: Record<FibraEstado, { label: string; tone: Tone }> = {
   online: { label: "Online", tone: "ok" },
   offline: { label: "Offline", tone: "bad" },
   loss: { label: "Sem sinal (loss)", tone: "bad" },
@@ -15,12 +15,12 @@ const FIBRA: Record<FibraEstado, { label: string; tone: Tone }> = {
   desabilitada: { label: "Desabilitada", tone: "warn" },
   desconhecido: { label: "Sem leitura", tone: "mute" },
 };
-const PPP: Record<AutenticacaoEstado, { label: string; tone: Tone }> = {
+export const PPP: Record<AutenticacaoEstado, { label: string; tone: Tone }> = {
   conectado: { label: "Conectado", tone: "ok" },
   desconectado: { label: "Desconectado", tone: "bad" },
   desconhecido: { label: "Sem leitura", tone: "mute" },
 };
-const CONTRATO: Record<ContratoEstado, { label: string; tone: Tone }> = {
+export const CONTRATO: Record<ContratoEstado, { label: string; tone: Tone }> = {
   ativo: { label: "Ativo", tone: "ok" },
   pendente_aprovacao: { label: "Aguardando aprovação", tone: "mute" },
   rejeitado: { label: "Rejeitado", tone: "bad" },
@@ -31,10 +31,10 @@ const CONTRATO: Record<ContratoEstado, { label: string; tone: Tone }> = {
 };
 
 const errMsg = (e: unknown, fb: string) => (e instanceof Error ? e.message : fb);
-const fmtDbm = (n: number | null) => (n === null ? "sem leitura" : `${n.toFixed(1).replace(".", ",")} dBm`);
+export const fmtDbm = (n: number | null) => (n === null ? "sem leitura" : `${n.toFixed(1).replace(".", ",")} dBm`);
 
 /** "há 4 min", "há 3 h", "há 2 dias". */
-function ago(iso: string | null): string {
+export function ago(iso: string | null): string {
   if (!iso) return "sem data";
   const ms = Date.now() - new Date(iso).getTime();
   if (ms < 90_000) return "agora há pouco";
@@ -42,9 +42,9 @@ function ago(iso: string | null): string {
   if (ms < 48 * 3600_000) return `há ${Math.round(ms / 3600_000)} h`;
   return `há ${Math.round(ms / (24 * 3600_000))} dias`;
 }
-const since = (iso: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : null);
+export const since = (iso: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : null);
 
-function Light({ title, label, tone, detail, age, stale }: { title: string; label: string; tone: Tone; detail?: string | null; age: string | null; stale: boolean }) {
+export function Light({ title, label, tone, detail, age, stale }: { title: string; label: string; tone: Tone; detail?: string | null; age: string | null; stale: boolean }) {
   return (
     <div className={`light t-${tone}`}>
       <small>{title}</small>

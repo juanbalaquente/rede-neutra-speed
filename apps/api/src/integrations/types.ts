@@ -348,6 +348,43 @@ export interface ClientSummary {
   fibraEm: string | null;
   autenticacaoEm: string | null;
   bloqueio?: Bloqueio;
+  /** RX da ONU no snapshot; ausente enquanto a Wiki não mandar no lote (contrato v3, seção I). */
+  sinalDbm?: number | null;
+}
+
+/** Diagnóstico ao vivo de uma ONU para o suporte do parceiro (contrato v3, seção I). */
+export interface OnuDetail {
+  login: string;
+  lidoEm: string | null;
+  onu: {
+    serial: string;
+    modelo: string | null;
+    estado: FibraEstado;
+    olt: string | null;
+    slot: number | null;
+    pon: number | null;
+    rxDbm: number | null;
+    txDbm: number | null;
+    rxOltDbm: number | null;
+    temperaturaC: number | null;
+    distanciaM: number | null;
+    ligadaDesde: string | null;
+    ultimaQuedaEm: string | null;
+    sinalLidoEm: string | null;
+  };
+  /** A porta inteira da OLT, só contagem: separa problema do cliente de falha na rede. */
+  pon: { onus: number; offline: number; mediaRxDbm: number | null } | null;
+  /** Roteador do assinante no ACS; null sem ACS. */
+  wifi: { online: boolean; lidoEm: string | null; dispositivos: WifiDevice[] } | null;
+}
+
+export interface WifiDevice {
+  nome: string | null;
+  mac: string;
+  banda: string | null;
+  ssid: string | null;
+  rssiDbm: number | null;
+  online: boolean;
 }
 
 /** Leitura do estado dos clientes. Resposta de rota fora do ar vira erro (IntegrationError); login desconhecido, null. */
@@ -356,4 +393,6 @@ export interface ClientStatusService {
   signal(login: string, partnerCode: string, dias: number): Promise<SignalSeries | null>;
   /** Até 200 logins, sempre do snapshot. */
   summary(logins: string[], partnerCode: string): Promise<ClientSummary[]>;
+  /** Ao vivo. Rota ainda não publicada na Wiki: IntegrationError com status 404. */
+  onu(login: string, partnerCode: string): Promise<OnuDetail | null>;
 }

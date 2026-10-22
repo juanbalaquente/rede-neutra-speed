@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AutenticacaoEstado, Bloqueio, ClientStatus, ClientStatusService, ClientSummary, ContratoEstado, FibraEstado, SignalSeries } from "./types.js";
+import { IntegrationError, type AutenticacaoEstado, type Bloqueio, type ClientStatus, type ClientStatusService, type ClientSummary, type ContratoEstado, type FibraEstado, type OnuDetail, type SignalSeries, type WifiDevice } from "./types.js";
 
 /**
  * Wiki de mentira para o status do cliente. O cenário sai do último dígito do contrato (o login é `<contrato>-<CÓDIGO>`),
@@ -43,12 +43,11 @@ export class MockClientStatus implements ClientStatusService {
     const s = this.scenario(login);
     const now = Date.now();
     const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
-    const base = mockBaseDbm(login);
     return {
       login,
       fibra: {
         estado: s.fibra,
-        sinalDbm: s.fibra === "online" ? Number(base.toFixed(1)) : null,
+        sinalDbm: s.fibra === "online" ? mockOnuRx(login) : null,
         uptimeDesde: s.fibra === "online" ? iso(6 * 24 * 3600_000) : null,
         ultimaQuedaEm: iso((mockHadDrop(login) ? 13 : 61) * 24 * 3600_000),
         atualizadoEm: iso(opts.fresh ? 1_000 : 4 * 60_000),
@@ -97,9 +96,60 @@ export class MockClientStatus implements ClientStatusService {
         return { login, fibra: "desconhecido", autenticacao: "desconhecido", contrato: "desconhecido", fibraEm: null, autenticacaoEm: null };
       }
       const s = this.scenario(login);
-      return { login, fibra: s.fibra, autenticacao: s.ppp, contrato: s.contrato, fibraEm: at, autenticacaoEm: at, bloqueio: this.bloqueio(s) };
+      return { login, fibra: s.fibra, autenticacao: s.ppp, contrato: s.contrato, fibraEm: at, autenticacaoEm: at, bloqueio: this.bloqueio(s), sinalDbm: s.fibra === "online" ? mockOnuRx(login) : null };
     });
   }
+
+  /**
+   * Diagnóstico ao vivo. Além dos cenários do status: 7 = offline com a porta da OLT quase toda caída (falha na rede),
+   * 4 = Wi-Fi com aparelhos de sinal ruim, 6 = sinal da ONU fraco, 8 = ONU sem roteador no ACS. `onuRouteMissing` simula a Wiki sem a rota.
+   */
+  onuRouteMissing = false;
+  async onu(login: string, partnerCode: string): Promise<OnuDetail | null> {
+    this.calls.push(`onu:${login}`);
+    if (this.onuRouteMissing) throw new IntegrationError("wiki", "GET /clientes/x/onu 404 (rota ainda não publicada)", 404);
+    if (!this.guard(login, partnerCode)) return null;
+    const s = this.scenario(login);
+    const digit = login.replace(/-.*$/, "").slice(-1);
+    const seed = this.seed(login);
+    const now = Date.now();
+    const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
+    const online = s.fibra === "online";
+    const rx = online ? mockOnuRx(login) : null;
+    const devices: WifiDevice[] = [
+      { nome: "Galaxy-A54", mac: "3C:2E:F9:10:22:01", banda: "5GHz", ssid: "CASA_5G", rssiDbm: -54, online: true },
+      { nome: "Smart-TV-Sala", mac: "A4:77:33:8B:01:9C", banda: "2.4GHz", ssid: "CASA", rssiDbm: digit === "4" ? -79 : -61, online: true },
+      { nome: "iPhone", mac: "F0:18:98:4A:7E:11", banda: "5GHz", ssid: "CASA_5G", rssiDbm: digit === "4" ? -76 : -49, online: true },
+    ];
+    return {
+      login,
+      lidoEm: iso(1_000),
+      onu: {
+        serial: mockSerial(login),
+        modelo: "F670L",
+        estado: s.contrato === "bloqueado" ? "desabilitada" : s.fibra,
+        olt: "OLT_SANTA_INES",
+        slot: 1,
+        pon: 15,
+        rxDbm: s.contrato === "bloqueado" ? null : rx,
+        txDbm: online ? 2.1 : null,
+        rxOltDbm: online && rx !== null ? Number((rx - 3.2).toFixed(1)) : null,
+        temperaturaC: online ? 44 + (seed % 9) : null,
+        distanciaM: 600 + (seed % 2400),
+        ligadaDesde: online ? iso(6 * 24 * 3600_000) : null,
+        ultimaQuedaEm: iso((mockHadDrop(login) ? 13 : 61) * 24 * 3600_000),
+        sinalLidoEm: iso(3 * 60_000),
+      },
+      pon: { onus: 42, offline: digit === "7" ? 31 : digit === "3" ? 2 : 1, mediaRxDbm: -20.6 },
+      wifi: online && digit !== "8" && s.contrato !== "bloqueado" ? { online: true, lidoEm: iso(2 * 60_000), dispositivos: devices } : null,
+    };
+  }
+}
+
+/** RX atual da ONU: o típico do login, ou fraco no cenário 6. */
+export function mockOnuRx(login: string): number {
+  if (login.replace(/-.*$/, "").slice(-1) === "6") return -27.4;
+  return Number(mockBaseDbm(login).toFixed(1));
 }
 
 /** Semente do login: o mesmo login dá sempre o mesmo sinal, serial e quedas (os dados de demonstração usam para combinar). */

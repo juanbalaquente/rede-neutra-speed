@@ -90,6 +90,40 @@ describe("WikiClientStatus (contrato v3, seção A)", () => {
     expect(calls[0]!.method).toBe("POST");
   });
 
+  it("diagnóstico da ONU (seção I): lê, limpa o sentinela e separa login desconhecido de rota ausente", async () => {
+    const ONU = {
+      login: "12345-JHV",
+      lidoEm: "2026-10-22T15:04:00-03:00",
+      onu: { serial: "HWTC6FE1FCB2", modelo: "EG8145X6", estado: "online", olt: "OLT_BACKBONE_CENTRAL", slot: 1, pon: 15, rxDbm: -21.4, txDbm: 2.1, rxOltDbm: -99.99, temperaturaC: 48, distanciaM: 1830, ligadaDesde: null, ultimaQuedaEm: null, sinalLidoEm: null },
+      pon: { onus: 42, offline: 3, mediaRxDbm: -20.9 },
+      wifi: { online: true, lidoEm: null, dispositivos: [{ nome: null, mac: "AA:BB:CC:DD:EE:01", banda: "5GHz", ssid: "CASA", rssiDbm: -58 }] },
+    };
+    const { wiki, calls } = build(() => json(ONU));
+    const d = await wiki.onu("12345-JHV", "JHV");
+    expect(calls[0]!.url).toBe("https://wiki.exemplo/proxy/redeneutra/v3/clientes/12345-JHV/onu");
+    expect(calls[0]!.headers["X-RedeNeutra-Partner"]).toBe("JHV");
+    expect(d!.onu).toMatchObject({ rxDbm: -21.4, rxOltDbm: null, distanciaM: 1830 });
+    expect(d!.wifi!.dispositivos[0]).toMatchObject({ online: true, nome: null });
+
+    const minimal = build(() => json({ login: "1-JHV", onu: { serial: "X", estado: "loss" } }));
+    expect(await minimal.wiki.onu("1-JHV", "JHV")).toMatchObject({ pon: null, wifi: null, onu: { rxDbm: null, slot: null } });
+
+    expect(await build(() => json({ error: "login_desconhecido" }, 404)).wiki.onu("1-JHV", "JHV")).toBeNull();
+    const missing = build(() => new Response("404 Not Found", { status: 404 }));
+    await expect(missing.wiki.onu("1-JHV", "JHV")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("o lote traz o sinal quando a Wiki manda, e nulo quando não manda", async () => {
+    const { wiki } = build(() =>
+      json({ clientes: [
+        { login: "1-JHV", fibra: "online", autenticacao: "conectado", contrato: "ativo", fibraEm: null, autenticacaoEm: null, sinalDbm: -20.5 },
+        { login: "2-JHV", fibra: "loss", autenticacao: "desconectado", contrato: "ativo", fibraEm: null, autenticacaoEm: null, sinalDbm: -99.99 },
+        { login: "3-JHV", fibra: "online", autenticacao: "conectado", contrato: "ativo", fibraEm: null, autenticacaoEm: null },
+      ] }),
+    );
+    expect((await wiki.summary(["1-JHV", "2-JHV", "3-JHV"], "JHV")).map((c) => c.sinalDbm)).toEqual([-20.5, null, null]);
+  });
+
   it("resposta fora do contrato e erro 5xx viram IntegrationError", async () => {
     const bad = build(() => json({ login: "x", fibra: { estado: "quase-online" } }));
     await expect(bad.wiki.status("12345-JHV", "JHV")).rejects.toThrow(/fora do contrato v3/);

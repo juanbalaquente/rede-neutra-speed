@@ -19,6 +19,7 @@ import { signalQuality } from "./services/signal-quality.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
 import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
+import { getOnuDetail, listOnus } from "./services/onus.js";
 import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
 import { TICKET_TYPES } from "./db/schema.js";
 import { getOperation, listOperations, operationView, refreshOperation, retryOperation, startOperation } from "./services/customer-ops.js";
@@ -653,6 +654,14 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
   });
 
   app.get("/dashboard/rede", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json(await getFleetStatus(db, integrations.clientStatus, c.get("user"))));
+
+  // ── ONUs: suporte do parceiro (lista do snapshot e diagnóstico ao vivo, contrato v3 seção I) ──
+  app.get("/onus", requireUser, requireRole("atendente", "supervisor"), async (c) => c.json(await listOnus(db, integrations.clientStatus, c.get("user"))));
+
+  app.get("/onus/:id", requireUser, async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json(await getOnuDetail(db, integrations.clientStatus, c.get("user"), id));
+  });
 
   /** Bloquear, desbloquear ou reiniciar vários clientes de uma vez (até 50). Cancelamento não entra em lote. */
   app.post("/operations/batch", requireUser, requireRole("atendente", "supervisor"), async (c) => {

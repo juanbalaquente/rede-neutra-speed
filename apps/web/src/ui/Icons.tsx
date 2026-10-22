@@ -14,6 +14,14 @@ export const PinIcon = () => (
     <circle cx="12" cy="9.5" r="2.5" />
   </Icon>
 );
+/** ONU: caixinha com antena e os leds de PON e LAN. */
+export const OnuIcon = () => (
+  <Icon>
+    <rect x="3.5" y="11" width="17" height="7" rx="2" />
+    <path d="M8 11V5.5M16 11 18 6" />
+    <path d="M7.5 14.5h.01M11 14.5h.01M14.5 14.5h2" />
+  </Icon>
+);
 export const ClockIcon = () => (
   <Icon>
     <circle cx="12" cy="12" r="8.5" />
