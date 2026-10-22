@@ -25,6 +25,11 @@ const fibraEstado = tolerant(["online", "offline", "loss", "sem_energia", "inati
 const authEstado = tolerant(["conectado", "desconectado", "desconhecido"] as const, "autenticação");
 const contratoEstado = tolerant(["ativo", "pendente_aprovacao", "rejeitado", "bloqueado", "suspenso", "cancelado", "desconhecido"] as const, "contrato");
 
+/** Ausente (Wiki anterior ao bloqueio pela ONU) vale "sem bloqueio". */
+const bloqueio = z
+  .object({ ativo: z.boolean(), desde: when, motivo: z.string().nullable().default(null) })
+  .default({ ativo: false, desde: null, motivo: null });
+
 const statusSchema = z.object({
   login: z.string().min(1),
   fibra: z.object({
@@ -38,6 +43,7 @@ const statusSchema = z.object({
   autenticacao: z.object({ estado: authEstado, ip: z.string().nullable().default(null), desde: when, atualizadoEm: when, motivo: z.string().nullable().default(null) }),
   contrato: z.object({ estado: contratoEstado, desde: z.string().nullable().default(null), atualizadoEm: when }),
   onu: z.object({ serial: z.string(), modelo: z.string().nullable().default(null), olt: z.string().nullable().default(null), vlan: z.number().int().nullable().default(null) }).nullable().default(null),
+  bloqueio,
 });
 
 const signalSchema = z.object({
@@ -48,7 +54,7 @@ const signalSchema = z.object({
 });
 
 const summarySchema = z.object({
-  clientes: z.array(z.object({ login: z.string().min(1), fibra: fibraEstado, autenticacao: authEstado, contrato: contratoEstado, fibraEm: when, autenticacaoEm: when })),
+  clientes: z.array(z.object({ login: z.string().min(1), fibra: fibraEstado, autenticacao: authEstado, contrato: contratoEstado, fibraEm: when, autenticacaoEm: when, bloqueio })),
 });
 
 const SENTINEL = -99;

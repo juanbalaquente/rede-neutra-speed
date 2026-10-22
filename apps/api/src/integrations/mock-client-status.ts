@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AutenticacaoEstado, ClientStatus, ClientStatusService, ClientSummary, ContratoEstado, FibraEstado, SignalSeries } from "./types.js";
+import type { AutenticacaoEstado, Bloqueio, ClientStatus, ClientStatusService, ClientSummary, ContratoEstado, FibraEstado, SignalSeries } from "./types.js";
 
 /**
  * Wiki de mentira para o status do cliente. O cenário sai do último dígito do contrato (o login é `<contrato>-<CÓDIGO>`),
@@ -17,6 +17,11 @@ export class MockClientStatus implements ClientStatusService {
     if (digit === "7") return { fibra: "offline", ppp: "desconectado", contrato: "ativo" };
     if (digit === "9") return { fibra: "online", ppp: "desconectado", contrato: "bloqueado" };
     return { fibra: "online", ppp: "conectado", contrato: "ativo" };
+  }
+
+  /** Contrato bloqueado no cenário = bloqueio da Speed na ONU (fibra "desabilitada"), como a Wiki devolve. */
+  private bloqueio(s: { contrato: ContratoEstado }): Bloqueio {
+    return s.contrato === "bloqueado" ? { ativo: true, desde: new Date(Date.now() - 3 * 24 * 3600_000).toISOString(), motivo: "inadimplência" } : { ativo: false, desde: null, motivo: null };
   }
 
   private seed(login: string): number {
@@ -56,6 +61,7 @@ export class MockClientStatus implements ClientStatusService {
       },
       contrato: { estado: s.contrato, desde: "2026-09-30", atualizadoEm: iso(60_000) },
       onu: { serial: mockSerial(login), modelo: "F670L", olt: "OLT_SANTA_INES", vlan: 2500 },
+      bloqueio: this.bloqueio(s),
     };
   }
 
@@ -91,7 +97,7 @@ export class MockClientStatus implements ClientStatusService {
         return { login, fibra: "desconhecido", autenticacao: "desconhecido", contrato: "desconhecido", fibraEm: null, autenticacaoEm: null };
       }
       const s = this.scenario(login);
-      return { login, fibra: s.fibra, autenticacao: s.ppp, contrato: s.contrato, fibraEm: at, autenticacaoEm: at };
+      return { login, fibra: s.fibra, autenticacao: s.ppp, contrato: s.contrato, fibraEm: at, autenticacaoEm: at, bloqueio: this.bloqueio(s) };
     });
   }
 }

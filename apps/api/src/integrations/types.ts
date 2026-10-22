@@ -323,6 +323,14 @@ export interface ClientStatus {
   autenticacao: { estado: AutenticacaoEstado; ip: string | null; desde: string | null; atualizadoEm: string | null; motivo?: string | null };
   contrato: { estado: ContratoEstado; desde: string | null; atualizadoEm: string | null };
   onu: { serial: string; modelo: string | null; olt: string | null; vlan: number | null } | null;
+  bloqueio?: Bloqueio;
+}
+
+/** Bloqueio feito pela Speed na ONU (desabilitada no OLTCloud). Registro da Wiki: o status "Desabilitada" sozinho também vale para cancelado. */
+export interface Bloqueio {
+  ativo: boolean;
+  desde: string | null;
+  motivo: string | null;
 }
 
 export interface SignalSeries {
@@ -339,6 +347,7 @@ export interface ClientSummary {
   contrato: ContratoEstado;
   fibraEm: string | null;
   autenticacaoEm: string | null;
+  bloqueio?: Bloqueio;
 }
 
 /** Leitura do estado dos clientes. Resposta de rota fora do ar vira erro (IntegrationError); login desconhecido, null. */

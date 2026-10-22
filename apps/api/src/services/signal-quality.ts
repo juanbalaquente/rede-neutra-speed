@@ -65,7 +65,7 @@ export async function signalQuality(db: Db, svc: ClientStatusService | undefined
     .select({ id: portReservations.id, contract: portReservations.contractNumber, nickname: portReservations.nickname, login: activations.pppLogin, sinalCtoDbm: activations.sinalCtoDbm, limiteDb: activations.limiteDb, createdAt: activations.createdAt })
     .from(portReservations)
     .innerJoin(activations, and(eq(activations.reservationId, portReservations.id), eq(activations.state, "online")))
-    .where(and(eq(portReservations.partnerId, user.partnerId), eq(portReservations.status, "convertida"), isNotNull(portReservations.osClosedAt), ne(portReservations.customerStatus, "cancelado")))
+    .where(and(eq(portReservations.partnerId, user.partnerId), eq(portReservations.status, "convertida"), isNotNull(portReservations.osClosedAt), ne(portReservations.customerStatus, "cancelado"), ne(portReservations.customerStatus, "bloqueado")))
     .orderBy(desc(activations.createdAt));
   // Um login por reserva (a ativação mais recente).
   const seen = new Set<string>();

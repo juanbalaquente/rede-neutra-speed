@@ -67,6 +67,18 @@ describe("WikiClientStatus (contrato v3, seção A)", () => {
     expect((await lote.wiki.summary(["1-JHV"], "JHV"))[0]!.fibra).toBe("desconhecido");
   });
 
+  it("bloqueio da Speed na ONU: lê o campo `bloqueio` no status e no lote; sem o campo vale 'sem bloqueio'", async () => {
+    const bloqueio = { ativo: true, desde: "2026-10-22T14:17:00.000Z", motivo: "inadimplência" };
+    const blocked = build(() => json({ ...STATUS, fibra: { ...STATUS.fibra, estado: "desabilitada", sinalDbm: null }, bloqueio }));
+    const s = await blocked.wiki.status("12345-JHV", "JHV");
+    expect(s!.fibra.estado).toBe("desabilitada");
+    expect(s!.bloqueio).toEqual(bloqueio);
+    const old = build(() => json(STATUS));
+    expect((await old.wiki.status("12345-JHV", "JHV"))!.bloqueio).toEqual({ ativo: false, desde: null, motivo: null });
+    const lote = build(() => json({ clientes: [{ login: "1-JHV", fibra: "desabilitada", autenticacao: "desconectado", contrato: "ativo", fibraEm: null, autenticacaoEm: null, bloqueio }] }));
+    expect((await lote.wiki.summary(["1-JHV"], "JHV"))[0]!.bloqueio?.ativo).toBe(true);
+  });
+
   it("lote com mais de 200 logins vai em várias chamadas", async () => {
     const { wiki, calls } = build((_url, init) => {
       const { logins } = JSON.parse(init!.body as string) as { logins: string[] };

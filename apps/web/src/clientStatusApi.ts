@@ -18,6 +18,8 @@ export interface ClientStatusView {
     autenticacao: { estado: AutenticacaoEstado; ip: string | null; desde: string | null; atualizadoEm: string | null; motivo?: string | null };
     contrato: { estado: ContratoEstado; desde: string | null; atualizadoEm: string | null };
     onu: { serial: string; modelo: string | null; olt: string | null; vlan: number | null } | null;
+    /** Bloqueio feito pela Speed na ONU; ausente em respostas antigas. */
+    bloqueio?: { ativo: boolean; desde: string | null; motivo: string | null };
   };
   fibraVelha: boolean;
   pppoeVelho: boolean;

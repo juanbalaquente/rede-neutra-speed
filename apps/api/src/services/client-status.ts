@@ -117,10 +117,10 @@ export async function getFleetStatus(db: Db, svc: ClientStatusService | undefine
     if (s.autenticacao === "conectado") out.pppoeConectado++;
     if (s.fibra === "loss") out.loss++;
     if (s.fibra === "offline" || s.fibra === "sem_energia") out.offline++;
-    if (s.contrato === "bloqueado" || r.customerStatus === "bloqueado") out.bloqueados++;
-    // Cliente bloqueado sem PPPoE é esperado: não vira alarme.
-    const blocked = s.contrato === "bloqueado" || r.customerStatus === "bloqueado";
-    const motivo: FleetAlarm["motivo"] | null = s.fibra === "loss" ? "fibra_loss" : s.fibra === "sem_energia" ? "sem_energia" : s.fibra === "offline" ? "fibra_offline" : s.fibra === "online" && s.autenticacao === "desconectado" && !blocked ? "pppoe_caido" : null;
+    // Bloqueado (contrato no Voalle, bloqueio da Speed na ONU ou situação no portal) é esperado: sem PPPoE e com fibra caindo, não vira alarme.
+    const blocked = s.contrato === "bloqueado" || s.bloqueio?.ativo === true || r.customerStatus === "bloqueado";
+    if (blocked) out.bloqueados++;
+    const motivo: FleetAlarm["motivo"] | null = blocked ? null : s.fibra === "loss" ? "fibra_loss" : s.fibra === "sem_energia" ? "sem_energia" : s.fibra === "offline" ? "fibra_offline" : s.fibra === "online" && s.autenticacao === "desconectado" ? "pppoe_caido" : null;
     if (motivo) out.alarmes.push({ reservationId: r.id, contract: r.contract, nickname: r.nickname, login: s.login, motivo });
     for (const at of [s.fibraEm, s.autenticacaoEm]) if (at && (oldest === null || new Date(at).getTime() < oldest)) oldest = new Date(at).getTime();
   }

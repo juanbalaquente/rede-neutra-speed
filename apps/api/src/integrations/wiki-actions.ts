@@ -16,6 +16,8 @@ const snapshotSchema = z.object({
   operacaoId: z.string().min(1),
   tipo,
   login: z.string().min(1),
+  /** Bloqueio e desbloqueio chegam os dois como `tipo: "bloqueio"`; quem separa é `acao` (22 out 2026). */
+  acao: z.enum(["bloquear", "desbloquear"]).optional(),
   estado,
   etapas: z.array(z.object({ nome: z.string(), estado: z.enum(["pendente", "concluida", "falhou", "aguardando_equipe"]), motivo: z.string().nullable().optional() })).default([]),
   /** Motivo da operação. "sistema_externo_indisponivel: <erro>" = a Wiki segue tentando sozinha (21 out 2026). */

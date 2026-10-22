@@ -124,6 +124,11 @@ export function ClientStatusPanel({ installationId, onOpenTicket }: { installati
             <div><small>ONU</small><span>{s.onu ? <>{s.onu.modelo ?? "ONU"} · <span className="mono">{s.onu.serial}</span></> : "sem dados"}</span></div>
             <div><small>{s.fibra.uptimeDesde ? "No ar desde" : "Última queda"}</small><span>{since(s.fibra.uptimeDesde ?? s.fibra.ultimaQuedaEm) ?? "sem registro"}</span></div>
           </div>
+          {s.bloqueio?.ativo && (
+            <div className="banner warn" role="status" style={{ margin: 0 }}>
+              Cliente bloqueado{since(s.bloqueio.desde) ? ` desde ${since(s.bloqueio.desde)}` : ""}{s.bloqueio.motivo ? ` (${s.bloqueio.motivo})` : ""}. A ONU está desligada na rede, por isso fibra e PPPoE aparecem sem conexão. Desbloqueie para religar.
+            </div>
+          )}
           {s.fibra.estado === "online" && s.fibra.sinalDbm !== null && s.fibra.sinalDbm < view.referencia.minimoDbm && (
             <div className="banner warn" role="status" style={{ margin: 0 }}>
               O sinal atual ({fmtDbm(s.fibra.sinalDbm)}) está abaixo do mínimo aceitável desta instalação ({fmtDbm(view.referencia.minimoDbm)}). Se persistir, abra um chamado de sinal.
