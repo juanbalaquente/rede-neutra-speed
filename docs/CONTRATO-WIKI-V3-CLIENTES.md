@@ -315,6 +315,9 @@ Leitura **ao vivo** do OLTCloud, uma ONU por vez (o portal chama quando o suport
 ### Pedido junto: `sinalDbm` no lote
 No `POST /clientes/status`, mandar também `sinalDbm` (o `device_rx` do snapshot, `null` sem leitura). A lista da tela "ONUs" mostra o sinal de cada cliente sem abrir um por um. Opcional: sem o campo, a lista mostra "—".
 
+### Entregue pela Wiki (22 out 2026)
+Rota e `sinalDbm` no lote publicados, no formato acima. `distanciaM` confirmada em **metros** (porta de 60 ONUs, mediana 903 m). `distanciaM` e `temperaturaC` vêm `null` quando o OLTCloud manda 0 ou -1 (ONU recém-habilitada). O ACS resolve pelo MAC (a serial dá "Device not found"), 15 s por tentativa, aparelhos do pior sinal para o melhor. **Falta a validação com ONU real:** não há ONU `-JHV` autorizada hoje; autorizar a de bancada HWTC6FE1FCB2 com um login `-JHV` pelo fluxo normal e comparar com o painel do OLTCloud (sinais, contagem da porta e aparelhos do Wi-Fi).
+
 ### No portal (pronto contra mock, 22 out 2026)
 Tela **ONUs** (atendente e supervisor do parceiro): lista de todas as ONUs com O.S. fechada, do snapshot (`POST /clientes/status`), com busca e filtro "com problema"; ao abrir uma, `GET /clientes/{login}/onu` e um **diagnóstico em português** calculado pelo portal (porta inteira caída, sem luz, sem energia, sinal abaixo do mínimo da instalação, PPPoE caído com fibra boa, Wi-Fi com aparelhos de sinal ruim). Ações que já existem (reiniciar, abrir chamado) ficam na mesma tela. Enquanto a rota não existir, o detalhe mostra só o semáforo da seção A e avisa que o diagnóstico completo ainda não está disponível.
 
