@@ -72,9 +72,11 @@ export function ClientStatusPanel({ installationId, onOpenTicket }: { installati
     async (fresh: boolean) => {
       setBusy(true);
       try {
-        setView(await clientStatusApi.status(installationId, fresh));
+        const next = await clientStatusApi.status(installationId, fresh);
+        setView(next);
         setProblem(null);
-        if (fresh) say("Consultado agora");
+        // A Wiki ainda responde do snapshot (até 15 min) mesmo com fresh: diz a idade real da leitura em vez de "agora".
+        if (fresh) say(`Consultado. Fibra lida ${ago(next.status.fibra.atualizadoEm)}, PPPoE ${ago(next.status.autenticacao.atualizadoEm)}`);
       } catch (e) {
         if (e instanceof ApiError) setProblem({ code: e.code, message: e.message });
         else setProblem({ code: "erro", message: errMsg(e, "Falha ao consultar.") });
