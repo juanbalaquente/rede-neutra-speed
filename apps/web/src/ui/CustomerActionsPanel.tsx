@@ -148,7 +148,15 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
                   ))}
                 </ol>
               )}
-              {o.state === "sem_confirmacao" && <small className="muted">A ONU não confirmou o reinício. Confira o status antes de tentar de novo.</small>}
+              {o.state === "sem_confirmacao" && (
+                <small className="muted">
+                  {o.type === "desbloqueio"
+                    ? "A ONU ainda não voltou Online (às vezes leva mais de 1 min e meio). Confira a situação na rede antes de pedir de novo."
+                    : o.type === "bloqueio"
+                      ? "A ONU ainda não aparece bloqueada. Confira a situação na rede antes de pedir de novo."
+                      : "A ONU não confirmou o reinício. Confira o status antes de tentar de novo."}
+                </small>
+              )}
             </li>
           ))}
         </ul>

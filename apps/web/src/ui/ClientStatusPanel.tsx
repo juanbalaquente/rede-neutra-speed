@@ -128,7 +128,7 @@ export function ClientStatusPanel({ installationId, onOpenTicket }: { installati
           </div>
           {s.bloqueio?.ativo && (
             <div className="banner warn" role="status" style={{ margin: 0 }}>
-              Cliente bloqueado{since(s.bloqueio.desde) ? ` desde ${since(s.bloqueio.desde)}` : ""}{s.bloqueio.motivo ? ` (${s.bloqueio.motivo})` : ""}. A ONU está desligada na rede, por isso fibra e PPPoE aparecem sem conexão. Desbloqueie para religar.
+              Cliente bloqueado{since(s.bloqueio.desde) ? ` desde ${since(s.bloqueio.desde)}` : ""}{s.bloqueio.motivo ? ` (${s.bloqueio.motivo})` : ""}. O serviço está cortado na rede: o Wi-Fi do cliente continua aparecendo, mas sem internet. Desbloqueie para religar (a ONU leva de 20 s a 1 min e meio para voltar).
             </div>
           )}
           {s.fibra.estado === "online" && s.fibra.sinalDbm !== null && s.fibra.sinalDbm < view.referencia.minimoDbm && (
