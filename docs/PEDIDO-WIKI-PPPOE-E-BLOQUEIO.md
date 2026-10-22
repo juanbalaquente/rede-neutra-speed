@@ -1,44 +1,47 @@
 # Pedido à SpeedWiki (22 out 2026): PPPoE no snapshot e bloqueio pela ONU
 
-Complementa o [`PEDIDO-WIKI.md`](PEDIDO-WIKI.md). O fluxo de contrato e ativação já está provado em produção (contratos 33720, 33721 e 33726 em ONU de bancada); obrigado pela etapa `cliente_no_oltcloud`. Restam dois assuntos de rede. O primeiro é um pedido; o segundo é só uma consulta de viabilidade, sem prazo.
+Complementa o [`PEDIDO-WIKI.md`](PEDIDO-WIKI.md). Obrigado pela etapa `cliente_no_oltcloud`. O contrato e a ativação já estão provados em produção com ONU de bancada (33720, 33721 e 33726). Restam dois assuntos de rede.
 
-## 1. PPPoE de rede neutra no snapshot do NE40 (pedido)
+## 1. Pedido: PPPoE da rede neutra no snapshot do NE40
 
-**Situação hoje.** `GET /v3/clientes/{login}/status` e `POST /v3/clientes/status` respondem, mas a fonte NE40 vem `autenticacao: "desconhecido"` para os logins `<contrato>-<CÓDIGO>`. No portal isso mostra "leitura do PPPoE ainda não disponível" na tela do cliente, e o painel do parceiro não consegue mostrar fibra online e PPPoE conectado lado a lado nem alarmar PPPoE caído.
+Hoje `GET /v3/clientes/{login}/status` e `POST /v3/clientes/status` devolvem `autenticacao: "desconhecido"` para os logins `<contrato>-<CÓDIGO>`. Por isso o portal não mostra PPPoE na tela do cliente nem alarma PPPoE caído.
 
-**O que pedimos** (já combinado em princípio na pergunta 1 do contrato v3):
+Pedimos:
 
-1. Incluir os logins da rede neutra (terminados em `-JHV` no piloto; depois outros códigos) no poller de PPPoE do NE40, ou num poller irmão.
-2. Servir pelo snapshot, por login: `autenticacao.estado` (`conectado` | `desconectado`), `ip` e `desde` quando conectado, e `autenticacaoEm` (hora da leitura, para o portal marcar dado velho acima de 30 min).
-3. `POST /v3/clientes/status` (lote de até 200) passa a devolver isso do snapshot, sem abrir SSH por chamada.
-4. Intervalo de até 15 min serve. Se o NE40 tiver um comando que liste as sessões de uma vez, melhor ainda; o portal aceita o que a Wiki conseguir.
-5. `?fresh=true` segue como está (fila no NE40, uma consulta por vez, `429` com `Retry-After`).
+- Incluir os logins da rede neutra (`-JHV` no piloto) no poller de PPPoE do NE40, ou num poller irmão.
+- Servir pelo snapshot, por login: `autenticacao.estado` (`conectado` | `desconectado`), `ip`, `desde` e `autenticacaoEm`.
+- O lote (`POST /v3/clientes/status`, até 200 logins) responde do snapshot, sem abrir SSH por chamada. Qualquer intervalo até 15 min serve.
+- `?fresh=true` continua como hoje (fila no NE40, `429` com `Retry-After`).
 
-**Como a Wiki descobre a lista de logins.** Duas opções, a que for mais simples para vocês:
+Perguntas:
 
-- (a) a Wiki lê os contratos com conexão `<contrato>-<CÓDIGO>` no Voalle (os que ela mesma criou por `POST /v3/contratos`);
-- (b) o portal manda a lista, por exemplo `PUT /v3/clientes/monitorados` com `{ "logins": [...] }`. Podemos construir se a Wiki preferir.
+1. Como a Wiki vai saber a lista de logins a monitorar? (a) Ela lê do Voalle as conexões que criou por `POST /v3/contratos`. (b) O portal manda a lista, por exemplo `PUT /v3/clientes/monitorados` com `{ "logins": [...] }`. Qual é mais simples para vocês?
+2. Qual intervalo do poller é viável?
+3. Existe comando no NE40 que liste as sessões de uma vez?
 
-**Como validamos.** Contrato 33726-JHV (ou um novo da bancada) com a ONU online: `status` deve trazer `autenticacao: conectado` com `ip`. Depois, desconectar a ONU de bancada e conferir `desconectado` no ciclo seguinte. Não precisa mudar nada no portal: `CLIENT_STATUS_MODE=wiki` já está ligado e a tela passa a mostrar o dado sozinha.
+Cuidado conhecido: o NE40 recusa SSH simultâneo (4 de 8 falharam no teste de vocês). Manter a concorrência baixa, como no poller atual (5, intervalo de 2 s).
 
-**Cuidado conhecido.** O NE40 recusa SSH simultâneo (4 de 8 falharam no teste de vocês). Manter a concorrência baixa, como no poller atual (5, intervalo de 2 s).
+Validação: com o contrato 33726-JHV e a ONU online, o `status` deve trazer `conectado` com `ip`. Depois desligamos a ONU de bancada e conferimos `desconectado` no ciclo seguinte. O portal já está com `CLIENT_STATUS_MODE=wiki`, então não precisa mudar nada do nosso lado.
 
-## 2. Bloqueio pela ONU, sem depender do Voalle (consulta de viabilidade)
+## 2. Consulta de viabilidade (sem pedido de implementação): bloquear o cliente pela ONU, sem Voalle
 
-**Contexto.** O contrato no Voalle não cobra nada: o parceiro paga à Speed pelo fechamento do portal. Por isso o bloqueio por inadimplência do assinante é decisão do **parceiro**, e a Speed só precisa ter um jeito confiável de cortar o serviço. Hoje o portal pede `POST /v3/clientes/{login}/bloqueio` e a Wiki depende de a suspensão do Voalle cortar o PPPoE (ainda não testado).
+O contrato no Voalle não cobra nada. O parceiro paga à Speed pelo fechamento do portal. Queremos que o supervisor do parceiro aperte "Bloquear" num cliente inadimplente dele e a Speed corte o serviço na rede, sem passar pelo Voalle e sem aprovação manual. Contrato, porta e cobrança do parceiro ficam como estão, e "Desbloquear" desfaz.
 
-**Ideia em estudo (Juan).** O supervisor do parceiro aperta "Bloquear" no cliente e a Speed corta o serviço **na própria ONU/rede**, sem passar pelo Voalle. O contrato, a porta e a cobrança do parceiro continuam como estão; desbloquear desfaz.
+Perguntas:
 
-**O que queremos saber da Wiki, antes de desenhar qualquer coisa:**
+1. Que mecanismos vocês têm, ou conseguem ter, para impedir o tráfego de uma ONU específica? Os que conhecemos são:
+   - (a) desativar a ONU no OLTCloud;
+   - (b) bloquear WAN ou LAN pelo ACS;
+   - (c) derrubar a sessão PPPoE e negar nova autenticação no RADIUS/NE40.
 
-1. Quais mecanismos a Wiki tem hoje, ou consegue ter, para impedir o tráfego de uma ONU específica? Candidatos que conhecemos: (a) desabilitar/desativar a ONU no OLTCloud, (b) bloquear a porta LAN ou a WAN pelo ACS, (c) desautorizar a ONU (descartado, perde o vínculo e exige reautorizar), (d) derrubar a sessão PPPoE e impedir nova autenticação no RADIUS/NE40.
-2. Para cada um: é **reversível em poucos segundos**, mantém o alias, o vínculo com a CTO e as VLANs, e a ONU continua visível para o monitoramento (para o portal mostrar "bloqueado" e não "offline")?
-3. Dá para o portal distinguir "bloqueado por nós" de "caiu"? Hoje o alarme ignora cliente bloqueado sem PPPoE; precisaríamos de um estado `bloqueado` confiável vindo da Wiki.
-4. Algum deles afeta outros clientes da mesma PON ou da mesma ONU (ONU de rede neutra tem um cliente só)?
-5. A operação seguiria o mesmo molde das outras: `202`, `idempotencyKey`, estados `recebida` → `executando` → `concluida`, repetível, com `motivo` curto.
+   Já descartamos desautorizar a ONU, porque perde o vínculo. Existe outro?
+2. Para cada opção: é reversível em poucos segundos? Mantém o alias, o vínculo com a CTO e as VLANs? A ONU continua visível no monitoramento?
+3. A Wiki consegue informar um estado `bloqueado` confiável, para o portal distinguir "bloqueado por nós" de "caiu"? Hoje o alarme ignora cliente bloqueado sem PPPoE.
+4. A opção pode afetar outros clientes da mesma PON ou da mesma ONU? Na rede neutra, cada ONU tem um cliente só.
+5. Qual a recomendação de vocês e o risco de cada uma? A operação seguiria o mesmo molde das outras: `202`, `idempotencyKey`, estados `recebida` → `executando` → `concluida`, repetível, com `motivo` curto.
 
-Sem pedido de implementação agora: respondam o que é possível e o risco de cada opção, e a gente fecha o desenho com o Juan.
+Sem pressa nesta segunda parte: queremos a viabilidade antes de desenhar.
 
 ## Ordem
 
-1 primeiro (destrava painel e alarmes). 2 só quando o Juan fechar a ideia.
+O item 1 vem primeiro, porque destrava o painel e os alarmes. O item 2 só quando o Juan fechar a ideia.
