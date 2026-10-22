@@ -67,6 +67,18 @@ describe("automações do cliente", () => {
     await off.close();
   });
 
+  it("bloquear exige motivo de 3+ caracteres (a Wiki recusa sem): a recusa não gasta pedido nem fica 'falhou'", async () => {
+    const { ate } = await partner();
+    const id = await installed(ate);
+    for (const reason of [undefined, "", "  a "]) {
+      const res = await start(ate, id, { type: "bloqueio", reason });
+      expect(res.status).toBe(422);
+      expect((await res.json()).error).toBe("motivo_obrigatorio");
+    }
+    const ok = await start(ate, id, { type: "bloqueio", reason: "inadimplência" });
+    expect(ok.status).toBe(202);
+  });
+
   it("bloquear e desbloquear mudam a situação do contrato, mas não a vaga", async () => {
     const { ate } = await partner();
     const id = await installed(ate);
@@ -80,7 +92,7 @@ describe("automações do cliente", () => {
     expect(await vagas(ate)).toBe(before); // continua ocupando a porta
 
     // Não bloqueia duas vezes; só desbloqueia quem está bloqueado.
-    expect((await start(ate, id, { type: "bloqueio" })).status).toBe(409);
+    expect((await start(ate, id, { type: "bloqueio", reason: "inadimplência" })).status).toBe(409);
     const un = (await (await start(ate, id, { type: "desbloqueio" })).json()).operation;
     expect((await settle(ate, un.id)).state).toBe("concluida");
     expect((await statusOf(id)).customerStatus).toBe("ativo");
@@ -105,7 +117,7 @@ describe("automações do cliente", () => {
     const { ate } = await partner();
     await ctx.call(ate, "POST", "/viability", { address: ADDRESS });
     const { reservation } = await (await ctx.call(ate, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: ADDRESS })).json();
-    const res = await start(ate, reservation.id, { type: "bloqueio" });
+    const res = await start(ate, reservation.id, { type: "bloqueio", reason: "inadimplência" });
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe("operacao_indisponivel");
   });

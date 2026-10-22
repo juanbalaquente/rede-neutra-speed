@@ -90,6 +90,10 @@ export async function startOperation(
   if (input.type === "cancelamento" && !(input.reason ?? "").trim()) {
     throw new AppError(422, "motivo_obrigatorio", "Informe o motivo do cancelamento.");
   }
+  // A Wiki recusa bloqueio sem motivo de 3+ caracteres (motivo_obrigatorio): recusar aqui não gasta a chave nem deixa operação "falhou".
+  if (input.type === "bloqueio" && (input.reason ?? "").trim().length < 3) {
+    throw new AppError(422, "motivo_obrigatorio", "Informe o motivo do bloqueio (mínimo de 3 caracteres).");
+  }
   const why = refuse(input.type, reservation);
   if (why) throw new AppError(409, "operacao_indisponivel", why);
 

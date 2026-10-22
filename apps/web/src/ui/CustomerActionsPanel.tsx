@@ -77,7 +77,8 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
 
   const cancelled = customerStatus === "cancelado";
   const hasOpen = !!ops?.some((o) => OPEN.includes(o.state));
-  const needsReason = asking === "cancelamento";
+  // A Wiki recusa o bloqueio sem motivo (mínimo 3 caracteres): pedir aqui evita o pedido que volta "falhou".
+  const needsReason = asking === "cancelamento" || asking === "bloqueio";
 
   return (
     <div className="summary" style={{ borderTop: "1px solid var(--line)" }}>
@@ -109,7 +110,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
             {asking === "cancelamento" && "Cancelar o cliente? O contrato é encerrado, a ONU sai da rede e a vaga volta para a Speed. Não dá para desfazer."}
           </span>
           {(asking === "cancelamento" || asking === "bloqueio") && (
-            <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder={asking === "cancelamento" ? "Motivo (obrigatório)" : "Motivo (opcional)"} autoFocus />
+            <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder={needsReason ? "Motivo (obrigatório)" : "Motivo (opcional)"} autoFocus />
           )}
           <div className="acts2">
             <button className={`btn sm ${asking === "cancelamento" ? "danger-solid" : ""}`} disabled={busy || (needsReason && reason.trim().length < 3)} onClick={() => void run(asking)}>

@@ -48,7 +48,7 @@ describe("aprovação da Speed", () => {
     const adm = await ctx.login("admin@speed.test");
     expect((await ctx.call(adm, "PUT", "/admin/settings/aprovacoes", { types: ["cancelamento"] })).status).toBe(200);
     // Bloqueio não exige: segue.
-    expect((await (await startOp(sup, id, { type: "bloqueio", reason: "x" })).json()).operation.state).toBe("recebida");
+    expect((await (await startOp(sup, id, { type: "bloqueio", reason: "motivo de teste" })).json()).operation.state).toBe("recebida");
     const res = await startOp(sup, id, { type: "cancelamento", reason: "pedido do cliente" });
     expect(res.status).toBe(202);
     const op = (await res.json()).operation;
@@ -147,7 +147,7 @@ describe("operações em lote", () => {
     const { id } = await installedClient();
     const other = await ctx.createPartner("Outro", "22222222000122", { code: "OUT" });
     const cookie = await ctx.login(other.supervisor);
-    const res = await (await batch(cookie, { type: "bloqueio", reservationIds: [id], reason: "x" })).json();
+    const res = await (await batch(cookie, { type: "bloqueio", reservationIds: [id], reason: "motivo de teste" })).json();
     expect(res).toMatchObject({ feitos: 0, pulados: 1 });
     expect(res.results[0].error).toBe("Cliente não encontrado.");
   });
