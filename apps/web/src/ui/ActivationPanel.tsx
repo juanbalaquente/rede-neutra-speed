@@ -6,6 +6,7 @@ import { useDraft } from "./useDraft";
 import { ContractStep, type ContractStatus } from "./ContractStep";
 import { outageText } from "./outage";
 import { useToast } from "./Toast";
+import { WifiForm } from "./WifiForm";
 
 const FINAL: ActivationState[] = ["online", "falha_provisionamento", "cancelada", "falhou"];
 
@@ -151,6 +152,8 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
   const ended = FINAL.includes(state) && !done;
   const note = STATE_NOTE[state];
   const motivo = activation.snapshot?.motivo;
+  // Wi-Fi do cliente: o técnico configura aqui, logo depois da ONU ficar online (a ativação deixa o Wi-Fi de fábrica).
+  const [wifiDone, setWifiDone] = useState<string | null | false>(false);
   return (
     <div className="atv-prog">
       <div className="atv-id">
@@ -187,11 +190,14 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
           {activation.snapshot?.sinal?.perdaDb != null && <span className="muted">perda de {fmtDb(activation.snapshot.sinal.perdaDb)} dB</span>}
         </p>
       )}
-      {done && (
-        <p className="atv-vlan">
-          O <b>Wi-Fi não é configurado</b> pela Speed: a ONU fica com a rede e a senha de fábrica, as da etiqueta. Passe ao cliente ou troque na hora.
-        </p>
-      )}
+      {done && (wifiDone === false ? (
+        <div className="atv-vlan">
+          <p style={{ margin: "0 0 8px" }}>A ONU está com o <b>Wi-Fi de fábrica</b> (o da etiqueta). Configure agora o nome e a senha que o cliente vai usar.</p>
+          <WifiForm installationId={activation.reservationId} onDone={(ssid) => setWifiDone(ssid)} />
+        </div>
+      ) : (
+        <p className="atv-vlan">Wi-Fi configurado{wifiDone ? <> na rede <b>{wifiDone}</b></> : ""}. Para trocar de novo, use as ações do cliente depois de fechar a O.S.</p>
+      ))}
     </div>
   );
 }

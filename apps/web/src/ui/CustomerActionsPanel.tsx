@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type CustomerOperation, type OperationState, type OperationType, type User } from "../api";
 import { outageText } from "./outage";
 import { useToast } from "./Toast";
+import { WifiForm } from "./WifiForm";
 
 const TYPE_LABEL: Record<OperationType, string> = { bloqueio: "Bloqueio", desbloqueio: "Desbloqueio", reinicio: "Reinício da ONU", cancelamento: "Cancelamento" };
 const STEP_LABEL: Record<string, string> = { contrato_encerrado: "Contrato encerrado", onu_removida: "ONU removida da rede", porta_devolvida: "Vaga devolvida" };
@@ -31,6 +32,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
   const [asking, setAsking] = useState<OperationType | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [wifi, setWifi] = useState(false);
 
   const load = useCallback(() => {
     api.operations(installationId).then((r) => setOps(r.operations)).catch(() => setOps([]));
@@ -89,7 +91,9 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
         </span>
       </div>
 
-      {!cancelled && asking === null && (
+      {!cancelled && asking === null && wifi && <WifiForm installationId={installationId} onDone={() => setWifi(false)} onCancel={() => setWifi(false)} submitLabel="Trocar Wi-Fi" />}
+
+      {!cancelled && asking === null && !wifi && (
         <div className="acts2">
           {customerStatus === "ativo" ? (
             <button className="btn sec sm" disabled={hasOpen} onClick={() => setAsking("bloqueio")}>Bloquear</button>
@@ -97,6 +101,7 @@ export function CustomerActionsPanel({ installationId, customerStatus, user, onC
             <button className="btn sec sm" disabled={hasOpen} onClick={() => setAsking("desbloqueio")}>Desbloquear</button>
           )}
           <button className="btn sec sm" disabled={hasOpen} onClick={() => setAsking("reinicio")}>Reiniciar ONU</button>
+          {customerStatus === "ativo" && <button className="btn sec sm" disabled={hasOpen} onClick={() => setWifi(true)}>Trocar Wi-Fi</button>}
           {user.role === "supervisor" && <button className="btn sec sm danger" disabled={hasOpen} onClick={() => setAsking("cancelamento")}>Cancelar cliente</button>}
         </div>
       )}

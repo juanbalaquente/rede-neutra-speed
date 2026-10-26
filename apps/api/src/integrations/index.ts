@@ -30,7 +30,7 @@ function createActions(config: Config, log: ApiCallLogger): CustomerActions | un
   if (config.AUTOMATION_MODE === "mock") return new MockCustomerActions();
   const missing = (["WIKI_BASE_URL", "WIKI_WRITE_KEY"] as const).filter((k) => !config[k]);
   if (missing.length) throw new Error(`AUTOMATION_MODE=wiki sem: ${missing.join(", ")}`);
-  return new WikiCustomerActions(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!);
+  return new WikiCustomerActions(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!, createHttp("wiki", log, 30_000));
 }
 
 function createTickets(config: Config, log: ApiCallLogger): TicketService | undefined {

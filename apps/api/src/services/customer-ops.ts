@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
 import { activations, customerOperations, partners, portReservations, settings } from "../db/schema.js";
-import { OPERATION_FINAL, type CustomerActions, type OperationSnapshot, type OperationState, type OperationType } from "../integrations/types.js";
+import { IntegrationError, OPERATION_FINAL, type CustomerActions, type OperationSnapshot, type OperationState, type OperationType } from "../integrations/types.js";
 import { OperationRefused } from "../integrations/wiki-actions.js";
 import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
@@ -123,6 +123,59 @@ export async function startOperation(
   }
   if (row.wikiOperationId || row.state === "aguardando_aprovacao") return row;
   return send(db, svc, row, partner.code);
+}
+
+const WIFI_REFUSAL: Record<string, string> = {
+  onu_offline: "A ONU está offline ou fora do ACS agora. Confira a situação do cliente e tente de novo quando ela voltar.",
+  cliente_bloqueado: "O cliente está bloqueado. Desbloqueie antes de trocar o Wi-Fi.",
+  login_de_outro_parceiro: "Esse cliente não pertence ao seu contrato.",
+  senha_invalida: "A Speed recusou a senha. Use de 8 a 63 caracteres.",
+  ssid_invalido: "A Speed recusou o nome da rede. Use de 1 a 32 caracteres, só letras sem acento, números e símbolos.",
+  login_desconhecido: "A Speed não achou a ONU desse cliente.",
+  limite_de_trocas: "Já houve 5 trocas de Wi-Fi nesse cliente na última hora. Tente de novo mais tarde.",
+  falha_no_aparelho: "A ONU recusou a configuração. Confira se ela está online e tente de novo; se persistir, abra um chamado.",
+  wifi_desligado: "A troca de Wi-Fi ainda não está habilitada pela Speed.",
+};
+const WIFI_STATUS = new Set<number>([403, 404, 429, 502, 503]);
+
+/**
+ * Troca o Wi-Fi da ONU do cliente. A senha só atravessa o portal: não vai para o banco, a auditoria, a resposta
+ * nem o log (a auditoria guarda quem trocou, quando e o nome da rede). Não há reenvio automático: se não
+ * confirmar, o atendente digita de novo.
+ */
+export async function changeWifi(
+  db: Db,
+  svc: CustomerActions,
+  user: SessionUser,
+  reservationId: string,
+  input: { ssid: string | null; senha: string },
+  opts: { ip?: string | null } = {},
+) {
+  const reservation = await ownReservation(db, user, reservationId);
+  // Sem exigir a O.S. fechada: o técnico configura o Wi-Fi na instalação, logo que a ONU fica online (a reserva vira "convertida").
+  if (reservation.status !== "convertida") throw new AppError(409, "operacao_indisponivel", "A ONU do cliente ainda não foi liberada.");
+  if (reservation.customerStatus === "cancelado") throw new AppError(409, "operacao_indisponivel", "Esse cliente já foi cancelado.");
+  if (reservation.customerStatus === "bloqueado") throw new AppError(409, "operacao_indisponivel", WIFI_REFUSAL.cliente_bloqueado!);
+  const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, reservation.partnerId));
+  if (!partner?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código cadastrado.");
+  const login = await loginOf(db, reservation.id);
+
+  const base = { partnerId: reservation.partnerId, userId: user.id, entity: "port_reservation", entityId: reservation.id, ip: opts.ip };
+  try {
+    const done = await svc.setWifi({ login, partnerCode: partner.code, ssid: input.ssid, senha: input.senha });
+    await recordAudit(db, { ...base, action: "cliente.wifi_alterado", data: { login, ssid: done.ssid ?? input.ssid, senhaTrocada: true } });
+    return { ssid: done.ssid ?? input.ssid };
+  } catch (e) {
+    if (e instanceof OperationRefused) {
+      await recordAudit(db, { ...base, action: "cliente.wifi_recusado", data: { login, motivo: e.code } });
+      throw new AppError(WIFI_STATUS.has(e.status) ? (e.status as 403 | 404 | 429 | 502 | 503) : 409, "wifi_recusado", WIFI_REFUSAL[e.code] ?? "A Speed não conseguiu trocar o Wi-Fi agora.");
+    }
+    if (e instanceof IntegrationError) {
+      await recordAudit(db, { ...base, action: "cliente.wifi_sem_confirmacao", data: { login } });
+      throw new AppError(502, "wifi_sem_confirmacao", "Não deu para confirmar a troca. A senha pode ter mudado: teste no aparelho antes de repetir.");
+    }
+    throw e;
+  }
 }
 
 /** Envia (ou reenvia, com a mesma chave) o pedido à Wiki. Falha de rede deixa a operação "recebida", e repetir é seguro. */

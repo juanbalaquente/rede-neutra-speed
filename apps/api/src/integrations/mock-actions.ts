@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { CustomerActions, OperationRequest, OperationSnapshot, OperationState, OperationStep } from "./types.js";
+import { OperationRefused } from "./wiki-actions.js";
+import { IntegrationError, type CustomerActions, type WifiRequest, type WifiResult, type OperationRequest, type OperationSnapshot, type OperationState, type OperationStep } from "./types.js";
 
 interface Entry {
   req: OperationRequest;
@@ -21,6 +22,18 @@ export class MockCustomerActions implements CustomerActions {
   outageMotivo: string | null = null;
   private readonly byId = new Map<string, Entry>();
   private readonly byKey = new Map<string, string>();
+  /** Última troca de Wi-Fi recebida, para os testes conferirem que a senha chegou (só no mock). */
+  lastWifi: WifiRequest | null = null;
+  wifiCalls = 0;
+
+  async setWifi(req: WifiRequest): Promise<WifiResult> {
+    this.wifiCalls += 1;
+    // Cenários pelo fim do login: -OFF = ONU sem ACS/offline; -LENTO = a Wiki não respondeu a tempo.
+    if (req.login.endsWith("-OFF")) throw new OperationRefused("onu_offline", 409);
+    if (req.login.endsWith("-LENTO")) throw new IntegrationError("wiki", "POST /clientes/{login}/wifi 504", 504);
+    this.lastWifi = { ...req };
+    return { ssid: req.ssid };
+  }
 
   async start(req: OperationRequest) {
     const known = this.byKey.get(req.idempotencyKey);

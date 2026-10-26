@@ -14,7 +14,7 @@ import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
 import { abandonContract, confirmCancelDone, contractIssues, getContract, refreshCancels, retryCancel, retryContract, startContract } from "./services/contracts.js";
-import { approveOperation, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
+import { approveOperation, changeWifi, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
 import { signalQuality } from "./services/signal-quality.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
@@ -695,6 +695,23 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
     );
     const row = await startOperation(db, actionsSvc(), c.get("user"), id, body, { ip: clientIp(c) });
     return c.json({ operation: operationView(row) }, 202);
+  });
+
+  /** Wi-Fi da ONU do cliente (nome opcional e senha). A senha não é gravada nem devolvida; a resposta nunca vai para cache. */
+  app.post("/installations/:id/wifi", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const body = await parseBody(
+      c,
+      z.object({
+        // A Wiki só aceita ASCII imprimível no nome (limite de 32 bytes, e acento ocupa 2); sem espaço nas pontas.
+        ssid: z.string().trim().min(1).max(32).regex(/^[\x20-\x7E]+$/, "só letras sem acento, números e símbolos").nullish(),
+        // WPA2: 8 a 63 caracteres ASCII imprimíveis (inclui espaço).
+        senha: z.string().min(8, "mínimo de 8 caracteres").max(63, "máximo de 63 caracteres").regex(/^[ -~]+$/, "só letras, números e símbolos sem acento"),
+      }),
+    );
+    const done = await changeWifi(db, actionsSvc(), c.get("user"), id, { ssid: body.ssid ?? null, senha: body.senha }, { ip: clientIp(c) });
+    c.header("Cache-Control", "no-store");
+    return c.json({ ok: true, ssid: done.ssid });
   });
 
   app.get("/operations/:id", requireUser, requireRole("atendente", "supervisor"), async (c) => {

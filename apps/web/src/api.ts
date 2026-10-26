@@ -255,6 +255,8 @@ export const api = {
   operations: (installationId: string) => request<{ operations: CustomerOperation[] }>("GET", `/installations/${installationId}/operations`),
   startOperation: (installationId: string, body: { type: OperationType; reason?: string | null; idempotencyKey?: string }) =>
     request<{ operation: CustomerOperation }>("POST", `/installations/${installationId}/operations`, body),
+  changeWifi: (installationId: string, body: { ssid: string | null; senha: string }) =>
+    request<{ ok: true; ssid: string | null }>("POST", `/installations/${installationId}/wifi`, body),
   operation: (id: string) => request<{ operation: CustomerOperation }>("GET", `/operations/${id}`),
   retryOperation: (id: string) => request<{ operation: CustomerOperation }>("POST", `/operations/${id}/retry`),
 

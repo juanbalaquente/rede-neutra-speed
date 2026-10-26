@@ -321,6 +321,48 @@ Rota e `sinalDbm` no lote publicados, no formato acima. `distanciaM` confirmada 
 ### No portal (pronto contra mock, 22 out 2026)
 Tela **ONUs** (atendente e supervisor do parceiro): lista de todas as ONUs com O.S. fechada, do snapshot (`POST /clientes/status`), com busca e filtro "com problema"; ao abrir uma, `GET /clientes/{login}/onu` e um **diagnóstico em português** calculado pelo portal (porta inteira caída, sem luz, sem energia, sinal abaixo do mínimo da instalação, PPPoE caído com fibra boa, Wi-Fi com aparelhos de sinal ruim). Ações que já existem (reiniciar, abrir chamado) ficam na mesma tela. Enquanto a rota não existir, o detalhe mostra só o semáforo da seção A e avisa que o diagnóstico completo ainda não está disponível.
 
+## J. Trocar o Wi-Fi da ONU do cliente (pedido do portal, 26 out 2026)
+
+> **Resposta da Wiki (26 out 2026, `CONTRATO-WIKI-V3-WIFI.md` no repositório da SpeedWiki), que vale sobre o texto abaixo:** mecanismo provado na ONU de bancada (ACS do OLTCloud, 8 a 10 s, sobrevive a reboot), rota ainda não construída, desligada por padrão (`503 wifi_desligado`). Mudanças para o portal: **nome da rede só ASCII imprimível, 1 a 32 bytes** (acento recusa na v1); **timeout de 30 s** nesta rota (feito); novos códigos `login_desconhecido` 404, `limite_de_trocas` 429 (5 por hora por login), `falha_no_aparelho` 502 e `wifi_desligado` 503 (feitos). **Uso no portal:** o técnico configura o Wi-Fi na instalação, logo que a ONU fica online (depois do reset de fábrica da ativação, nunca antes) e antes de fechar a O.S.; o suporte troca depois pela caixa de ações. Falta a Wiki provar: chamada única com as duas bandas, caracteres especiais na senha (`" \ & < ' %`; se algum falhar, ganhamos mais uma regra) e a senha valendo depois do boot.
+
+**Para quê:** o suporte do parceiro troca nome e/ou senha do Wi-Fi do assinante pela caixa "Ações do cliente" da tela ONUs, sem ligar para a Speed. A ativação deixa a ONU com o Wi-Fi de fábrica (da etiqueta); esta rota é como ele muda depois. Escrita: mesma chave (`X-RedeNeutra-Write-Key`) e `X-RedeNeutra-Partner` das rotas da seção C, atrás de `AUTOMATION_MODE`.
+
+### `POST /proxy/redeneutra/v3/clientes/{login}/wifi`
+
+```json
+{ "ssid": "Casa do Joao", "senha": "Segredo-Wifi-9876" }
+```
+
+- `ssid`: opcional (`null` = só troca a senha e mantém o nome). 1 a 32 caracteres.
+- `senha`: 8 a 63 caracteres ASCII imprimíveis (WPA2). O portal já valida; a Wiki valida de novo.
+- **Síncrona, sem `operacaoId`:** aplica pelo ACS e responde com o que leu de volta. Repetir com os mesmos valores é seguro (por isso não há `idempotencyKey`). O cliente HTTP do portal espera até 15 s; se o ACS puder levar mais, responda `504` e conclua sozinha (o portal diz ao atendente "não deu para confirmar, teste no aparelho antes de repetir").
+- Banda: aplicar às redes de 2,4 e 5 GHz juntas (mesmo nome e senha). Se a Wiki precisar de campo de banda, combinamos depois.
+
+Resposta `200`:
+
+```json
+{ "aplicado": true, "ssid": "Casa do Joao" }
+```
+
+`ssid` é o nome que ficou na ONU, lido de volta do ACS (o portal mostra ao atendente). `aplicado` só é `true` depois de conferir a leitura de volta; senão, erro.
+
+Recusas de negócio (`409`/`422`, corpo `{ "error": "<código>" }`), que o portal traduz:
+
+| Código | Quando |
+|---|---|
+| `onu_offline` | ONU offline ou sem ACS agora |
+| `cliente_bloqueado` | ONU desabilitada pelo bloqueio |
+| `login_de_outro_parceiro` | login não termina com o código do `X-RedeNeutra-Partner` |
+| `senha_invalida` / `ssid_invalido` | fora das regras acima |
+
+`404 login_desconhecido` como nas outras rotas.
+
+### Regra de segredo (vale para os dois lados)
+
+- A senha do Wi-Fi **nunca** é gravada, logada nem devolvida: nem no log de chamadas, nem no card interno da Wiki, nem na resposta, nem em auditoria. A auditoria do portal guarda quem trocou, quando e o nome da rede.
+- O portal não grava a senha em banco nem tem reenvio automático: se falhar, o atendente digita de novo. Por isso a rota é síncrona e idempotente.
+- A leitura `wifi` da seção I continua **sem** a senha.
+
 ## G. No portal
 - Interfaces novas em `integrations/types.ts`: `CustomerStatusService`, `TicketService` e `CustomerActions`, cada uma com **mock** e cliente real da Wiki que valida a resposta contra este contrato.
 - Escrita (`bloqueio`, `reinicio`, `cancelamento`, `chamados`) atrás de `AUTOMATION_MODE=off|mock|wiki`, **desligado por padrão**, como o `ACTIVATION_MODE`. Só liga com a validação explícita do Juan.

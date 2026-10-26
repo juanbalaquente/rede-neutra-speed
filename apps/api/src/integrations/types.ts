@@ -209,7 +209,26 @@ export interface OperationSnapshot {
  * Automações do cliente final, executadas pela Wiki (contrato v3). É ESCRITA em produção:
  * só liga com AUTOMATION_MODE e validação do Juan. Desligada por padrão.
  */
+export interface WifiRequest {
+  login: string;
+  partnerCode: string;
+  /** Nome da rede. Null = só troca a senha e mantém o nome atual. */
+  ssid: string | null;
+  /** Senha nova. Só passa por aqui: nunca é gravada, logada nem auditada pelo portal. */
+  senha: string;
+}
+
+export interface WifiResult {
+  /** SSID que ficou na ONU, como a Wiki leu de volta do ACS. */
+  ssid: string | null;
+}
+
 export interface CustomerActions {
+  /**
+   * Troca o nome e/ou a senha do Wi-Fi da ONU pelo ACS (contrato v3, seção J). Resposta direta, sem operação:
+   * repetir com os mesmos valores é seguro. Recusa de negócio vira OperationRefused (onu_offline, cliente_bloqueado...).
+   */
+  setWifi(req: WifiRequest): Promise<WifiResult>;
   start(req: OperationRequest): Promise<{ operacaoId: string; estado: OperationState }>;
   /** null = a Wiki não conhece essa operação. O código do parceiro vai junto: a Wiki confere o dono da operação. */
   get(operacaoId: string, partnerCode: string): Promise<OperationSnapshot | null>;

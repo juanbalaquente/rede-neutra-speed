@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Http } from "./http.js";
-import { IntegrationError, type CustomerActions, type OperationRequest, type OperationSnapshot } from "./types.js";
+import { IntegrationError, type CustomerActions, type OperationRequest, type OperationSnapshot, type WifiRequest, type WifiResult } from "./types.js";
 
 /**
  * Cliente de ESCRITA da SpeedWiki para as automações do cliente final (/proxy/redeneutra/v3/*).
@@ -25,6 +25,8 @@ const snapshotSchema = z.object({
   atualizadoEm: z.string().datetime({ offset: true }),
 });
 
+const wifiSchema = z.object({ aplicado: z.literal(true), ssid: z.string().nullable().default(null) });
+
 const startedSchema = z.object({ operacaoId: z.string().min(1), estado });
 
 /** Erro de negócio devolvido pela Wiki (409/422: login_de_outro_parceiro, fatura_em_aberto...). */
@@ -44,6 +46,8 @@ export class WikiCustomerActions implements CustomerActions {
     private readonly http: Http,
     base: string,
     private readonly writeKey: string,
+    /** Cliente com tempo maior só para o Wi-Fi: gravar no ACS leva 8 a 10 s e a conferência soma mais ~5 s (Wiki, 26 out 2026). */
+    private readonly wifiHttp: Http = http,
   ) {
     this.root = `${base.replace(/\/$/, "")}/proxy/redeneutra/v3`;
   }
@@ -76,6 +80,22 @@ export class WikiCustomerActions implements CustomerActions {
       throw new IntegrationError("wiki", `resposta de ${what} fora do contrato v3 (${first?.path.join(".")}: ${first?.message})`);
     }
     return parsed.data;
+  }
+
+  async setWifi(req: WifiRequest): Promise<WifiResult> {
+    const res = await this.wifiHttp(`${this.root}/clientes/${encodeURIComponent(req.login)}/wifi`, {
+      method: "POST",
+      headers: { "X-RedeNeutra-Write-Key": this.writeKey, "X-RedeNeutra-Partner": req.partnerCode, Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ ssid: req.ssid, senha: req.senha }),
+    });
+    const json: unknown = await res.json().catch(() => null);
+    const code = (json as { error?: unknown } | null)?.error;
+    // Recusas com código (inclui 429 limite_de_trocas, 502 falha_no_aparelho e 503 wifi_desligado). 504 e o resto são "sem confirmação".
+    if ([403, 404, 409, 422, 429].includes(res.status) || ([502, 503].includes(res.status) && typeof code === "string")) {
+      throw new OperationRefused(typeof code === "string" ? code : res.status === 404 ? "login_desconhecido" : "recusada", res.status);
+    }
+    if (!res.ok) throw new IntegrationError("wiki", `POST /clientes/{login}/wifi ${res.status}`, res.status);
+    return { ssid: this.parse(wifiSchema, json, "Wi-Fi").ssid };
   }
 
   async start(req: OperationRequest) {
