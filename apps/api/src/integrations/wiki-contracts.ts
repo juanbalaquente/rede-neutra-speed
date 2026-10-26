@@ -15,7 +15,8 @@ const startedSchema = z.object({ operacaoId: z.string().min(1), estado: estado.d
 
 const snapshotSchema = z.object({
   operacaoId: z.string().min(1),
-  tipo: z.literal("contrato").optional(),
+  // A operação de cancelamento volta com outro tipo (26 out 2026, produção); o portal não usa o campo, então não recusa por ele.
+  tipo: z.string().optional(),
   estado,
   etapas: z.array(z.object({ nome: z.string(), estado: z.enum(["pendente", "concluida", "falhou", "aguardando_equipe"]), motivo: z.string().nullable().optional() })).default([]),
   resultado: z.object({ contrato: z.string().min(1), login: z.string().min(1) }).nullable().default(null),
@@ -72,7 +73,9 @@ export class WikiContractService implements ContractService {
   }
 
   async cancel(operacaoId: string, partnerCode: string, input: { idempotencyKey: string; motivo: string }) {
-    const { json } = await this.call("POST", `/contratos/${encodeURIComponent(operacaoId)}/cancelamento`, partnerCode, input);
+    const { status, json } = await this.call("POST", `/contratos/${encodeURIComponent(operacaoId)}/cancelamento`, partnerCode, input);
+    // A Wiki não conhece a operação: é recusa, não falha de envio (senão o reenvio fica eterno).
+    if (status === 404) throw new OperationRefused("contrato_desconhecido", 404 as never);
     return this.parse(startedSchema, json, "cancelamento de contrato");
   }
 

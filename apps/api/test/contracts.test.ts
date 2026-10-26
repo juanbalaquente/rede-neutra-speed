@@ -247,6 +247,12 @@ describe("WikiContractService (contrato v3, seção H)", () => {
     await expect(build(() => json({ operacaoId: "op", estado: "quase" })).svc.get("op", "JHV")).rejects.toThrow(/fora do contrato v3/);
     await expect(build(() => json({ error: "boom" }, 503)).svc.create(REQ)).rejects.toMatchObject({ status: 503 });
   });
+
+  it("lê a operação de cancelamento com outro tipo e recusa o cancelamento de operação desconhecida (26 out 2026)", async () => {
+    const snap = await build(() => json({ operacaoId: "c1", tipo: "cancelamento_contrato", estado: "aguardando_equipe", etapas: [{ nome: "contrato_cancelado", estado: "aguardando_equipe" }], resultado: null, atualizadoEm: "2026-10-26T13:30:00-03:00" })).svc.get("c1", "JHV");
+    expect(snap).toMatchObject({ estado: "aguardando_equipe" });
+    await expect(build(() => new Response(null, { status: 404 })).svc.cancel("demo-ct-1", "EUS", { idempotencyKey: REQ.idempotencyKey, motivo: "x" })).rejects.toMatchObject({ code: "contrato_desconhecido" });
+  });
 });
 
 describe("contrato criado trava expiração e cancelamento da reserva", () => {
