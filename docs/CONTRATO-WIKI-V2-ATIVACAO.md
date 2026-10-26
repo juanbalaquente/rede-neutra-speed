@@ -28,13 +28,13 @@ As rotas abaixo existem na Wiki, com `X-RedeNeutra-Write-Key` (valor entregue qu
 
 ## Configuração completa da ONU (Wiki, 23 out 2026)
 
-A ativação passou a entregar a ONU configurada, sem mudar rotas, estados nem formatos. Dentro de `provisionando`, em ordem: reset de fábrica (apaga Wi-Fi, senhas e PPPoE de cliente anterior; nunca repete em nova tentativa), AUTENTICADOR da OLT, senha web `admin` com a senha padrão da Speed (ACS), WAN de internet com IPv6 (endereço automático e prefixo delegado) e serviço `VOIP_INTERNET` (ACS), acesso remoto pela rede de gerência. Depois, vínculo com a porta da CTO e espera de Online + PPPoE. **`provisionando` passa a levar de 2,5 a 5 min**, com a ONU uns 2 min fora do ar.
+A ativação passou a entregar a ONU configurada, sem mudar rotas, estados nem formatos. Dentro de `provisionando`, em ordem: reset de fábrica (apaga Wi-Fi, senhas e PPPoE de cliente anterior; nunca repete em nova tentativa), AUTENTICADOR da OLT, senha web `admin` com a senha padrão da Speed (ACS), perfil (DHCP de 3 dias, DNS, LAN secundária desligada, UPnP, acesso web remoto permanente) e IPv6 (WAN PPPoE com delegação de prefixo; o NE40 delega o /56 em ~30 s). **Sem telefonia por ora:** `VOIP_INTERNET` fica para outro momento (Wiki, 26 out 2026). Depois, vínculo com a porta da CTO e espera de Online + PPPoE. **`provisionando` passa a levar de 2,5 a 5 min**, com a ONU uns 2 min fora do ar.
 
 - **Só ONU Huawei gerenciada pelo ACS**, fora EG8010H, 546M e 010H. Outra termina em `falha_provisionamento` (card para a equipe da Wiki); a checagem é antes do reset, então a ONU fica autorizada sem ser mexida. O portal avisa na lista de pendentes (serial que não começa com `HWTC` ou modelo recusado) e não bloqueia o envio: quem decide é a Wiki.
 - **Wi-Fi não é configurado:** a ONU termina com a rede da etiqueta. O portal avisa ao concluir.
 - OLTs Jaqueline e Santa Luzia (dois scripts AUTENTICADOR) vão para a equipe da Wiki.
 - Corrigido pela Wiki: ITA, Esmeraldas, Laguna e Vale do Ouro (nome do script com dois espaços); VLAN do AUTENTICADOR em ITA e Nossa Fazenda; falhas silenciosas do OLTCloud agora conferidas no histórico.
-- Validado pela Wiki em produção numa EG8145X6-10 de bancada (online na primeira tentativa, /56 delegado, /64 na LAN). A troca automática para `VOIP_INTERNET` ainda não rodou numa ativação completa.
+- Validado pela Wiki em produção numa EG8145X6-10 de bancada (online na primeira tentativa, /56 delegado, /64 na LAN). A Wiki também validou na X9 e resume a ativação em 5 etapas (reset, AUTENTICADOR, senha web, perfil, IPv6); o reset nunca se repete em nova tentativa.
 - **Em aberto (Juan):** de onde vêm nome e senha do Wi-Fi (campo opcional no `POST /v2/ativacoes`, padrão por cliente ou o técnico configura) e se a Wiki deve devolver `modelo_nao_suportado` (o portal já traduz esse motivo).
 
 ## Autenticação

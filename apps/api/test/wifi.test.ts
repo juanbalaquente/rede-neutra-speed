@@ -92,7 +92,8 @@ describe("troca do Wi-Fi do cliente", () => {
   it("recusa senha fora do padrão WPA2 antes de chegar à Wiki, sem repetir o valor na mensagem", async () => {
     const { ate } = await partner();
     const id = await installed(ate);
-    for (const senha of ["curta", "x".repeat(64), "senhaçomacento1"]) {
+    // Curta, longa, com acento e sem as quatro classes (a Wiki devolveria 422 senha_fraca).
+    for (const senha of ["Ab1!", "Ab1!".repeat(16), "Senhaçom1!", "senhasemclasses1", "SENHA-SEM-MINUSCULA1", "Senha-sem-numero", "SenhaSemEspecial1"]) {
       const res = await wifi(ate, id, { senha });
       expect(res.status).toBe(400);
       expect(await res.text()).not.toContain(senha);

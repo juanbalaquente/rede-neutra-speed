@@ -705,8 +705,13 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
       z.object({
         // A Wiki só aceita ASCII imprimível no nome (limite de 32 bytes, e acento ocupa 2); sem espaço nas pontas.
         ssid: z.string().trim().min(1).max(32).regex(/^[\x20-\x7E]+$/, "só letras sem acento, números e símbolos").nullish(),
-        // WPA2: 8 a 63 caracteres ASCII imprimíveis (inclui espaço).
-        senha: z.string().min(8, "mínimo de 8 caracteres").max(63, "máximo de 63 caracteres").regex(/^[ -~]+$/, "só letras, números e símbolos sem acento"),
+        // WPA2: 8 a 63 caracteres ASCII imprimíveis. A Wiki (e o OLTCloud) exigem as quatro classes: senão 422 senha_fraca.
+        senha: z
+          .string()
+          .min(8, "mínimo de 8 caracteres")
+          .max(63, "máximo de 63 caracteres")
+          .regex(/^[ -~]+$/, "só letras, números e símbolos sem acento")
+          .refine((s) => /[A-Z]/.test(s) && /[a-z]/.test(s) && /\d/.test(s) && /[^A-Za-z0-9 ]/.test(s), "precisa de maiúscula, minúscula, número e caractere especial"),
       }),
     );
     const done = await changeWifi(db, actionsSvc(), c.get("user"), id, { ssid: body.ssid ?? null, senha: body.senha }, { ip: clientIp(c) });

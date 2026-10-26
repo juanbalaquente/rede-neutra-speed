@@ -6,7 +6,7 @@ import { OperationRefused, WikiCustomerActions } from "../src/integrations/wiki-
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const REQ = { login: "10001-JHV", partnerCode: "JHV", ssid: "Casa do Joao", senha: "Segredo-Wifi-9876" };
 
-/** O cliente comum (15 s) nunca pode ser usado para o Wi-Fi: só o de 30 s. */
+/** O cliente comum (15 s) nunca pode ser usado para o Wi-Fi: só o de 45 s. */
 function build(respond: () => Response) {
   const calls: { url: string; headers: Record<string, string>; body?: string }[] = [];
   const wifiHttp: Http = async (url, init) => {
@@ -33,6 +33,7 @@ describe("WikiCustomerActions.setWifi (contrato v3, seção J)", () => {
     [409, "onu_offline"],
     [409, "cliente_bloqueado"],
     [422, "senha_invalida"],
+    [422, "senha_fraca"],
     [403, "login_de_outro_parceiro"],
     [429, "limite_de_trocas"],
     [502, "falha_no_aparelho"],
