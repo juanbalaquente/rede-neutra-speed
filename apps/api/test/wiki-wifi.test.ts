@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Http } from "../src/integrations/http.js";
 import { IntegrationError } from "../src/integrations/types.js";
 import { OperationRefused, WikiCustomerActions } from "../src/integrations/wiki-actions.js";
+import { WikiClientStatus } from "../src/integrations/wiki-client-status.js";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const REQ = { login: "10001-JHV", partnerCode: "JHV", ssid: "Casa do Joao", senha: "Segredo-Wifi-9876" };
 
-/** O cliente comum (15 s) nunca pode ser usado para o Wi-Fi: só o de 45 s. */
+/** O cliente comum (15 s) nunca pode ser usado para o Wi-Fi: só o de 75 s (maior que os 45 s da Wiki mais a conferência dela). */
 function build(respond: () => Response) {
   const calls: { url: string; headers: Record<string, string>; body?: string }[] = [];
   const wifiHttp: Http = async (url, init) => {
@@ -66,5 +67,36 @@ describe("WikiCustomerActions.setWifi (contrato v3, seção J)", () => {
       const e = await svc.setWifi(REQ).catch((x: Error) => x);
       expect(String((e as Error).message)).not.toContain(REQ.senha);
     }
+  });
+});
+
+describe("WikiClientStatus.wifiLastChange (ultima-troca)", () => {
+  const build = (respond: () => Response) => {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    const http: Http = async (url, init) => {
+      calls.push({ url, headers: { ...(init?.headers as Record<string, string>) } });
+      return respond();
+    };
+    return { svc: new WikiClientStatus(http, "https://wiki.exemplo/", "chave-leitura"), calls };
+  };
+  const ok = { estado: "aplicado", banda: null, motivo: null, ssid: "Casa", duracaoMs: 33903, atualizadoEm: "2026-10-26T13:28:03.181Z" };
+
+  it("usa a chave de LEITURA e o parceiro, e valida a resposta", async () => {
+    const { svc, calls } = build(() => json(ok));
+    expect(await svc.wifiLastChange("10001-JHV", "JHV")).toMatchObject({ estado: "aplicado", ssid: "Casa", duracaoMs: 33903 });
+    expect(calls[0]!.url).toBe("https://wiki.exemplo/proxy/redeneutra/v3/clientes/10001-JHV/wifi/ultima-troca");
+    expect(calls[0]!.headers["X-RedeNeutra-Key"]).toBe("chave-leitura");
+    expect(calls[0]!.headers["X-RedeNeutra-Partner"]).toBe("JHV");
+    expect(calls[0]!.headers["X-RedeNeutra-Write-Key"]).toBeUndefined();
+  });
+
+  it("404 (sem_troca_registrada) vira null", async () => {
+    const { svc } = build(() => json({ error: "sem_troca_registrada" }, 404));
+    expect(await svc.wifiLastChange("10001-JHV", "JHV")).toBeNull();
+  });
+
+  it("estado fora do contrato é erro, não resultado", async () => {
+    const { svc } = build(() => json({ ...ok, estado: "talvez" }));
+    await expect(svc.wifiLastChange("10001-JHV", "JHV")).rejects.toBeInstanceOf(IntegrationError);
   });
 });

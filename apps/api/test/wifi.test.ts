@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { auditLog, customerOperations } from "../src/db/schema.js";
 import { MockActivationService } from "../src/integrations/mock-activation.js";
 import { MockCustomerActions } from "../src/integrations/mock-actions.js";
+import { MockClientStatus } from "../src/integrations/mock-client-status.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
 import { OperationRefused } from "../src/integrations/wiki-actions.js";
 import { OS_REQUIRED_KINDS } from "../src/services/installations.js";
@@ -10,10 +11,12 @@ import { setup } from "./helpers.js";
 type Ctx = Awaited<ReturnType<typeof setup>>;
 let ctx: Ctx;
 let actions: MockCustomerActions;
+let status: MockClientStatus;
 
 beforeEach(async () => {
   actions = new MockCustomerActions();
-  ctx = await setup(new MockNetworkMap(), new MockActivationService(), {}, actions);
+  status = new MockClientStatus();
+  ctx = await setup(new MockNetworkMap(), new MockActivationService(), {}, actions, undefined, status);
 });
 afterEach(async () => {
   await ctx.close();
@@ -164,6 +167,55 @@ describe("troca do Wi-Fi do cliente", () => {
     expect(res.status).toBe(502);
     expect(JSON.stringify(await res.json())).not.toContain(SENHA);
     expect((await ctx.db.select().from(auditLog)).some((a) => a.action === "cliente.wifi_sem_confirmacao")).toBe(true);
+  });
+
+  describe("resultado depois do 504 (ultima-troca da Wiki)", () => {
+    const outcome = (cookie: string, id: string) => ctx.call(cookie, "GET", `/installations/${id}/wifi/ultima-troca`);
+    const agora = () => new Date().toISOString();
+
+    it("sem tentativa do portal não há resultado, mesmo que a Wiki tenha uma troca antiga", async () => {
+      const { ate } = await partner();
+      const id = await installed(ate);
+      status.wifiLast.set("10001-JHV", { estado: "aplicado", banda: null, motivo: null, ssid: "Velha", duracaoMs: 1, atualizadoEm: agora() });
+      expect(await (await outcome(ate, id)).json()).toEqual({ estado: "sem_registro" });
+    });
+
+    it("troca antiga da Wiki não vale como resultado da tentativa atual", async () => {
+      const { ate } = await partner();
+      const id = await installed(ate);
+      status.wifiLast.set("10001-JHV", { estado: "aplicado", banda: null, motivo: null, ssid: "Velha", duracaoMs: 1, atualizadoEm: new Date(Date.now() - 3600_000).toISOString() });
+      await wifi(ate, id, { senha: SENHA });
+      expect(await (await outcome(ate, id)).json()).toEqual({ estado: "sem_registro" });
+    });
+
+    it("devolve em andamento, aplicada e falhou da tentativa atual, sem a senha", async () => {
+      const { ate } = await partner();
+      const id = await installed(ate);
+      await wifi(ate, id, { ssid: "Casa", senha: SENHA });
+      for (const [estado, motivo] of [["em_andamento", null], ["aplicado", null], ["falhou", "sem_convergencia"]] as const) {
+        status.wifiLast.set("10001-JHV", { estado, banda: estado === "falhou" ? 5 : null, motivo, ssid: "Casa", duracaoMs: 33903, atualizadoEm: agora() });
+        const res = await outcome(ate, id);
+        expect(res.headers.get("cache-control")).toBe("no-store");
+        const text = await res.text();
+        expect(text).not.toContain(SENHA);
+        expect(JSON.parse(text)).toMatchObject({ estado, motivo });
+      }
+    });
+
+    it("a Wiki sem troca registrada (404) vira sem_registro", async () => {
+      const { ate } = await partner();
+      const id = await installed(ate);
+      await wifi(ate, id, { senha: SENHA });
+      expect(await (await outcome(ate, id)).json()).toEqual({ estado: "sem_registro" });
+    });
+
+    it("outro parceiro recebe 404", async () => {
+      const { ate } = await partner();
+      const id = await installed(ate);
+      await wifi(ate, id, { senha: SENHA });
+      const other = await ctx.createPartner("Outro", "44444444000144", { code: "OUT" });
+      expect((await outcome(await ctx.login(other.atendente), id)).status).toBe(404);
+    });
   });
 
   it("sem o serviço de automação, responde 503", async () => {

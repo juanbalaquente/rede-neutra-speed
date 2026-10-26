@@ -25,12 +25,19 @@ function createActivation(config: Config, log: ApiCallLogger): ActivationService
   return new WikiActivationService(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!);
 }
 
+/**
+ * A troca de Wi-Fi na Wiki: antes de começar ela confere a ONU (info ao vivo no ACS, alguns segundos) e SÓ DEPOIS conta
+ * 45 s; passado isso responde 504 e termina a troca sozinha. O portal precisa esperar o 504 chegar: com 45 s (e depois 55 s)
+ * ele desistia antes (26 out 2026, 13:11, abortado em 45 004 ms). Fica abaixo do proxy_read_timeout do nginx (90 s).
+ */
+const WIFI_TIMEOUT_MS = 75_000;
+
 function createActions(config: Config, log: ApiCallLogger): CustomerActions | undefined {
   if (config.AUTOMATION_MODE === "off") return undefined;
   if (config.AUTOMATION_MODE === "mock") return new MockCustomerActions();
   const missing = (["WIKI_BASE_URL", "WIKI_WRITE_KEY"] as const).filter((k) => !config[k]);
   if (missing.length) throw new Error(`AUTOMATION_MODE=wiki sem: ${missing.join(", ")}`);
-  return new WikiCustomerActions(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!, createHttp("wiki", log, 45_000));
+  return new WikiCustomerActions(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!, createHttp("wiki", log, WIFI_TIMEOUT_MS));
 }
 
 function createTickets(config: Config, log: ApiCallLogger): TicketService | undefined {

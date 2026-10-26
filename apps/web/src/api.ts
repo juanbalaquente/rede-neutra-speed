@@ -255,6 +255,7 @@ export const api = {
   operations: (installationId: string) => request<{ operations: CustomerOperation[] }>("GET", `/installations/${installationId}/operations`),
   startOperation: (installationId: string, body: { type: OperationType; reason?: string | null; idempotencyKey?: string }) =>
     request<{ operation: CustomerOperation }>("POST", `/installations/${installationId}/operations`, body),
+  wifiOutcome: (installationId: string) => request<WifiOutcome>("GET", `/installations/${installationId}/wifi/ultima-troca`),
   changeWifi: (installationId: string, body: { ssid: string | null; senha: string }) =>
     request<{ ok: true; ssid: string | null }>("POST", `/installations/${installationId}/wifi`, body),
   operation: (id: string) => request<{ operation: CustomerOperation }>("GET", `/operations/${id}`),
@@ -552,3 +553,7 @@ export interface CustomerOperation {
   createdAt: string;
   updatedAt: string;
 }
+
+export type WifiOutcome =
+  | { estado: "sem_registro" }
+  | { estado: "em_andamento" | "aplicado" | "falhou"; banda: 24 | 5 | null; motivo: string | null; ssid: string | null; duracaoMs: number | null };

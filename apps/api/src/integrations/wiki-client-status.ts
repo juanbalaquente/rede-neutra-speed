@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Http } from "./http.js";
-import { IntegrationError, type ClientStatus, type ClientStatusService, type ClientSummary, type OnuDetail, type SignalSeries } from "./types.js";
+import { IntegrationError, type ClientStatus, type ClientStatusService, type ClientSummary, type OnuDetail, type SignalSeries, type WifiLastChange } from "./types.js";
 
 /**
  * Leitura do estado dos clientes na SpeedWiki (/proxy/redeneutra/v3/clientes, contrato v3 seção A).
@@ -98,6 +98,15 @@ const dbm = (n: number | null) => (n !== null && n <= SENTINEL ? null : n);
 
 const SENTINEL = -99;
 
+const wifiLastSchema = z.object({
+  estado: z.enum(["em_andamento", "aplicado", "falhou"]),
+  banda: z.union([z.literal(24), z.literal(5)]).nullable().default(null),
+  motivo: z.enum(["recusado", "sem_convergencia", "erro_interno"]).nullable().default(null),
+  ssid: z.string().nullable().default(null),
+  duracaoMs: z.number().nullable().default(null),
+  atualizadoEm: z.string(),
+});
+
 export class WikiClientStatus implements ClientStatusService {
   private readonly root: string;
 
@@ -157,6 +166,12 @@ export class WikiClientStatus implements ClientStatusService {
       out.push(...this.parse(summarySchema, json, "lote de clientes").clientes.map((c) => ({ ...c, sinalDbm: dbm(c.sinalDbm) })));
     }
     return out;
+  }
+
+  async wifiLastChange(login: string, partnerCode: string): Promise<WifiLastChange | null> {
+    const { status, json } = await this.call("GET", `/clientes/${encodeURIComponent(login)}/wifi/ultima-troca`, partnerCode);
+    if (status === 404) return null;
+    return this.parse(wifiLastSchema, json, "última troca de Wi-Fi");
   }
 
   async onu(login: string, partnerCode: string): Promise<OnuDetail | null> {

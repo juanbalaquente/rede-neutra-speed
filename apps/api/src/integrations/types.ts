@@ -407,6 +407,16 @@ export interface WifiDevice {
 }
 
 /** Leitura do estado dos clientes. Resposta de rota fora do ar vira erro (IntegrationError); login desconhecido, null. */
+/** Resultado da última troca de Wi-Fi do login, guardado em memória pela Wiki (contrato v3 seção J, `ultima-troca`). Nunca traz a senha. */
+export interface WifiLastChange {
+  estado: "em_andamento" | "aplicado" | "falhou";
+  banda: 24 | 5 | null;
+  motivo: "recusado" | "sem_convergencia" | "erro_interno" | null;
+  ssid: string | null;
+  duracaoMs: number | null;
+  atualizadoEm: string;
+}
+
 export interface ClientStatusService {
   status(login: string, partnerCode: string, opts?: { fresh?: boolean }): Promise<ClientStatus | null>;
   signal(login: string, partnerCode: string, dias: number): Promise<SignalSeries | null>;
@@ -414,4 +424,6 @@ export interface ClientStatusService {
   summary(logins: string[], partnerCode: string): Promise<ClientSummary[]>;
   /** Ao vivo. Rota ainda não publicada na Wiki: IntegrationError com status 404. */
   onu(login: string, partnerCode: string): Promise<OnuDetail | null>;
+  /** Depois de um 504 na troca de Wi-Fi: como terminou. null = a Wiki não tem troca registrada (reiniciou ou nunca houve). */
+  wifiLastChange(login: string, partnerCode: string): Promise<WifiLastChange | null>;
 }

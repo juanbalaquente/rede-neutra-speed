@@ -18,7 +18,7 @@ import { approveOperation, changeWifi, startBatch, getApprovalTypes, listPending
 import { signalQuality } from "./services/signal-quality.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
-import { getClientSignal, getClientStatus, getFleetStatus } from "./services/client-status.js";
+import { getClientSignal, getClientStatus, getFleetStatus, getWifiOutcome } from "./services/client-status.js";
 import { getOnuDetail, listOnus } from "./services/onus.js";
 import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
 import { TICKET_TYPES } from "./db/schema.js";
@@ -717,6 +717,13 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
     const done = await changeWifi(db, actionsSvc(), c.get("user"), id, { ssid: body.ssid ?? null, senha: body.senha }, { ip: clientIp(c) });
     c.header("Cache-Control", "no-store");
     return c.json({ ok: true, ssid: done.ssid });
+  });
+
+  /** Depois de "não deu para confirmar": como a Wiki terminou a troca de Wi-Fi (só a desta tentativa; nunca a senha). */
+  app.get("/installations/:id/wifi/ultima-troca", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    c.header("Cache-Control", "no-store");
+    return c.json(await getWifiOutcome(db, integrations.clientStatus, c.get("user"), id));
   });
 
   app.get("/operations/:id", requireUser, requireRole("atendente", "supervisor"), async (c) => {

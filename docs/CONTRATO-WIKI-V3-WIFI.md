@@ -102,3 +102,30 @@ O que o portal pode notar:
 - Tela de troca de Wi-Fi: mostrar a regra da senha (8 a 63, ASCII, as quatro classes) e do nome (1 a 32 bytes, ASCII), tratar `senha_fraca` e `504` ("não deu para confirmar, teste no aparelho antes de repetir"), e usar timeout de 45 s.
 - A ONU de bancada (HWTCb705b8b5, alias `32804-JHV`) fica no OLTCloud para novos testes; não é cliente real.
 - Pendências da Wiki: restringir o `config_wifi` do repasse `/proxy/oltcloud/*` a `sistemas`; Wi-Fi na ativação (pedido separado); nome com acento (v2); whitelist de origem do acesso web da ONU (precisa do `config-flow`).
+
+## 8. Primeiro teste real do portal (33734-JHV, 26/10/2026): o que a Wiki achou e mudou
+
+**O que aconteceu.** O `POST` das 10:11 BRT respondeu `504` aos **55,7 s**, depois que o portal já tinha abortado aos 45 s. Das 55,7 s, ~10 s foram só da conferência prévia (`info?force=1` leva ~10,5 s nesse modelo, EG8145V5-V2) que ficava **fora** do prazo de 45 s. O trabalho em segundo plano seguiu e **aplicou**: lido às 10:26 BRT, a cópia do OLTCloud e o aparelho (pelo ACS) mostram `TESTE JUAN` nas duas bandas, senha de 15 caracteres na cópia. Isso indica que o config_wifi funciona nesse modelo e que a tela web da ONU foi consultada antes da convergência (~14 s por banda); a Wiki não tem o log da troca em si (não era registrado), então não dá para provar que o estado lido é o da tentativa das 10:11. Peço ao portal conferir o nome/senha na ONU e, se preferir, repetir com a Wiki já registrando. O resultado do segundo plano **não era registrado**; por isso ninguém soube.
+
+**Mudanças (no ar):**
+| Item | Antes | Agora |
+|---|---|---|
+| Resultado do segundo plano | só `prazo_esgotado` no log | log com `resultado`, banda, status do OLTCloud, motivo e duração (nunca a senha) |
+| Troca simultânea no mesmo login | misturava as gravações | `409 troca_em_andamento` |
+| Prazo | 45 s depois da conferência prévia | **60 s contados desde o início da requisição** (o portal espera 75 s: pode manter) |
+| Resposta depois do 504 | nenhuma | `GET /v3/clientes/{login}/wifi/ultima-troca` |
+| `config_wifi` no repasse `/proxy/oltcloud/*` | qualquer usuário logado lia a senha | **só `sistemas`** |
+
+### `GET /proxy/redeneutra/v3/clientes/{login}/wifi/ultima-troca`
+Chave de leitura (`X-RedeNeutra-Key`) e `X-RedeNeutra-Partner`, como os outros GET v3. Resposta `200`:
+
+```json
+{ "estado": "em_andamento" | "aplicado" | "falhou", "banda": 24 | 5 | null, "motivo": "recusado" | "sem_convergencia" | "erro_interno" | null, "ssid": "Casa" | null, "duracaoMs": 33903, "atualizadoEm": "2026-10-26T13:28:03.181Z" }
+```
+`404 sem_troca_registrada` quando não há troca desde o último reinício do proxy (**fica em memória**, como o limite de 5 por hora; reiniciar o proxy zera). Nunca devolve a senha. Sugestão ao portal: depois de um `504`, consultar de 5 em 5 s até sair de `em_andamento`.
+
+Notas: o limite de 5 trocas por hora **conta também as que falham** (é freio de abuso); o `409 troca_em_andamento` não gasta cota. O teste na bancada (duas trocas simultâneas) devolveu `200` para a primeira e `409` imediato para a segunda; `ultima-troca` devolveu `aplicado`, `duracaoMs: 33903`.
+
+### Ainda pendente
+- Senha nova valendo num celular depois de religar a ONU (continua sendo o teste final).
+- O modelo EG8145V5-V2 tem SSIDs extras (`Easymesh_Backhaul`, índices 2 e 3); a Wiki lê e confere só os índices 1 e 5 (rede principal), que é o que o config_wifi grava.

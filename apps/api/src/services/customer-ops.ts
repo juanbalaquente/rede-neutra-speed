@@ -7,6 +7,7 @@ import { IntegrationError, OPERATION_FINAL, type CustomerActions, type Operation
 import { OperationRefused } from "../integrations/wiki-actions.js";
 import { AppError, isUniqueViolation } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
+import { wifiAttemptAt } from "./wifi-attempts.js";
 
 type Row = typeof customerOperations.$inferSelect;
 
@@ -136,6 +137,8 @@ const WIFI_REFUSAL: Record<string, string> = {
   limite_de_trocas: "Já houve 5 trocas de Wi-Fi nesse cliente na última hora. Tente de novo mais tarde.",
   falha_no_aparelho: "A ONU recusou a configuração. Confira se ela está online e tente de novo; se persistir, abra um chamado.",
   wifi_desligado: "A troca de Wi-Fi ainda não está habilitada pela Speed.",
+  troca_em_andamento: "Já existe uma troca de Wi-Fi em andamento nesse cliente. Aguarde ela terminar antes de pedir outra.",
+  onu_sem_acs: "Essa ONU não é gerenciada pelo ACS da Speed, então o Wi-Fi não pode ser trocado por aqui.",
 };
 const WIFI_STATUS = new Set<number>([403, 404, 429, 502, 503]);
 
@@ -160,6 +163,7 @@ export async function changeWifi(
   const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, reservation.partnerId));
   if (!partner?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código cadastrado.");
   const login = await loginOf(db, reservation.id);
+  wifiAttemptAt.set(reservation.id, Date.now());
 
   const base = { partnerId: reservation.partnerId, userId: user.id, entity: "port_reservation", entityId: reservation.id, ip: opts.ip };
   try {

@@ -3,6 +3,7 @@ import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
 import { activations, partners, portReservations } from "../db/schema.js";
 import type { ClientStatus, ClientStatusService, ClientSummary, SignalSeries } from "../integrations/types.js";
+import { wifiAttemptAt } from "./wifi-attempts.js";
 import { AppError } from "../lib/errors.js";
 
 /** Idade a partir da qual o portal avisa que o dado está velho (contrato v3: 15 min fibra, 30 min PPPoE em snapshot). */
@@ -24,6 +25,25 @@ async function reservationOf(db: Db, user: SessionUser, id: string) {
     .where(user.role === "admin_speed" ? eq(portReservations.id, id) : and(eq(portReservations.id, id), eq(portReservations.partnerId, user.partnerId ?? "")));
   if (!row) throw new AppError(404, "reserva_nao_encontrada", "Cliente não encontrado.");
   return row;
+}
+
+export type WifiOutcome =
+  | { estado: "sem_registro" }
+  | { estado: "em_andamento" | "aplicado" | "falhou"; banda: 24 | 5 | null; motivo: string | null; ssid: string | null; duracaoMs: number | null };
+
+/**
+ * Como terminou a troca de Wi-Fi que o portal acabou de pedir (depois de um 504). Só vale o registro da Wiki que é desta
+ * tentativa (atualizado depois do pedido, com 5 s de folga entre os relógios); senão "sem_registro" e o técnico testa no aparelho.
+ */
+export async function getWifiOutcome(db: Db, svc: ClientStatusService | undefined, user: SessionUser, reservationId: string): Promise<WifiOutcome> {
+  const service = requireSvc(svc);
+  const reservation = await reservationOf(db, user, reservationId);
+  const attempt = wifiAttemptAt.get(reservation.id);
+  if (attempt === undefined) return { estado: "sem_registro" };
+  const { login, code } = await loginAndCode(db, reservation);
+  const last = await service.wifiLastChange(login, code);
+  if (!last || Date.parse(last.atualizadoEm) < attempt - 5000) return { estado: "sem_registro" };
+  return { estado: last.estado, banda: last.banda, motivo: last.motivo, ssid: last.ssid, duracaoMs: last.duracaoMs };
 }
 
 async function loginAndCode(db: Db, reservation: { id: string; partnerId: string }) {

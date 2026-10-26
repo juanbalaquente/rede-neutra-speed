@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { IntegrationError, type AutenticacaoEstado, type Bloqueio, type ClientStatus, type ClientStatusService, type ClientSummary, type ContratoEstado, type FibraEstado, type OnuDetail, type SignalSeries, type WifiDevice } from "./types.js";
+import { IntegrationError, type AutenticacaoEstado, type Bloqueio, type ClientStatus, type ClientStatusService, type ClientSummary, type ContratoEstado, type FibraEstado, type OnuDetail, type SignalSeries, type WifiDevice, type WifiLastChange } from "./types.js";
 
 /**
  * Wiki de mentira para o status do cliente. O cenário sai do último dígito do contrato (o login é `<contrato>-<CÓDIGO>`),
@@ -10,6 +10,14 @@ import { IntegrationError, type AutenticacaoEstado, type Bloqueio, type ClientSt
 export class MockClientStatus implements ClientStatusService {
   failNext = false;
   readonly calls: string[] = [];
+  /** Última troca de Wi-Fi por login, para os testes (a Wiki guarda em memória). */
+  readonly wifiLast = new Map<string, WifiLastChange>();
+
+  async wifiLastChange(login: string, partnerCode: string): Promise<WifiLastChange | null> {
+    this.calls.push(`wifi:${login}`);
+    if (!this.guard(login, partnerCode)) return null;
+    return this.wifiLast.get(login) ?? null;
+  }
 
   private scenario(login: string): { fibra: FibraEstado; ppp: AutenticacaoEstado; contrato: ContratoEstado } {
     const digit = login.replace(/-.*$/, "").slice(-1);
