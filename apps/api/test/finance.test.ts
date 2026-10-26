@@ -168,9 +168,14 @@ describe("painel do parceiro", () => {
     await ctx.db.update(portReservations).set({ visitAt: new Date(Date.now() - 3 * 24 * 3600_000) }).where(eq(portReservations.id, reservation.id));
     const d = await (await ctx.call(ate, "GET", "/dashboard")).json();
     expect(d).toMatchObject({ portasAtivas: 1, reservasAbertas: 1, osPendentes: 0, instalacoesNoMes: 1, visitasAtrasadas: 1 });
-    expect(d.serie).toHaveLength(6);
-    expect(d.serie[5]).toMatchObject({ month: THIS_MONTH, instalacoes: 1, ativasNoFim: 1 });
+    expect(d.serie).toHaveLength(12);
+    expect(d.serie[11]).toMatchObject({ month: THIS_MONTH, instalacoes: 1, ativasNoFim: 1 });
     expect(d.planos).toEqual([{ plano: "600 Mega", qtd: 1 }]);
+    // Lista "precisa de você agora": a visita atrasada aparece primeiro, com o caminho até a tela certa.
+    expect(d.agora[0]).toMatchObject({ tone: "bad", label: "Visita atrasada", go: "agenda", reservationId: reservation.id });
+    // Funil dos últimos 30 dias: duas reservas feitas aqui; só a instalada chegou ao contrato e à O.S. fechada.
+    expect(d.funil).toMatchObject({ reservas: 2, contratos: 1, osFechadas: 1 });
+    expect(d.funil.consultas).toBeGreaterThanOrEqual(2);
     // Outro parceiro não vê nada disso; a Speed tem outro painel.
     const other = await ctx.createPartner("Outro", "33333333000133", { code: "OUT" });
     expect((await (await ctx.call(await ctx.login(other.atendente), "GET", "/dashboard")).json()).portasAtivas).toBe(0);
@@ -296,5 +301,37 @@ describe("cobrança da Speed por parceiro (o parceiro paga por fora do ERP)", ()
   it("só a Speed vê a cobrança", async () => {
     const a = await partner();
     expect((await ctx.call(a.sup, "GET", `/admin/cobranca?month=${THIS_MONTH}`)).status).toBe(403);
+  });
+});
+
+describe("telas novas: porta cobrada, receita e meta", () => {
+  it("o financeiro separa as portas ativas das canceladas no mês (explica 1 no painel e 5 no financeiro)", async () => {
+    const { sup, ate } = await partner();
+    const a = await installed(ate, 600, "10001");
+    await installed(ate, 600, "10002");
+    await ctx.db.update(portReservations).set({ status: "cancelada", cancelledAt: new Date() }).where(eq(portReservations.id, a));
+    const fin = await (await ctx.call(sup, "GET", `/finance?month=${THIS_MONTH}`)).json();
+    expect(fin.resumo).toMatchObject({ portasAtivas: 2, ativas: 1, canceladasNoMes: 1 });
+    expect((await (await ctx.call(ate, "GET", "/dashboard")).json()).portasAtivas).toBe(1);
+  });
+
+  it("a meta de receita é só da Speed, fica auditada e aparece na série de receita", async () => {
+    const { sup, ate } = await partner();
+    await installed(ate, 600, "10001");
+    const admin = await ctx.login("admin@speed.test");
+    expect((await ctx.call(sup, "PUT", "/admin/settings/meta-receita", { cents: 500000 })).status).toBe(403);
+    expect((await ctx.call(admin, "GET", "/admin/painel/receita")).status).toBe(200);
+    expect((await (await ctx.call(admin, "GET", "/admin/painel/receita")).json()).metaCents).toBeNull();
+    expect((await ctx.call(admin, "PUT", "/admin/settings/meta-receita", { cents: 50 })).status).toBe(400);
+    expect((await ctx.call(admin, "PUT", "/admin/settings/meta-receita", { cents: 500000 })).status).toBe(200);
+    const r = await (await ctx.call(admin, "GET", "/admin/painel/receita")).json();
+    expect(r.metaCents).toBe(500000);
+    expect(r.meses).toHaveLength(6);
+    expect(r.meses[5]).toMatchObject({ month: THIS_MONTH, totalCents: 4000, portas: 1 });
+    expect(r.parceiros[0]).toMatchObject({ name: "JHV Telecom", portas: [0, 0, 0, 0, 0, 1] });
+    expect((await ctx.db.select().from(auditLog)).some((l) => l.action === "config.meta_receita")).toBe(true);
+    // null remove a meta.
+    await ctx.call(admin, "PUT", "/admin/settings/meta-receita", { cents: null });
+    expect((await (await ctx.call(admin, "GET", "/admin/painel/receita")).json()).metaCents).toBeNull();
   });
 });

@@ -442,7 +442,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
         )}
 
         {tab === "painel" && user.role === "admin_speed" ? (
-          <PanelPage />
+          <PanelPage onGo={setTab} pedidos={pedidos} />
         ) : tab === "auditoria" && user.role === "admin_speed" ? (
           <AuditPage />
         ) : tab === "equipe" && user.role === "supervisor" ? (

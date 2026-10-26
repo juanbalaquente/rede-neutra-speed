@@ -196,7 +196,7 @@ function RegionCard({ region }: { region: PanelRegion }) {
 }
 
 /** Administrador Speed: demanda dos parceiros e estado das CTOs vistas, por sigla. */
-export function PanelPage() {
+export function PanelPage({ onGo, pedidos }: { onGo: (tab: "pedidos" | "parceiros" | "chamados") => void; pedidos: number }) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<NetworkPanel | null>(null);
   const [loading, setLoading] = useState(true);
@@ -221,7 +221,7 @@ export function PanelPage() {
       <div className="ph">
         <div>
           <h1>Painel da rede</h1>
-          <p>O que os parceiros procuram e como estão as CTOs que eles encontram.</p>
+          <p>O que pede ação, quanto a rede rende e o que os parceiros procuram.</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {PERIODS.map((p) => <button key={p} className={`btn sm ${p === days ? "" : "sec"}`} onClick={() => setDays(p)}>{p} dias</button>)}
@@ -232,8 +232,9 @@ export function PanelPage() {
       {data && t && (
         // Recarregando: mantém o painel anterior esmaecido, sem pular o layout.
         <div style={{ display: "grid", gap: 14, opacity: loading ? 0.55 : 1, transition: "opacity .2s" }}>
-          <SpeedOverview />
+          <SpeedOverview onGo={onGo} pedidos={pedidos} />
           <SpeedBillingCard />
+          <h2 className="sect">A rede</h2>
           <div className="kpis">
             <div className="card kpi"><span>Consultas</span><b>{t.consultas}</b><small>nos últimos {data.days} dias</small></div>
             <div className="card kpi"><span>Com viabilidade</span><b>{pct(t.viaveis, t.consultas)}</b><small>{t.viaveis} consultas</small></div>

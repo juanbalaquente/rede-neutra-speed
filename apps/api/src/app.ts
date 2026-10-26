@@ -23,7 +23,7 @@ import { getOnuDetail, listOnus } from "./services/onus.js";
 import { DEFAULT_SLA_HOURS, addTicketMessage, createTicket, getSla, getTicket, listTickets, retryTicket, setSla, type TicketEnv } from "./services/tickets.js";
 import { TICKET_TYPES } from "./db/schema.js";
 import { getOperation, listOperations, operationView, refreshOperation, retryOperation, startOperation } from "./services/customer-ops.js";
-import { MONTH_RE, cobrancaCsv, financeForPartner, speedBilling, clientesCsv, fechamentoCsv, getDashboard, getFinance, getPrices, markPayment, monthOf, setPrice, setSpeedPrice } from "./services/finance.js";
+import { MONTH_RE, cobrancaCsv, financeForPartner, setRevenueGoal, speedBilling, speedRevenueSeries, clientesCsv, fechamentoCsv, getDashboard, getFinance, getPrices, markPayment, monthOf, setPrice, setSpeedPrice } from "./services/finance.js";
 import { closeServiceOrder, getInstallation, getOsPhotosRequired, listAgenda, listInstallations, listTechnicians, reschedule, saveCliente, setOsPhotosRequired } from "./services/installations.js";
 import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
@@ -1053,6 +1053,15 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
 
   /** Cobrança da Speed por parceiro no mês (o contrato no Voalle não tem valor: o parceiro paga por este fechamento). */
   admin.get("/cobranca", async (c) => c.json(await speedBilling(db, monthQuery(c))));
+
+  /** Receita dos últimos meses (total e por parceiro) e a meta mensal definida pela diretoria. */
+  admin.get("/painel/receita", async (c) => c.json(await speedRevenueSeries(db)));
+
+  /** Meta mensal de receita (centavos); null remove a linha de meta das telas. */
+  admin.put("/settings/meta-receita", async (c) => {
+    const body = await parseBody(c, z.object({ cents: z.number().int().min(100).max(1_000_000_000).nullable() }));
+    return c.json({ metaCents: await setRevenueGoal(db, c.get("user"), body.cents, clientIp(c)) });
+  });
 
   /** Demonstrativo de um parceiro (planilha): uma linha por porta cobrada no mês. */
   admin.get("/cobranca/:partnerId/export", async (c) => {

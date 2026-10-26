@@ -1,7 +1,7 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
-import { partnerPrices, payments, plans, portReservations, tickets, partners } from "../db/schema.js";
+import { partnerPrices, payments, plans, portReservations, settings, tickets, partners, viabilityQueries } from "../db/schema.js";
 import { AppError } from "../lib/errors.js";
 import { recordAudit } from "./audit.js";
 
@@ -148,6 +148,9 @@ export async function financeForPartner(db: Db, partnerId: string, month: string
     month,
     resumo: {
       portasAtivas: clients.length,
+      // Porta cobrada no mês inclui a cancelada nele (mês cheio); o painel conta só as ativas agora. Os dois números aparecem juntos.
+      ativas: clients.filter((c) => c.cancelledAt === null).length,
+      canceladasNoMes: clients.filter((c) => c.cancelledAt !== null).length,
       custoCents,
       faturamentoCents,
       lucroCents: faturamentoCents - custoCents,
@@ -229,9 +232,9 @@ export async function getDashboard(db: Db, user: SessionUser, now = new Date()) 
     .from(portReservations)
     .where(and(eq(portReservations.partnerId, partnerId), eq(portReservations.status, "cancelada"), isNotNull(portReservations.osClosedAt)));
 
-  // Últimos 6 meses: instalações fechadas em cada um e portas ativas no fim dele.
-  const serie = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - (5 - i), 1));
+  // Últimos 12 meses: instalações fechadas em cada um e portas ativas no fim dele (a tela corta os meses vazios do começo).
+  const serie = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - (11 - i), 1));
     const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     const { start, end } = monthBounds(month);
     return {
@@ -244,7 +247,47 @@ export async function getDashboard(db: Db, user: SessionUser, now = new Date()) 
   const planos = new Map<string, number>();
   for (const x of rows.filter((x) => x.r.osClosedAt)) planos.set(x.planName ?? "sem plano", (planos.get(x.planName ?? "sem plano") ?? 0) + 1);
 
+  // Funil dos últimos 30 dias: do endereço consultado à O.S. fechada (reservas canceladas e vencidas contam como reservadas).
+  const since = new Date(now.getTime() - 30 * 24 * 3600_000);
+  const queries = await db.select({ viable: viabilityQueries.viable }).from(viabilityQueries).where(and(eq(viabilityQueries.partnerId, partnerId), gte(viabilityQueries.createdAt, since)));
+  const recent = await db
+    .select({ contract: portReservations.contractNumber, closed: portReservations.osClosedAt })
+    .from(portReservations)
+    .where(and(eq(portReservations.partnerId, partnerId), gte(portReservations.createdAt, since)));
+  const funil = {
+    consultas: queries.length,
+    comVaga: queries.filter((q) => q.viable).length,
+    reservas: recent.length,
+    contratos: recent.filter((x) => x.contract !== null).length,
+    osFechadas: recent.filter((x) => x.closed !== null).length,
+  };
+
+  // O que pede ação do parceiro agora, do mais grave ao menos grave. Cada item leva à tela onde se resolve.
+  const who = (x: (typeof rows)[number]) => x.r.nickname ?? x.r.contractNumber ?? x.r.address;
+  const soon = new Date(now.getTime() + 6 * 3600_000);
+  const agora: { id: string; tone: "bad" | "warn"; label: string; text: string; go: "agenda" | "reservas" | "chamados" | "instalacoes"; reservationId?: string }[] = [
+    ...rows
+      .filter((x) => open(x) && x.r.visitAt && x.r.visitAt < dayStart)
+      .sort((a, b) => a.r.visitAt!.getTime() - b.r.visitAt!.getTime())
+      .slice(0, 5)
+      .map((x) => ({ id: `visita-${x.r.id}`, tone: "bad" as const, label: "Visita atrasada", text: who(x), go: "agenda" as const, reservationId: x.r.id })),
+    ...(stillOpen.filter((t) => t.dueAt < now).length > 0
+      ? [{ id: "chamados", tone: "bad" as const, label: "Chamado fora do prazo", text: `${stillOpen.filter((t) => t.dueAt < now).length} chamado(s) passaram do prazo da Speed`, go: "chamados" as const }]
+      : []),
+    ...rows
+      .filter((x) => x.r.status === "ativa" && x.r.expiresAt && x.r.expiresAt > now && x.r.expiresAt < soon)
+      .sort((a, b) => a.r.expiresAt!.getTime() - b.r.expiresAt!.getTime())
+      .slice(0, 5)
+      .map((x) => ({ id: `reserva-${x.r.id}`, tone: "warn" as const, label: "Reserva vence em breve", text: `${who(x)} · ${x.r.ctoName}`, go: "reservas" as const, reservationId: x.r.id })),
+    ...rows
+      .filter((x) => x.r.status === "convertida" && open(x) && !(x.r.visitAt && x.r.visitAt < dayStart))
+      .slice(0, 5)
+      .map((x) => ({ id: `os-${x.r.id}`, tone: "warn" as const, label: "O.S. para fechar", text: who(x), go: "instalacoes" as const, reservationId: x.r.id })),
+  ];
+
   return {
+    agora,
+    funil,
     portasAtivas: closedAt.length,
     reservasAbertas: rows.filter((x) => x.r.status === "ativa").length,
     osPendentes: rows.filter((x) => x.r.status === "convertida" && open(x)).length,
@@ -298,6 +341,50 @@ export async function speedBilling(db: Db, month: string): Promise<{ month: stri
     });
   }
   return { month, parceiros, totalCents: parceiros.reduce((s, p) => s + p.valorCents, 0), totalPortas: parceiros.reduce((s, p) => s + p.portas, 0) };
+}
+
+// ── Receita da Speed ao longo dos meses e meta (parâmetro da diretoria) ──────
+
+export const REVENUE_GOAL_KEY = "meta.receita_mensal";
+
+/** Meta mensal de receita em centavos; null enquanto a diretoria não definir. */
+export async function getRevenueGoal(db: Db): Promise<number | null> {
+  const [row] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, REVENUE_GOAL_KEY));
+  const cents = (row?.value as { cents?: unknown } | undefined)?.cents;
+  return typeof cents === "number" && cents > 0 ? cents : null;
+}
+
+export async function setRevenueGoal(db: Db, user: SessionUser, cents: number | null, ip?: string | null) {
+  const before = await getRevenueGoal(db);
+  await db
+    .insert(settings)
+    .values({ key: REVENUE_GOAL_KEY, value: { cents }, updatedBy: user.id })
+    .onConflictDoUpdate({ target: settings.key, set: { value: { cents }, updatedBy: user.id, updatedAt: new Date() } });
+  await recordAudit(db, { partnerId: null, userId: user.id, action: "config.meta_receita", entity: "setting", entityId: REVENUE_GOAL_KEY, ip, data: { before, after: cents } });
+  return cents;
+}
+
+/** Cobrança dos últimos `count` meses (o mais antigo primeiro), total e por parceiro, para o gráfico e o ranking da Speed. */
+export async function speedRevenueSeries(db: Db, now = new Date(), count = 6) {
+  const local = new Date(now.getTime() - 3 * 3600_000);
+  const months = Array.from({ length: count }, (_, i) => {
+    const d = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - (count - 1 - i), 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+  const billings: Awaited<ReturnType<typeof speedBilling>>[] = [];
+  for (const m of months) billings.push(await speedBilling(db, m));
+  const ids = new Map<string, string>();
+  for (const b of billings) for (const p of b.parceiros) ids.set(p.partnerId, p.name);
+  return {
+    metaCents: await getRevenueGoal(db),
+    meses: months.map((month, i) => ({ month, totalCents: billings[i]!.totalCents, portas: billings[i]!.totalPortas })),
+    parceiros: [...ids.entries()].map(([partnerId, name]) => ({
+      partnerId,
+      name,
+      portas: billings.map((b) => b.parceiros.find((p) => p.partnerId === partnerId)?.portas ?? 0),
+      valorCents: billings.map((b) => b.parceiros.find((p) => p.partnerId === partnerId)?.valorCents ?? 0),
+    })),
+  };
 }
 
 /** Demonstrativo de cobrança de um parceiro: uma linha por porta cobrada no mês, para mandar junto da cobrança. */

@@ -272,6 +272,8 @@ export const api = {
   signalLimit: () => request<{ limiteDb: number; padraoDb: number }>("GET", "/admin/settings/limite-sinal"),
   setSignalLimit: (limiteDb: number) => request<{ limiteDb: number }>("PUT", "/admin/settings/limite-sinal", { limiteDb }),
   painel: (days: number) => request<NetworkPanel>("GET", `/admin/painel?days=${days}`),
+  receita: () => request<RevenueSeries>("GET", "/admin/painel/receita"),
+  setRevenueGoal: (cents: number | null) => request<{ metaCents: number | null }>("PUT", "/admin/settings/meta-receita", { cents }),
 };
 
 export interface AuditEntry {
@@ -497,6 +499,16 @@ export interface Dashboard {
   chamadosAtrasados: number;
   serie: { month: string; instalacoes: number; ativasNoFim: number }[];
   planos: { plano: string; qtd: number }[];
+  /** O que pede ação agora, do mais grave ao menos grave. `go` é a tela onde se resolve. */
+  agora: { id: string; tone: "bad" | "warn"; label: string; text: string; go: "agenda" | "reservas" | "chamados" | "instalacoes"; reservationId?: string }[];
+  /** Últimos 30 dias, da consulta de endereço à O.S. fechada. */
+  funil: { consultas: number; comVaga: number; reservas: number; contratos: number; osFechadas: number };
+}
+
+export interface RevenueSeries {
+  metaCents: number | null;
+  meses: { month: string; totalCents: number; portas: number }[];
+  parceiros: { partnerId: string; name: string; portas: number[]; valorCents: number[] }[];
 }
 
 export interface FinanceClient {
@@ -528,7 +540,7 @@ export const financeQuery = (f: FinanceFilters): string =>
 
 export interface Finance {
   month: string;
-  resumo: { portasAtivas: number; custoCents: number; faturamentoCents: number; lucroCents: number; recebidoCents: number; emAbertoCents: number; pagos: number; semPreco: number };
+  resumo: { portasAtivas: number; ativas: number; canceladasNoMes: number; custoCents: number; faturamentoCents: number; lucroCents: number; recebidoCents: number; emAbertoCents: number; pagos: number; semPreco: number };
   porPlano: { planId: string; plan: string; speedMbps: number; qtd: number; custoCents: number; faturamentoCents: number; lucroCents: number; margemPct: number | null }[];
   clientes: FinanceClient[];
 }

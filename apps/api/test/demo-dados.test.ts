@@ -43,10 +43,10 @@ describe("dados de demonstração do Eustáquio", () => {
     expect(dash.osPendentes).toBe(3);
     expect(dash.visitasAtrasadas).toBeGreaterThanOrEqual(1);
     expect(dash.chamadosAbertos).toBeGreaterThanOrEqual(4);
-    expect(dash.serie).toHaveLength(6);
-    expect(dash.serie[5].ativasNoFim).toBeGreaterThan(dash.serie[0].ativasNoFim);
+    expect(dash.serie).toHaveLength(12);
+    expect(dash.serie[11].ativasNoFim).toBeGreaterThan(dash.serie[6].ativasNoFim);
 
-    const month = dash.serie[5].month;
+    const month = dash.serie[11].month;
     const fin = await (await ctx.call(cookies.supervisor, "GET", `/finance?month=${month}`)).json();
     expect(fin.resumo.portasAtivas).toBeGreaterThanOrEqual(68);
     expect(fin.resumo.lucroCents).toBeGreaterThan(0);

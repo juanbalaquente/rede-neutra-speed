@@ -597,3 +597,75 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .onu-pon, .onu-wifi { display: grid; gap: 8px; }
 .onu-pon .pbar i.ok { background: var(--ok); } .onu-pon .pbar i.warn { background: var(--warn); } .onu-pon .pbar i.bad { background: var(--bad); }
 .onu-wifi .hist th:first-child, .onu-wifi .hist td:first-child { padding-left: 0; }
+
+/* ── gráficos novos (ui/charts.tsx) ── */
+.area { padding: 6px 18px 12px; }
+.area-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--data); box-shadow: 0 0 0 3px var(--data-soft); pointer-events: none; }
+.area-dot.hot { background: var(--surf); border: 2px solid var(--data); width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; box-shadow: none; }
+.area-hit { position: absolute; left: 18px; right: 18px; top: 6px; display: flex; }
+.area-hit button { flex: 1; border: 0; background: none; padding: 0; cursor: crosshair; }
+.area-hit button:focus-visible { outline: none; background: color-mix(in srgb, var(--hover) 70%, transparent); }
+.area-x { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--mute); padding-top: 6px; }
+.area-goal { position: absolute; right: 22px; top: 2px; font: 11px var(--mono); color: var(--brand); background: var(--surf); padding: 0 4px; }
+.area .tip { transform: translate(-50%, -100%); }
+.donut { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.donut svg { flex: none; }
+.donut-leg { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 150px; flex: 1; }
+.donut-leg .rowbtn { width: 100%; gap: 8px; padding: 3px 6px; margin: 0 -6px; border-radius: 7px; font-weight: 400; justify-content: flex-start; }
+.donut-leg .rowbtn:not([disabled]):hover { background: var(--hover); color: inherit; }
+.donut-leg i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.donut-leg b { margin-left: auto; font-weight: 600; }
+.hbars { display: grid; gap: 9px; }
+.hbar { display: grid; grid-template-columns: minmax(70px, 120px) minmax(0, 1fr) auto; gap: 12px; align-items: center; font-size: 13px; }
+.hbar .hl { color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar .ht { height: 12px; background: var(--hover); border-radius: 4px; overflow: hidden; }
+.hbar .ht i { display: block; height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.hbar .hv { font-weight: 600; min-width: 36px; text-align: right; }
+.bars .col.pair { flex-direction: row; align-items: flex-end; gap: 0; padding: 0 5%; }
+.pair-in { display: flex; align-items: flex-end; gap: 3px; width: 100%; height: 100%; }
+.pair-in .seg { flex: 1; border-radius: 4px 4px 0 0; min-height: 1px; }
+
+/* lista "precisa de você agora" e blocos dos painéis */
+.now { display: grid; }
+.now-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 18px; border-top: 1px solid var(--line); }
+.now-row:first-child { border-top: 0; }
+.now-row .nl { color: var(--mute); font-size: 12.5px; }
+.now-row .nt { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-ok { display: flex; gap: 10px; align-items: center; padding: 16px 18px; color: var(--ok); font-weight: 500; }
+.now-ok i { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+.hero { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+@media (max-width: 1000px) { .hero { grid-template-columns: minmax(0, 1fr); } }
+.stat3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 16px 18px 6px; }
+.stat3 > div { display: grid; gap: 2px; }
+.stat3 span { color: var(--mute); font-size: 12.5px; }
+.stat3 b { font-size: 24px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat3 small { color: var(--mute); font-size: 12px; }
+.delta-up { color: var(--ok); } .delta-down { color: var(--bad); }
+.step-card { display: grid; gap: 10px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line2)); background: var(--warn-soft); border-radius: 14px; }
+.step-card h3 { margin: 0; font-size: 14px; }
+.step-card p { margin: 0; font-size: 13.5px; }
+.margin-pill { display: inline-block; min-width: 54px; text-align: right; font-weight: 600; }
+.paybar { height: 10px; border-radius: 5px; background: var(--hover); overflow: hidden; }
+.paybar i { display: block; height: 100%; background: var(--ok); border-radius: 5px; transition: width 0.5s; }
+.rk { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 14px; align-items: center; padding: 10px 18px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.rk:first-of-type { border-top: 0; }
+.rk .rn { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk .rn small { color: var(--mute); font-weight: 400; margin-left: 6px; }
+.rkh { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 14px; padding: 8px 18px; color: var(--mute); font-size: 12px; border-bottom: 1px solid var(--line); }
+@media (max-width: 700px) { .stat3 { grid-template-columns: minmax(0, 1fr); } .rk, .rkh { grid-template-columns: minmax(0, 1fr) auto auto; } .rk > :nth-child(2), .rkh > :nth-child(2) { display: none; } }
+h2.sect { margin: 10px 0 -4px; font-size: 13px; font-weight: 500; letter-spacing: 0.02em; color: var(--mute); }
+.goal-edit { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.goal-edit input { width: 130px; }
+.area-in { position: relative; }
+.area-hit { left: 0 !important; right: 0 !important; top: 0 !important; height: 100%; }
+.area-tick { position: absolute; left: 0; transform: translateY(-105%); font: 10.5px var(--mono); color: var(--mute); pointer-events: none; }
+.area-goal { top: -2px !important; right: 0 !important; }
+.rk, .rkh { grid-template-columns: minmax(0, 1fr) 96px 78px 118px; }
+@media (max-width: 700px) { .rk, .rkh { grid-template-columns: minmax(0, 1fr) 70px 100px; } }
+.bars .xl { overflow: hidden; }
+.bars .xl span { min-width: 0; white-space: nowrap; }
+@media (max-width: 700px) {
+  .rk > svg, .rkh > :nth-child(2) { display: none !important; }
+  .rk .rn { white-space: normal; }
+  .rk .rn .badge { margin: 4px 6px 0 0 !important; }
+}
