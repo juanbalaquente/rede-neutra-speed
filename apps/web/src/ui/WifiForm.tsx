@@ -44,7 +44,7 @@ export function WifiForm({ installationId, onDone, onCancel, submitLabel = "Conf
       <input value={ssid} onChange={(e) => setSsid(e.target.value)} maxLength={32} placeholder="Nome da rede (opcional, sem acento, até 32 letras)" autoComplete="off" />
       <input type={show ? "text" : "password"} value={senha} onChange={(e) => setSenha(e.target.value)} maxLength={63} placeholder="Senha (8 a 63, com maiúscula, minúscula, número e especial)" autoComplete="new-password" spellCheck={false} />
       <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Mostrar a senha
+        <input type="checkbox" style={{ width: "auto", padding: 0 }} checked={show} onChange={(e) => setShow(e.target.checked)} /> Mostrar a senha
       </label>
       {!ssidOk && <small className="error">O nome da rede não pode ter acento nem ç.</small>}
       {senha !== "" && !senhaOk && (

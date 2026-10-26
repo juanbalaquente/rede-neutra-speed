@@ -169,7 +169,7 @@ export async function changeWifi(
   } catch (e) {
     if (e instanceof OperationRefused) {
       await recordAudit(db, { ...base, action: "cliente.wifi_recusado", data: { login, motivo: e.code } });
-      throw new AppError(WIFI_STATUS.has(e.status) ? (e.status as 403 | 404 | 429 | 502 | 503) : 409, "wifi_recusado", WIFI_REFUSAL[e.code] ?? "A Speed não conseguiu trocar o Wi-Fi agora.");
+      throw new AppError(WIFI_STATUS.has(e.status) ? (e.status as 403 | 404 | 429 | 502 | 503) : 409, "wifi_recusado", WIFI_REFUSAL[e.code] ?? `A Speed não conseguiu trocar o Wi-Fi agora (código: ${e.code}).`);
     }
     if (e instanceof IntegrationError) {
       await recordAudit(db, { ...base, action: "cliente.wifi_sem_confirmacao", data: { login } });

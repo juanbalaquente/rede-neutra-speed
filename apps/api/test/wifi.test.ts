@@ -3,6 +3,7 @@ import { auditLog, customerOperations } from "../src/db/schema.js";
 import { MockActivationService } from "../src/integrations/mock-activation.js";
 import { MockCustomerActions } from "../src/integrations/mock-actions.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
+import { OperationRefused } from "../src/integrations/wiki-actions.js";
 import { OS_REQUIRED_KINDS } from "../src/services/installations.js";
 import { setup } from "./helpers.js";
 
@@ -139,6 +140,19 @@ describe("troca do Wi-Fi do cliente", () => {
     expect(res.status).toBe(409);
     expect((await res.json()).message).toContain("offline");
     expect((await ctx.db.select().from(auditLog)).some((a) => a.action === "cliente.wifi_recusado")).toBe(true);
+  });
+
+  it("código que o portal não conhece: a mensagem mostra o código (sem a senha) para dar para diagnosticar", async () => {
+    const { ate } = await partner();
+    const id = await installed(ate, "10004");
+    actions.setWifi = async () => {
+      throw new OperationRefused("codigo_novo_da_wiki", 422);
+    };
+    const res = await wifi(ate, id, { senha: SENHA });
+    expect(res.status).toBe(409);
+    const text = await res.text();
+    expect(text).toContain("codigo_novo_da_wiki");
+    expect(text).not.toContain(SENHA);
   });
 
   it("Wiki sem resposta: 502 'sem confirmação' e não diz que mudou", async () => {
