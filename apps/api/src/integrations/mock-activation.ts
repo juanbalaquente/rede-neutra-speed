@@ -28,6 +28,8 @@ export class MockActivationService implements ActivationService {
   readonly pending: PendingOnu[] = [
     { serial: "ZTEGC0000001", modelo: "F670L", vistaEm: "2026-10-09T10:02:00-03:00" },
     { serial: "ZTEGC0000BAD", modelo: "F670L", vistaEm: "2026-10-09T10:05:00-03:00" },
+    // Modelo que a Wiki configura de verdade (Huawei com ACS); as ZTE acima mostram o aviso de modelo não aceito.
+    { serial: "HWTC00000002", modelo: "EG8145X6-10", vistaEm: "2026-10-09T10:07:00-03:00" },
   ];
 
   async listPendingOnus(_ctoId?: string, _partnerCode?: string): Promise<PendingOnu[]> {

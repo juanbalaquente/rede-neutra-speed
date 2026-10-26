@@ -142,7 +142,7 @@ function OsForm({ inst, onClosed }: { inst: InstallationDetail; onClosed: (i: In
         </label>
         <label className="fld">
           <span>Modelo da ONU</span>
-          <input value={modelo} onChange={(e) => setModelo(e.target.value)} placeholder="ex.: F670L" />
+          <input value={modelo} onChange={(e) => setModelo(e.target.value)} placeholder="ex.: EG8145X6" />
         </label>
         <label className="fld">
           <span>Serial da ONU</span>

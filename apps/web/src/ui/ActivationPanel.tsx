@@ -20,10 +20,51 @@ const STEPS: { state: ActivationState; label: string }[] = [
 const STATE_NOTE: Partial<Record<ActivationState, string>> = {
   recebida: "Pedido na fila.",
   aguardando_cliente: "O contrato ainda não chegou ao sistema de rede. A liberação continua sozinha quando ele chegar (pode levar até 2 horas); não refaça o pedido.",
-  falha_provisionamento: "A ONU foi autorizada, mas a configuração falhou. A Speed foi avisada; não refaça a instalação.",
+  falha_provisionamento: "A ONU foi autorizada, mas a configuração falhou. A Speed foi avisada; não refaça a instalação. Se a ONU não for Huawei de modelo aceito, avise a Speed para trocar.",
   cancelada: "Ativação cancelada. A reserva continua ativa e você pode tentar de novo.",
   falhou: "A ativação não pôde ser feita.",
 };
+
+/** Motivos que a Wiki manda na ativação; código desconhecido aparece como veio. */
+const MOTIVO_ATIVACAO: Record<string, string> = {
+  nova_tentativa_de_provisionamento: "nova tentativa de configuração",
+  provisionamento_falhou: "a configuração da ONU falhou",
+  modelo_nao_suportado: "modelo de ONU não aceito",
+};
+
+/**
+ * A Wiki só configura ONU Huawei gerenciada pelo ACS, fora EG8010H, 546M e 010H (23 out 2026).
+ * Serve só para avisar antes de enviar: quem decide é a Wiki, que confere antes de mexer na ONU.
+ */
+const MODELOS_RECUSADOS = ["010H", "546M"];
+function onuProblem(o: Pick<PendingOnu, "serial" | "modelo">): string | null {
+  if (!o.serial.toUpperCase().startsWith("HWTC")) return "Não é Huawei: a Speed não configura essa ONU.";
+  const modelo = (o.modelo ?? "").toUpperCase();
+  if (MODELOS_RECUSADOS.some((m) => modelo.includes(m))) return `O modelo ${o.modelo} não é aceito pela Speed.`;
+  return null;
+}
+
+/** A configuração (reset de fábrica, senha, IPv6) leva de 2,5 a 5 min, com a ONU uns 2 min fora do ar. */
+const PROVISIONING_SLOW_MS = 6 * 60_000;
+
+function Provisioning() {
+  const since = useRef(Date.now());
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const left = now - since.current;
+  const m = Math.floor(left / 60_000);
+  const s = Math.floor((left % 60_000) / 1000);
+  return (
+    <p className="muted">
+      Configurando a ONU: reset de fábrica, senha de acesso e IPv6. Leva de 2 a 5 minutos e a ONU reinicia e fica uns 2 minutos fora do ar; não desligue
+      a ONU nem refaça o pedido. <span className="mono">{m}:{String(s).padStart(2, "0")}</span>
+      {left > PROVISIONING_SLOW_MS && " Está demorando mais que o normal; a Speed acompanha e a tela segue sozinha."}
+    </p>
+  );
+}
 
 const fmtDb = (n: number) => n.toFixed(1).replace(".", ",");
 
@@ -109,6 +150,7 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
   const done = state === "online";
   const ended = FINAL.includes(state) && !done;
   const note = STATE_NOTE[state];
+  const motivo = activation.snapshot?.motivo;
   return (
     <div className="atv-prog">
       <div className="atv-id">
@@ -128,8 +170,10 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
       </ol>
       {outageText(activation.snapshot?.motivo) && !ended ? (
         <p className="error" role="alert">{outageText(activation.snapshot?.motivo)} Não refaça o pedido.</p>
+      ) : state === "provisionando" ? (
+        <Provisioning />
       ) : (
-        note && <p className={ended ? "error" : "muted"}>{note}{activation.snapshot?.motivo && state !== "cancelada" ? ` (${activation.snapshot.motivo})` : ""}</p>
+        note && <p className={ended ? "error" : "muted"}>{note}{motivo && state !== "cancelada" ? ` (${MOTIVO_ATIVACAO[motivo] ?? motivo})` : ""}</p>
       )}
       {activation.snapshot?.vlan && ["provisionando", "online"].includes(state) && (
         <p className="atv-vlan">
@@ -141,6 +185,11 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
         <p>
           <span className="badge b-ok">ONU liberada</span>{" "}
           {activation.snapshot?.sinal?.perdaDb != null && <span className="muted">perda de {fmtDb(activation.snapshot.sinal.perdaDb)} dB</span>}
+        </p>
+      )}
+      {done && (
+        <p className="atv-vlan">
+          O <b>Wi-Fi não é configurado</b> pela Speed: a ONU fica com a rede e a senha de fábrica, as da etiqueta. Passe ao cliente ou troque na hora.
         </p>
       )}
     </div>
@@ -224,6 +273,8 @@ export function ActivationPanel({
   const dbm = Number(sinal.replace(",", "."));
   const sinalOk = sinal.trim() !== "" && Number.isFinite(dbm) && dbm <= 0 && dbm >= -40;
   const tail = serial.slice(-4);
+  const selectedOnu = onus?.find((o) => o.serial === serial);
+  const selectedProblem = selectedOnu ? onuProblem(selectedOnu) : null;
   const confirmed = serial !== "" && confirm.trim().toUpperCase() === tail.toUpperCase();
   const contractOk = contractStatus.enabled ? !!contractStatus.contract : /^\d{1,12}$/.test(contrato);
   const ready = sinalOk && contractOk && confirmed && !!pppSuffix && hasMedicao;
@@ -286,11 +337,16 @@ export function ActivationPanel({
                     <button key={o.serial} type="button" role="radio" aria-checked={serial === o.serial} className={`atv-onu ${serial === o.serial ? "on" : ""}`} onClick={() => { setSerial(o.serial); setConfirm(""); }}>
                       <span className="mono">{o.serial}</span>
                       <small>{o.modelo} · consultada às {new Date(o.vistaEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>
+                      {onuProblem(o) && <small className="error">modelo não aceito</small>}
                     </button>
                   ))}
                 </div>
               )}
+              <small>Use ONU Huawei gerenciada pela Speed (ex.: EG8145X6, EG8145V5). Não servem outros fabricantes (ZTE, Fiberhome…) nem os modelos EG8010H, 546M e 010H.</small>
             </div>
+            {selectedProblem && (
+              <p className="error" role="alert">{selectedProblem} A ativação vai terminar em falha e a ONU fica autorizada sem serviço. Troque por uma ONU aceita antes de liberar.</p>
+            )}
             {serial && (
               <label className="fld">
                 <span>Confirme a etiqueta da ONU</span>

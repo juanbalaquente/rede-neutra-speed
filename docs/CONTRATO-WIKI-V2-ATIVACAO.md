@@ -26,6 +26,17 @@ Complementa o [contrato v1](CONTRATO-WIKI-V1.md) (leitura). Mesmo modelo: rotas 
 
 As rotas abaixo existem na Wiki, com `X-RedeNeutra-Write-Key` (valor entregue quando ligarem) e **`X-RedeNeutra-Partner` obrigatórios em todas**. `porta` é aceita e ignorada (o portal não manda). `pppLogin` e `alias` precisam ser `<contrato>-<CÓDIGO do header>` (senão `422 login_fora_do_padrao`); a mesma `idempotencyKey` devolve a mesma ativação; serial já em outra ativação aberta é `409 serial_em_ativacao`. **Atualização (16 out 2026):** a Wiki testou a v2 ponta a ponta numa ONU da Speed. As rotas de **leitura** (`GET /v2/onus/pendentes` e `GET /v2/ativacoes/{id}`) estão ativas, com a chave de escrita e o `X-RedeNeutra-Partner`; `POST /v2/ativacoes` e `/decisao` seguem em `503 ativacao_desligada` e só ligam com o **primeiro cliente real do piloto**, que depende do contrato no Voalle com login `<contrato>-JHV`. `vistaEm` nos pendentes é o horário da **consulta** (o OLTCloud não informa quando a ONU apareceu). O portal já segue tudo isso: manda o header em toda chamada, trata esses três 503 como "ainda não liberada" (o pedido fica guardado e pode ser repetido) e mostra a recusa com texto claro.
 
+## Configuração completa da ONU (Wiki, 23 out 2026)
+
+A ativação passou a entregar a ONU configurada, sem mudar rotas, estados nem formatos. Dentro de `provisionando`, em ordem: reset de fábrica (apaga Wi-Fi, senhas e PPPoE de cliente anterior; nunca repete em nova tentativa), AUTENTICADOR da OLT, senha web `admin` com a senha padrão da Speed (ACS), WAN de internet com IPv6 (endereço automático e prefixo delegado) e serviço `VOIP_INTERNET` (ACS), acesso remoto pela rede de gerência. Depois, vínculo com a porta da CTO e espera de Online + PPPoE. **`provisionando` passa a levar de 2,5 a 5 min**, com a ONU uns 2 min fora do ar.
+
+- **Só ONU Huawei gerenciada pelo ACS**, fora EG8010H, 546M e 010H. Outra termina em `falha_provisionamento` (card para a equipe da Wiki); a checagem é antes do reset, então a ONU fica autorizada sem ser mexida. O portal avisa na lista de pendentes (serial que não começa com `HWTC` ou modelo recusado) e não bloqueia o envio: quem decide é a Wiki.
+- **Wi-Fi não é configurado:** a ONU termina com a rede da etiqueta. O portal avisa ao concluir.
+- OLTs Jaqueline e Santa Luzia (dois scripts AUTENTICADOR) vão para a equipe da Wiki.
+- Corrigido pela Wiki: ITA, Esmeraldas, Laguna e Vale do Ouro (nome do script com dois espaços); VLAN do AUTENTICADOR em ITA e Nossa Fazenda; falhas silenciosas do OLTCloud agora conferidas no histórico.
+- Validado pela Wiki em produção numa EG8145X6-10 de bancada (online na primeira tentativa, /56 delegado, /64 na LAN). A troca automática para `VOIP_INTERNET` ainda não rodou numa ativação completa.
+- **Em aberto (Juan):** de onde vêm nome e senha do Wi-Fi (campo opcional no `POST /v2/ativacoes`, padrão por cliente ou o técnico configura) e se a Wiki deve devolver `modelo_nao_suportado` (o portal já traduz esse motivo).
+
 ## Autenticação
 
 - **Chave própria para escrita** (ex.: `X-RedeNeutra-Write-Key`), separada da chave de leitura da v1. Vazou a de leitura? Ninguém autoriza ONU com ela.
@@ -39,7 +50,7 @@ As rotas abaixo existem na Wiki, com `X-RedeNeutra-Write-Key` (valor entregue qu
 ONUs aguardando autorização na **OLT** que atende a CTO. A Wiki filtra pela OLT (via sigla do nome da CTO), não pela PON: 72% das caixas não têm PON no OLTCloud. A lista é curta (hoje 1 a 8 pendentes por OLT) e o técnico escolhe pela serial. O portal mostra modelo e há quanto tempo a ONU apareceu, e pede ao técnico que **confirme a serial impressa na etiqueta da ONU** (últimos dígitos) antes de enviar, para ninguém ativar a ONU pendente de outro técnico.
 
 ```json
-{ "onus": [{ "serial": "ZTEGC1234567", "modelo": "F670L", "vistaEm": "2026-10-09T10:02:00-03:00" }] }
+{ "onus": [{ "serial": "HWTC6FE1FCB2", "modelo": "EG8145X6-10", "vistaEm": "2026-10-09T10:02:00-03:00" }] }
 ```
 
 Slot, pon e onu_hash ficam na Wiki.
@@ -91,7 +102,7 @@ Estados:
 | `autorizando` | etapa 1 |
 | `medindo_sinal` | autorizada, sem serviço; lendo o sinal |
 | `aguardando_decisao` | sinal fora da trava; espera o técnico (ver abaixo) |
-| `provisionando` | etapa 2 (AUTENTICADOR), até 2 novas tentativas |
+| `provisionando` | etapa 2: reset, AUTENTICADOR, ACS e vínculo com a porta (ver "Configuração completa"), até 2 novas tentativas; 2,5 a 5 min |
 | `online` | ONU Online (OLTCloud) **e** PPPoE autenticado no concentrador (a Wiki consulta o NE40). Só entra neste estado quando os dois confirmam |
 | `falha_provisionamento` | autorizada, provisionar falhou 3 vezes; chamado aberto ao NOC; **não desautoriza** |
 | `cancelada` | desautorizada antes de provisionar (decisão do técnico, ou sem decisão em 30 min) |

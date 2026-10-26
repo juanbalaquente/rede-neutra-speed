@@ -180,7 +180,7 @@ describe("liberação de ONU", () => {
   it("lista as ONUs pendentes da OLT da CTO reservada", async () => {
     const { cookie, reservation } = await partnerWithReservation();
     const res = await ctx.call(cookie, "GET", `/reservations/${reservation.id}/onus-pendentes`);
-    expect((await res.json()).onus.map((o: { serial: string }) => o.serial)).toEqual([GOOD, BAD]);
+    expect((await res.json()).onus.map((o: { serial: string }) => o.serial)).toEqual([GOOD, BAD, "HWTC00000002"]);
   });
 
   it("código do parceiro: só admin define, em maiúsculas e único", async () => {
