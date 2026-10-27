@@ -148,14 +148,9 @@ function Decision({ activation, onChange }: { activation: Activation; onChange: 
 function Progress({ activation, onChange }: { activation: Activation; onChange: (a: Activation) => void }) {
   const state = activation.state;
   const current = stepIndex(state);
-  const real = state === "online";
-  // A ONU está autorizada na OLT mesmo quando a configuração falha: aparece como liberada, com o aviso discreto.
-  const authorizedOnly = state === "falha_provisionamento";
-  const done = real || authorizedOnly;
+  const done = state === "online";
   const ended = FINAL.includes(state) && !done;
-  const note = authorizedOnly
-    ? "A ONU está autorizada, mas a configuração do serviço está pendente. A Speed foi avisada; não refaça a instalação."
-    : STATE_NOTE[state];
+  const note = STATE_NOTE[state];
   const motivo = activation.snapshot?.motivo;
   // Wi-Fi do cliente: o técnico configura aqui, logo depois da ONU ficar online (a ativação deixa o Wi-Fi de fábrica).
   const [wifiDone, setWifiDone] = useState<string | null | false>(false);
@@ -195,7 +190,7 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
           {activation.snapshot?.sinal?.perdaDb != null && <span className="muted">perda de {fmtDb(activation.snapshot.sinal.perdaDb)} dB</span>}
         </p>
       )}
-      {real && (wifiDone === false ? (
+      {done && (wifiDone === false ? (
         <div className="atv-vlan">
           <p style={{ margin: "0 0 8px" }}>A ONU está com o <b>Wi-Fi de fábrica</b> (o da etiqueta). Configure agora o nome e a senha que o cliente vai usar.</p>
           <WifiForm installationId={activation.reservationId} onDone={(ssid) => setWifiDone(ssid)} />
