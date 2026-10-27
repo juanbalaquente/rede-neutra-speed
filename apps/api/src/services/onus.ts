@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import type { SessionUser } from "../auth/session.js";
 import type { Db } from "../db/client.js";
 import { activations, partners, plans, portReservations } from "../db/schema.js";
@@ -65,7 +65,7 @@ export async function listOnus(db: Db, svc: ClientStatusService | undefined, use
       createdAt: activations.createdAt,
     })
     .from(portReservations)
-    .innerJoin(activations, and(eq(activations.reservationId, portReservations.id), eq(activations.state, "online")))
+    .innerJoin(activations, and(eq(activations.reservationId, portReservations.id), inArray(activations.state, ["online", "falha_provisionamento"])))
     .leftJoin(plans, eq(plans.id, portReservations.planId))
     .where(and(eq(portReservations.partnerId, user.partnerId), eq(portReservations.status, "convertida"), isNotNull(portReservations.osClosedAt), ne(portReservations.customerStatus, "cancelado")))
     .orderBy(desc(activations.createdAt));
@@ -186,7 +186,7 @@ export async function getOnuDetail(db: Db, svc: ClientStatusService | undefined,
   const [a] = await db
     .select({ login: activations.pppLogin, serial: activations.serial, sinalCtoDbm: activations.sinalCtoDbm, limiteDb: activations.limiteDb })
     .from(activations)
-    .where(and(eq(activations.reservationId, r.id), eq(activations.state, "online")))
+    .where(and(eq(activations.reservationId, r.id), inArray(activations.state, ["online", "falha_provisionamento"])))
     .orderBy(desc(activations.createdAt))
     .limit(1);
   if (!a) throw new AppError(409, "cliente_sem_login", "Esse cliente ainda não tem ONU liberada.");
