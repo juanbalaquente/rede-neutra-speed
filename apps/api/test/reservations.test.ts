@@ -88,6 +88,22 @@ describe("área liberada por sigla", () => {
     expect(admin.ctos).toHaveLength(3);
   });
 
+  it("com a rede inteira liberada, as siglas são ignoradas e a Speed liga e desliga pelo cadastro", async () => {
+    const a = await ctx.createPartner("A", "11111111000111", { allowedRegions: ["R1"], allRegions: true });
+    const ca = await ctx.login(a.atendente);
+    const body = await (await ctx.call(ca, "POST", "/viability", { address: ADDRESS })).json();
+    expect(body.ctos).toHaveLength(3);
+    expect(body.foraDaArea).toBe(false);
+    expect((await reserve(ca, "CTO-TESTE-03")).status).toBe(201);
+
+    const admin = await ctx.login("admin@speed.test");
+    const off = await ctx.call(admin, "PATCH", `/admin/partners/${a.partner.id}`, { allRegions: false });
+    expect((await off.json()).partner.allRegions).toBe(false);
+    expect((await (await ctx.call(ca, "POST", "/viability", { address: ADDRESS })).json()).foraDaArea).toBe(true);
+    const [audit] = await ctx.db.select().from(auditLog).where(eq(auditLog.action, "parceiro.alterado"));
+    expect(audit?.data).toMatchObject({ changes: { allRegions: false } });
+  });
+
   it("a área vale no servidor: se a Speed tira a sigla depois da consulta, a reserva é recusada", async () => {
     const a = await ctx.createPartner("A", "11111111000111");
     const ca = await ctx.login(a.atendente);

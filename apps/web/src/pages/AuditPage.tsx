@@ -26,6 +26,7 @@ const ACTION_LABEL: Record<string, string> = {
 const CHANGE_LABEL: Record<string, string> = {
   status: "situação",
   allowedRegions: "siglas",
+  allRegions: "toda a rede",
   maxActiveReservations: "reservas simultâneas",
   maxCtoOccupancyPct: "ocupação por CTO",
   maxUsers: "usuários",

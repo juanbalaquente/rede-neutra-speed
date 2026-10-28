@@ -67,6 +67,24 @@ function RegionsInput({ value, onChange }: { value: string[]; onChange: (v: stri
   );
 }
 
+/** Área do contrato: só algumas siglas ou toda a rede da Speed (as siglas ficam guardadas, mas não valem). */
+function AreaField({ regions, onRegions, all, onAll }: { regions: string[]; onRegions: (v: string[]) => void; all: boolean; onAll: (v: boolean) => void }) {
+  return (
+    <div className="fld">
+      <span>Área do contrato</span>
+      <div role="radiogroup" aria-label="Área do contrato" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" role="radio" aria-checked={!all} className={`btn sm${all ? " sec" : ""}`} onClick={() => onAll(false)}>Área específica</button>
+        <button type="button" role="radio" aria-checked={all} className={`btn sm${all ? "" : " sec"}`} onClick={() => onAll(true)}>Toda a rede da Speed</button>
+      </div>
+      {all ? (
+        <small>Qualquer CTO com sigla no nome é oferecida, inclusive regiões novas. As siglas abaixo deixam de valer enquanto isto estiver ligado.</small>
+      ) : (
+        <RegionsInput value={regions} onChange={onRegions} />
+      )}
+    </div>
+  );
+}
+
 /** Código curto do provedor. O login PPPoE de cada cliente é `<contrato>-<código>`. */
 function CodeField({ value, onChange, valid }: { value: string; onChange: (v: string) => void; valid: boolean }) {
   const shown = value.trim().toUpperCase();
@@ -108,6 +126,7 @@ function PartnerEditor({ partner, onChanged, focusUsers }: { partner: AdminPartn
     if (focusUsers) usersRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [focusUsers]);
   const [regions, setRegions] = useState(partner.allowedRegions);
+  const [allRegions, setAllRegions] = useState(partner.allRegions);
   const [code, setCode] = useState(partner.code ?? "");
   const [limits, setLimits] = useState<PartnerLimits>({
     maxActiveReservations: partner.maxActiveReservations,
@@ -119,17 +138,19 @@ function PartnerEditor({ partner, onChanged, focusUsers }: { partner: AdminPartn
   const [reason, setReason] = useState("");
 
   const regionsChanged = regions.join(",") !== partner.allowedRegions.join(",");
+  const allChanged = allRegions !== partner.allRegions;
   const codeNorm = code.trim().toUpperCase();
   const codeChanged = codeNorm !== (partner.code ?? "");
   const codeValid = CODE_RE.test(codeNorm);
   const changedLimits = (Object.keys(limits) as (keyof PartnerLimits)[]).filter((k) => limits[k] !== partner[k]);
-  const dirty = regionsChanged || codeChanged || changedLimits.length > 0;
+  const dirty = regionsChanged || allChanged || codeChanged || changedLimits.length > 0;
 
   async function save() {
     setBusy(true);
     try {
       const changes: Parameters<typeof api.updatePartner>[1] = {};
       if (regionsChanged) changes.allowedRegions = regions;
+      if (allChanged) changes.allRegions = allRegions;
       if (codeChanged) changes.code = codeNorm;
       for (const k of changedLimits) changes[k] = limits[k];
       await api.updatePartner(partner.id, changes);
@@ -169,7 +190,7 @@ function PartnerEditor({ partner, onChanged, focusUsers }: { partner: AdminPartn
         </div>
         <div className="summary">
           <CodeField value={code} onChange={setCode} valid={codeValid || code === ""} />
-          <RegionsInput value={regions} onChange={setRegions} />
+          <AreaField regions={regions} onRegions={setRegions} all={allRegions} onAll={setAllRegions} />
           <LimitsFields value={limits} onChange={setLimits} />
           <div className="acts2" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn sm" disabled={!dirty || busy || (codeChanged && !codeValid)} onClick={save}>{busy ? "Salvando…" : "Salvar alterações"}</button>
@@ -179,6 +200,7 @@ function PartnerEditor({ partner, onChanged, focusUsers }: { partner: AdminPartn
                 onClick={() => {
                   setCode(partner.code ?? "");
                   setRegions(partner.allowedRegions);
+                  setAllRegions(partner.allRegions);
                   setLimits({ maxActiveReservations: partner.maxActiveReservations, maxCtoOccupancyPct: partner.maxCtoOccupancyPct, maxUsers: partner.maxUsers });
                 }}
               >
@@ -224,6 +246,7 @@ function NewPartnerForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   const [cnpj, setCnpj] = useState("");
   const [code, setCode] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
+  const [allRegions, setAllRegions] = useState(false);
   const [limits, setLimits] = useState(DEFAULT_LIMITS);
   const [busy, setBusy] = useState(false);
   const digits = cnpj.replace(/\D/g, "");
@@ -237,7 +260,7 @@ function NewPartnerForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
     e.preventDefault();
     setBusy(true);
     try {
-      const { partner } = await api.createPartner({ name: name.trim(), cnpj: digits, ...(codeNorm ? { code: codeNorm } : {}), allowedRegions: regions, ...limits });
+      const { partner } = await api.createPartner({ name: name.trim(), cnpj: digits, ...(codeNorm ? { code: codeNorm } : {}), allowedRegions: regions, allRegions, ...limits });
       say(`${partner.name} cadastrado. Agora cadastre o supervisor dele.`);
       onCreated(partner.id);
     } catch (err) {
@@ -261,7 +284,7 @@ function NewPartnerForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
           </label>
         </div>
         <CodeField value={code} onChange={setCode} valid={codeOk} />
-        <RegionsInput value={regions} onChange={setRegions} />
+        <AreaField regions={regions} onRegions={setRegions} all={allRegions} onAll={setAllRegions} />
         <LimitsFields value={limits} onChange={setLimits} />
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn sm" disabled={busy || blocker !== null}>{busy ? "Cadastrando…" : "Cadastrar parceiro"}</button>
@@ -484,7 +507,7 @@ export function PartnersPage() {
                       </button>
                       <div className="muted mono" style={{ fontSize: 12 }}>{p.code ? `${p.code} · ` : ""}{fmtCnpj(p.cnpj)}</div>
                     </td>
-                    <td>{p.allowedRegions.length ? p.allowedRegions.join(" · ") : <span className="muted">nenhuma</span>}</td>
+                    <td>{p.allRegions ? <strong>Toda a rede</strong> : p.allowedRegions.length ? p.allowedRegions.join(" · ") : <span className="muted">nenhuma</span>}</td>
                     <td className="tab">{p.activeReservations} / {p.maxActiveReservations}</td>
                     <td className="tab">{p.activeUsers} / {p.maxUsers}</td>
                   </tr>
@@ -506,7 +529,7 @@ export function PartnersPage() {
           />
         ) : selected ? (
           // key: ao trocar de parceiro, o formulário recomeça com os dados dele.
-          <PartnerEditor key={`${selected.id}-${selected.code}-${selected.status}-${selected.allowedRegions.join()}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} focusUsers={justCreated === selected.id} />
+          <PartnerEditor key={`${selected.id}-${selected.code}-${selected.status}-${selected.allowedRegions.join()}-${selected.allRegions}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} focusUsers={justCreated === selected.id} />
         ) : (
           list && <p className="note">Selecione um parceiro ou cadastre o primeiro.</p>
         )}

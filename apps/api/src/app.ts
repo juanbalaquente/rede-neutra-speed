@@ -253,6 +253,7 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
         maxCtoOccupancyPct: partners.maxCtoOccupancyPct,
         maxUsers: partners.maxUsers,
         allowedRegions: partners.allowedRegions,
+        allRegions: partners.allRegions,
       })
       .from(partners)
       .where(eq(partners.id, partnerId));
@@ -914,6 +915,7 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
         maxCtoOccupancyPct: z.number().int().min(1).max(100).optional(),
         maxUsers: z.number().int().min(1).max(500).optional(),
         allowedRegions: regionsSchema.optional(),
+        allRegions: z.boolean().optional(),
       }),
     );
     try {
@@ -938,6 +940,7 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
           maxCtoOccupancyPct: z.number().int().min(1).max(100),
           maxUsers: z.number().int().min(1).max(500),
           allowedRegions: regionsSchema,
+          allRegions: z.boolean(),
           /** Obrigatória para bloquear (confirmação dupla no front + registro aqui). */
           reason: z.string().max(500),
         })

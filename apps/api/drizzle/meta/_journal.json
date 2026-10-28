@@ -127,6 +127,13 @@
       "when": 1792605935460,
       "tag": "0017_observacao_da_wiki",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793197570776,
+      "tag": "0018_rede_inteira_do_parceiro",
+      "breakpoints": true
     }
   ]
 }

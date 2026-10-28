@@ -54,6 +54,8 @@ export interface Partner {
   maxUsers: number;
   /** Siglas de região liberadas pela Speed (R1, ITA, FAT...). */
   allowedRegions: string[];
+  /** Contrato com a rede inteira da Speed: as siglas acima são ignoradas. */
+  allRegions: boolean;
 }
 
 export interface ViabilityResult {
@@ -210,9 +212,9 @@ export const api = {
 
   // ── Administração Speed ──
   adminPartners: () => request<{ partners: AdminPartner[] }>("GET", "/admin/partners"),
-  createPartner: (input: PartnerLimits & { name: string; cnpj: string; code?: string; allowedRegions: string[] }) =>
+  createPartner: (input: PartnerLimits & { name: string; cnpj: string; code?: string; allowedRegions: string[]; allRegions?: boolean }) =>
     request<{ partner: AdminPartner }>("POST", "/admin/partners", input),
-  updatePartner: (id: string, changes: Partial<PartnerLimits> & { code?: string; allowedRegions?: string[]; status?: AdminPartner["status"]; reason?: string }) =>
+  updatePartner: (id: string, changes: Partial<PartnerLimits> & { code?: string; allowedRegions?: string[]; allRegions?: boolean; status?: AdminPartner["status"]; reason?: string }) =>
     request<{ partner: AdminPartner }>("PATCH", `/admin/partners/${id}`, changes),
   users: (partnerId?: string) => request<{ users: PartnerUser[] }>("GET", partnerId ? `/users?partnerId=${encodeURIComponent(partnerId)}` : "/users"),
   createUser: (input: { partnerId?: string; name: string; email: string; password: string; role: "atendente" | "supervisor" }) =>
@@ -342,6 +344,7 @@ export interface AdminPartner extends PartnerLimits {
   cnpj: string;
   status: "ativo" | "bloqueado";
   allowedRegions: string[];
+  allRegions: boolean;
   createdAt: string;
   /** Uso atual, calculado na listagem. */
   activeReservations: number;

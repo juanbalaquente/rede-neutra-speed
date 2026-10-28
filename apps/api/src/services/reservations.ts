@@ -80,9 +80,13 @@ export function maxVagasForPartner(totalVagas: number, maxPct: number): number {
   return Math.floor((totalVagas * maxPct) / 100);
 }
 
-/** A CTO está na área liberada ao parceiro? Sigla ausente (nome fora do padrão) nunca está. */
-export function isRegionAllowed(allowed: string[], regiao: string | null): boolean {
-  return regiao !== null && allowed.some((a) => a.toUpperCase() === regiao.toUpperCase());
+/**
+ * A CTO está na área liberada ao parceiro? Sigla ausente (nome fora do padrão) nunca está,
+ * nem com a rede inteira liberada (`allRegions`): sem sigla não dá para saber de onde é a caixa.
+ */
+export function isRegionAllowed(allowed: string[], regiao: string | null, allRegions = false): boolean {
+  if (regiao === null) return false;
+  return allRegions || allowed.some((a) => a.toUpperCase() === regiao.toUpperCase());
 }
 
 export interface CreateReservationInput {
@@ -152,7 +156,7 @@ export async function createReservation(
     const [partner] = await tx.select().from(partners).where(eq(partners.id, partnerId)).for("update");
     if (!partner || partner.status !== "ativo") throw new AppError(403, "parceiro_bloqueado", "Parceiro bloqueado.");
     // A área liberada vale no servidor, com a sigla da leitura fresca, não só na tela.
-    if (!isRegionAllowed(partner.allowedRegions, cto.regiao)) {
+    if (!isRegionAllowed(partner.allowedRegions, cto.regiao, partner.allRegions)) {
       throw new AppError(422, "fora_da_area", "Essa CTO está fora da área liberada para o seu contrato.");
     }
 

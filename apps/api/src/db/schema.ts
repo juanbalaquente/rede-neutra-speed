@@ -40,6 +40,11 @@ export const partners = pgTable("partners", {
    * Vazio = nenhuma CTO é oferecida (liberação explícita, nunca por omissão).
    */
   allowedRegions: text("allowed_regions").array().notNull().default(sql`'{}'::text[]`),
+  /**
+   * Contrato que libera toda a rede da Speed: qualquer CTO com sigla no nome é oferecida,
+   * e `allowedRegions` é ignorada. Ligado só pela Speed, de propósito (padrão: false).
+   */
+  allRegions: boolean("all_regions").notNull().default(false),
   createdAt: createdAt(),
 });
 

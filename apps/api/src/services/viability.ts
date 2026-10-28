@@ -69,7 +69,7 @@ export async function runViability(
 
   const nearby = await network.findNearbyCtos(trimmed, VIABILITY_RADIUS_M);
   // Só a área liberada ao parceiro: CTO com sigla fora da lista (ou sem sigla) não é oferecida.
-  const inArea = partner ? nearby.ctos.filter((c) => isRegionAllowed(partner.allowedRegions, c.regiao)) : nearby.ctos;
+  const inArea = partner ? nearby.ctos.filter((c) => isRegionAllowed(partner.allowedRegions, c.regiao, partner.allRegions)) : nearby.ctos;
   const foraDaArea = nearby.ctos.length > 0 && inArea.length === 0;
   const foraSiglas = [...new Set(nearby.ctos.filter((c) => !inArea.includes(c)).map((c) => c.regiao?.toUpperCase() ?? "sem sigla"))];
   const candidates = inArea.slice(0, MAX_CTOS);
