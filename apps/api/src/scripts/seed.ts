@@ -4,12 +4,11 @@ import { loadConfig } from "../config.js";
 import { createDb, type Db } from "../db/client.js";
 import { partners, plans, users } from "../db/schema.js";
 
-/** Planos da tabela sugerida no planejamento (valor fixo por plano). */
+/** Valor fixo por plano definido pela diretoria (28 out 2026). Banco já existente é ajustado pela migration 0019. */
 export const DEFAULT_PLANS = [
   { name: "600 Mega", speedMbps: 600, speedPriceCents: 4000 },
-  { name: "700 Mega", speedMbps: 700, speedPriceCents: 4400 },
-  { name: "800 Mega", speedMbps: 800, speedPriceCents: 4800 },
-  { name: "1 Giga", speedMbps: 1000, speedPriceCents: 5600 },
+  { name: "800 Mega", speedMbps: 800, speedPriceCents: 5000 },
+  { name: "1 Giga", speedMbps: 1000, speedPriceCents: 7000 },
 ];
 
 export async function seed(db: Db, opts: { adminEmail: string; adminPassword: string; demo: boolean }) {

@@ -134,6 +134,13 @@
       "when": 1793197570776,
       "tag": "0018_rede_inteira_do_parceiro",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793205801592,
+      "tag": "0019_precos_novos",
+      "breakpoints": true
     }
   ]
 }

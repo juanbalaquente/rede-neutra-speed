@@ -37,7 +37,7 @@ Piloto com **um parceiro** (um cliente que já compra link da Speed), mas multi-
 - **Tela do cliente (semáforo de 3 estados):** Fibra (OLTCloud), Autenticação PPPoE (Voalle/RADIUS) e Situação do contrato (Voalle). Fibra verde com PPPoE vermelho é cadastro; fibra vermelha é problema físico.
 - **Automações sobre o cliente:** bloqueio por inadimplência (bloqueio administrativo no Voalle é o preferido), desbloqueio, reinício de ONU, cancelamento (encerra contrato, remove ONU, devolve porta).
 - **Proteção da rede:** limite de ocupação por CTO por parceiro (sugerido **50%**), limite de reservas simultâneas, auditoria de tudo que mexe na rede ou no cadastro.
-- **Preços (referência):** 600 Mega, Speed recebe R$ 40,00, parceiro vende a R$ 99,90. Tabela fixa por plano é a recomendação do PDF.
+- **Valor da Speed por porta ativada (diretoria, 28 out 2026):** 600 Mega R$ 40, 800 Mega R$ 50, 1 Giga R$ 70, iguais para todos os parceiros. Tabela fixa, sem degrau. Vale também para os meses já fechados (o fechamento usa o valor atual do plano). O 700 Mega saiu da venda; quem tiver continua cobrado a R$ 44. Aplicado pela migration 0019, com auditoria (`plano.preco_speed`, `plano.fora_da_venda`). O preço de venda ao cliente final é de cada parceiro.
 
 ## 3. Fases
 

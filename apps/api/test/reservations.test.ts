@@ -37,7 +37,7 @@ describe("viabilidade", () => {
     expect(vagasOf(body, "CTO-TESTE-03")).toBe(8);
     expect(body.ctos.find((c: { ctoId: string }) => c.ctoId === "CTO-TESTE-02").blockedReason).toBe("sem_vaga_livre");
     expect(body.ctos[0]).not.toHaveProperty("freePorts");
-    expect(body.plans.length).toBe(4);
+    expect(body.plans.map((p: { speedMbps: number }) => p.speedMbps)).toEqual([600, 800, 1000]);
     expect(await ctx.db.select().from(viabilityQueries)).toHaveLength(1);
   });
 

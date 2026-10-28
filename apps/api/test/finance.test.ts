@@ -47,7 +47,7 @@ describe("preços de venda", () => {
     const { sup, ate } = await partner();
     expect((await ctx.call(ate, "GET", "/prices")).status).toBe(403);
     const list = (await (await ctx.call(sup, "GET", "/prices")).json()).prices;
-    expect(list).toHaveLength(4);
+    expect(list).toHaveLength(3);
     expect(list[0]).toMatchObject({ name: "600 Mega", speedPriceCents: 4000, salePriceCents: null });
     const p600 = await planByMbps(600);
     const res = await ctx.call(sup, "PUT", "/prices", { planId: p600.id, priceCents: 9990 });
@@ -91,7 +91,7 @@ describe("financeiro do mês", () => {
     await ctx.call(sup, "PUT", "/prices", { planId: (await planByMbps(1000)).id, priceCents: 13990 });
 
     const f = await (await ctx.call(sup, "GET", `/finance?month=${THIS_MONTH}`)).json();
-    expect(f.resumo).toMatchObject({ portasAtivas: 2, custoCents: 9600, faturamentoCents: 23980, lucroCents: 14380, recebidoCents: 0, emAbertoCents: 23980, semPreco: 0 });
+    expect(f.resumo).toMatchObject({ portasAtivas: 2, custoCents: 11000, faturamentoCents: 23980, lucroCents: 12980, recebidoCents: 0, emAbertoCents: 23980, semPreco: 0 });
     expect(f.porPlano).toHaveLength(2);
     expect(f.porPlano[0]).toMatchObject({ plan: "600 Mega", qtd: 1, custoCents: 4000, faturamentoCents: 9990, lucroCents: 5990, margemPct: 60 });
     expect(f.clientes.map((c: { contract: string }) => c.contract)).toEqual(["10001", "10002"]);

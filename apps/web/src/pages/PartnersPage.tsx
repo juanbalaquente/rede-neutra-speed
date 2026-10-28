@@ -409,7 +409,7 @@ function OsPhotosCard() {
 /** O que a Speed cobra do parceiro por porta ativada, por plano. O parceiro não edita. */
 function SpeedPricesCard() {
   const say = useToast();
-  const [plans, setPlans] = useState<{ id: string; name: string; speedMbps: number; speedPriceCents: number }[] | null>(null);
+  const [plans, setPlans] = useState<{ id: string; name: string; speedMbps: number; speedPriceCents: number; active: boolean }[] | null>(null);
   const [text, setText] = useState<Record<string, string>>({});
   useEffect(() => {
     api.adminPlans().then((r) => {
@@ -437,7 +437,7 @@ function SpeedPricesCard() {
             const changed = Number.isFinite(cents) && cents >= 100 && cents !== p.speedPriceCents;
             return (
               <tr key={p.id}>
-                <td style={{ fontFamily: "var(--font)" }}>{p.name}</td>
+                <td style={{ fontFamily: "var(--font)" }}>{p.name}{!p.active && <small style={{ display: "block" }}>fora da venda, vale para quem já tem</small>}</td>
                 <td>
                   <span className="inrow">
                     <input value={text[p.id] ?? ""} onChange={(e) => setText({ ...text, [p.id]: e.target.value })} inputMode="decimal" aria-label={`Valor da Speed no ${p.name}`} style={{ maxWidth: 120 }} />

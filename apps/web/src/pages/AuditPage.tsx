@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AdminPartner, type AuditEntry } from "../api";
+import { brl } from "../money";
 
 const ACTIONS: { value: string; label: string }[] = [
   { value: "", label: "Todas as ações" },
@@ -8,6 +9,7 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: "usuario.", label: "Usuários" },
   { value: "parceiro.", label: "Parceiros" },
   { value: "auth.", label: "Entradas no portal" },
+  { value: "plano.", label: "Planos e valores" },
 ];
 
 const ACTION_LABEL: Record<string, string> = {
@@ -21,7 +23,11 @@ const ACTION_LABEL: Record<string, string> = {
   "usuario.desativado": "Desativou usuário",
   "parceiro.criado": "Cadastrou parceiro",
   "parceiro.alterado": "Alterou parceiro",
+  "plano.preco_speed": "Alterou valor do plano",
+  "plano.fora_da_venda": "Tirou plano da venda",
 };
+
+const money = (cents: unknown) => (typeof cents === "number" ? brl(cents) : "?");
 
 const CHANGE_LABEL: Record<string, string> = {
   status: "situação",
@@ -51,6 +57,10 @@ function detail(e: AuditEntry): string {
       if (d.reason) parts.push(`motivo: ${String(d.reason)}`);
       return parts.join(" · ");
     }
+    case "plano.preco_speed":
+      return `${String(d.plano ?? "")}: ${money(d.before)} → ${money(d.after)}`;
+    case "plano.fora_da_venda":
+      return String(d.plano ?? "");
     default:
       return "";
   }
