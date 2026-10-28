@@ -57,6 +57,7 @@ function PriceRow({ p, onSaved }: { p: PlanPrice; onSaved: (prices: PlanPrice[])
         {text.trim() !== "" && !valid && <small className="error" style={{ display: "block", marginTop: 4 }}>Informe um valor a partir de R$ 1,00.</small>}
         {belowCost && <small style={{ display: "block", marginTop: 4, color: "var(--warn)" }}>Abaixo do que a Speed cobra: prejuízo de {brl(p.speedPriceCents - cents)} por porta.</small>}
       </td>
+      <td className="tab num">{p.referencePriceCents === null ? "—" : brl(p.referencePriceCents)}</td>
       <td className="tab num">{lucro === null ? "—" : `${brl(lucro)} (${Math.round((lucro / cents) * 100)}%)`}</td>
     </tr>
   );
@@ -189,7 +190,7 @@ export function FinancePage() {
           <p className="empty">Carregando…</p>
         ) : (
           <table className="hist">
-            <thead><tr><th>Plano</th><th className="num">Speed cobra</th><th>Você vende por (R$)</th><th className="num">Seu lucro por porta</th></tr></thead>
+            <thead><tr><th>Plano</th><th className="num">Speed cobra</th><th>Você vende por (R$)</th><th className="num" title="Quanto a própria Speed cobra do cliente final nesse plano">Speed vende ao cliente</th><th className="num">Seu lucro por porta</th></tr></thead>
             <tbody>{prices.map((p) => <PriceRow key={`${p.planId}-${p.salePriceCents}`} p={p} onSaved={(next) => { setPrices(next); load(); }} />)}</tbody>
           </table>
         )}

@@ -141,6 +141,13 @@
       "when": 1793205801592,
       "tag": "0019_precos_novos",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793207444487,
+      "tag": "0020_preco_referencia",
+      "breakpoints": true
     }
   ]
 }

@@ -39,4 +39,22 @@ describe("migration 0019: tabela de valores da Speed", () => {
     await runPrecosNovos(client);
     expect((await client.query("SELECT 1 FROM audit_log")).rows).toHaveLength(3);
   });
+
+  it("migration 0020 grava o preço da Speed ao cliente final como referência, com auditoria", async () => {
+    const client = new PGlite();
+    await migrate(drizzle(client), { migrationsFolder: folder });
+    await client.exec(`INSERT INTO plans (name, speed_mbps, speed_price_cents, active) VALUES
+      ('600 Mega', 600, 4000, true), ('700 Mega', 700, 4400, false), ('800 Mega', 800, 5000, true), ('1 Giga', 1000, 7000, true)`);
+    const sql = await readFile(`${folder}/0020_preco_referencia.sql`, "utf8");
+    for (const stmt of sql.split("--> statement-breakpoint").slice(1)) await client.exec(stmt);
+
+    const plans = (await client.query<{ speed_mbps: number; reference_price_cents: number | null }>("SELECT speed_mbps, reference_price_cents FROM plans ORDER BY speed_mbps")).rows;
+    expect(plans.map((p) => [p.speed_mbps, p.reference_price_cents])).toEqual([[600, 9990], [700, null], [800, 12990], [1000, 14990]]);
+    const audit = (await client.query<{ action: string; data: Record<string, unknown> }>("SELECT action, data FROM audit_log ORDER BY id")).rows;
+    expect(audit.map((a) => [a.action, a.data.plano, a.data.after])).toEqual([
+      ["plano.preco_referencia", "600 Mega", 9990],
+      ["plano.preco_referencia", "800 Mega", 12990],
+      ["plano.preco_referencia", "1 Giga", 14990],
+    ]);
+  });
 });

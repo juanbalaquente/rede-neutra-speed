@@ -487,6 +487,8 @@ export interface PlanPrice {
   speedMbps: number;
   /** O que a Speed cobra por porta ativada (definido pela Speed). */
   speedPriceCents: number;
+  /** Quanto a Speed cobra do cliente final nesse plano (referência); null = não mostra. */
+  referencePriceCents: number | null;
   /** Preço de venda do parceiro; null = ainda não cadastrou. */
   salePriceCents: number | null;
 }

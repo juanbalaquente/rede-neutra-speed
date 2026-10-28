@@ -48,7 +48,7 @@ describe("preços de venda", () => {
     expect((await ctx.call(ate, "GET", "/prices")).status).toBe(403);
     const list = (await (await ctx.call(sup, "GET", "/prices")).json()).prices;
     expect(list).toHaveLength(3);
-    expect(list[0]).toMatchObject({ name: "600 Mega", speedPriceCents: 4000, salePriceCents: null });
+    expect(list[0]).toMatchObject({ name: "600 Mega", speedPriceCents: 4000, referencePriceCents: 9990, salePriceCents: null });
     const p600 = await planByMbps(600);
     const res = await ctx.call(sup, "PUT", "/prices", { planId: p600.id, priceCents: 9990 });
     expect(res.status).toBe(200);

@@ -25,6 +25,7 @@ const ACTION_LABEL: Record<string, string> = {
   "parceiro.alterado": "Alterou parceiro",
   "plano.preco_speed": "Alterou valor do plano",
   "plano.fora_da_venda": "Tirou plano da venda",
+  "plano.preco_referencia": "Alterou preço de referência",
 };
 
 const money = (cents: unknown) => (typeof cents === "number" ? brl(cents) : "?");
@@ -58,6 +59,7 @@ function detail(e: AuditEntry): string {
       return parts.join(" · ");
     }
     case "plano.preco_speed":
+    case "plano.preco_referencia":
       return `${String(d.plano ?? "")}: ${money(d.before)} → ${money(d.after)}`;
     case "plano.fora_da_venda":
       return String(d.plano ?? "");

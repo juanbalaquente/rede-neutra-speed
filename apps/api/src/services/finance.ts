@@ -35,7 +35,7 @@ export async function getPrices(db: Db, user: SessionUser) {
   const list = await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.speedMbps);
   const mine = await db.select().from(partnerPrices).where(eq(partnerPrices.partnerId, partnerId));
   const byPlan = new Map(mine.map((p) => [p.planId, p.priceCents]));
-  return list.map((p) => ({ planId: p.id, name: p.name, speedMbps: p.speedMbps, speedPriceCents: p.speedPriceCents, salePriceCents: byPlan.get(p.id) ?? null }));
+  return list.map((p) => ({ planId: p.id, name: p.name, speedMbps: p.speedMbps, speedPriceCents: p.speedPriceCents, referencePriceCents: p.referencePriceCents, salePriceCents: byPlan.get(p.id) ?? null }));
 }
 
 export async function setPrice(db: Db, user: SessionUser, planId: string, priceCents: number, ip?: string | null) {

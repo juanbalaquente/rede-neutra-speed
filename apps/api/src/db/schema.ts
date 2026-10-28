@@ -95,6 +95,8 @@ export const plans = pgTable("plans", {
   speedMbps: integer("speed_mbps").notNull(),
   /** Valor que a Speed cobra do parceiro por porta ativada, em centavos. */
   speedPriceCents: integer("speed_price_cents").notNull(),
+  /** Quanto a própria Speed cobra do cliente final nesse plano, em centavos. Só referência para o parceiro; null = não mostra. */
+  referencePriceCents: integer("reference_price_cents"),
   active: boolean("active").notNull().default(true),
   createdAt: createdAt(),
 });
