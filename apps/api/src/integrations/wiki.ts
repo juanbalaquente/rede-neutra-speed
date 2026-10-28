@@ -108,7 +108,7 @@ export class WikiNetworkMap implements NetworkMap {
       // ok:false é um estado válido: a Wiki está de pé, mas o dado da rede está parado ou uma fonte (ex.: Codemaps) caiu.
       return body.data.ok
         ? { ok: true, detail: "Wiki respondeu ok" }
-        : { ok: false, detail: "Wiki no ar, mas com dado da rede parado ou fonte fora (ok:false). Viabilidade e reserva podem falhar ou vir como 'conferir'." };
+        : { ok: false, detail: "Wiki no ar, mas com dado da rede parado ou fonte fora (ok:false)." };
     } catch (e) {
       return { ok: false, detail: e instanceof Error ? e.message : "Wiki inalcançável" };
     }
