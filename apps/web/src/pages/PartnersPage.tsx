@@ -118,7 +118,7 @@ function LimitsFields({ value, onChange }: { value: PartnerLimits; onChange: (v:
   );
 }
 
-function PartnerEditor({ partner, onChanged, focusUsers }: { partner: AdminPartner; onChanged: () => void; focusUsers?: boolean }) {
+function PartnerEditor({ partner, onChanged, focusUsers, onVerComo }: { partner: AdminPartner; onChanged: () => void; focusUsers?: boolean; onVerComo: (partnerId: string) => void }) {
   const say = useToast();
   const usersRef = useRef<HTMLDivElement>(null);
   // Parceiro recém-cadastrado: o próximo passo é o supervisor, que fica no fim do painel.
@@ -207,6 +207,7 @@ function PartnerEditor({ partner, onChanged, focusUsers }: { partner: AdminPartn
                 Descartar
               </button>
             )}
+            <button className="btn sec sm" style={{ marginLeft: "auto" }} onClick={() => onVerComo(partner.id)}>Ver painel do parceiro</button>
           </div>
         </div>
         <div className="summary" style={{ borderTop: "1px solid var(--line)" }}>
@@ -454,7 +455,7 @@ function SpeedPricesCard() {
 }
 
 /** Administrador Speed: parceiros, área liberada (siglas), limites, bloqueio e usuários. */
-export function PartnersPage() {
+export function PartnersPage({ onVerComo }: { onVerComo: (partnerId: string) => void }) {
   const say = useToast();
   const [list, setList] = useState<AdminPartner[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -490,7 +491,7 @@ export function PartnersPage() {
 
       <div className="g11">
         <div className="card">
-          <div className="ch"><h3>{list ? `${list.length} ${list.length === 1 ? "parceiro" : "parceiros"}` : "Carregando…"}</h3><small>clique para editar</small></div>
+          <div className="ch"><h3>{list ? `${list.length} ${list.length === 1 ? "parceiro" : "parceiros"}` : "Carregando…"}</h3><small>nome abre o painel · linha edita</small></div>
           {list && list.length === 0 && <p className="empty">Nenhum parceiro ainda.</p>}
           {list && list.length > 0 && (
             <table className="hist plist">
@@ -499,12 +500,20 @@ export function PartnersPage() {
               </thead>
               <tbody>
                 {list.map((p) => (
-                  <tr key={p.id} className={p.id === selectedId && !creating ? "on" : ""}>
+                  // A linha seleciona o parceiro para editar; o nome abre o painel dele.
+                  <tr
+                    key={p.id}
+                    className={`pick${p.id === selectedId && !creating ? " on" : ""}`}
+                    tabIndex={0}
+                    onClick={() => { setCreating(false); setJustCreated(null); setSelectedId(p.id); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) { setCreating(false); setJustCreated(null); setSelectedId(p.id); } }}
+                  >
                     <td style={{ fontFamily: "var(--font)" }}>
-                      <button className="rowbtn" onClick={() => { setCreating(false); setJustCreated(null); setSelectedId(p.id); }}>
+                      <button className="rowbtn plink" title={`Ver o painel da ${p.name} como supervisor`} onClick={(e) => { e.stopPropagation(); onVerComo(p.id); }}>
                         {p.name}
-                        {p.status === "bloqueado" && <span className="badge b-bad" style={{ marginLeft: 8 }}>Bloqueado</span>}
+                        <span aria-hidden="true" className="plink-arrow">↗</span>
                       </button>
+                      {p.status === "bloqueado" && <span className="badge b-bad" style={{ marginLeft: 8 }}>Bloqueado</span>}
                       <div className="muted mono" style={{ fontSize: 12 }}>{p.code ? `${p.code} · ` : ""}{fmtCnpj(p.cnpj)}</div>
                     </td>
                     <td>{p.allRegions ? <strong>Toda a rede</strong> : p.allowedRegions.length ? p.allowedRegions.join(" · ") : <span className="muted">nenhuma</span>}</td>
@@ -529,7 +538,7 @@ export function PartnersPage() {
           />
         ) : selected ? (
           // key: ao trocar de parceiro, o formulário recomeça com os dados dele.
-          <PartnerEditor key={`${selected.id}-${selected.code}-${selected.status}-${selected.allowedRegions.join()}-${selected.allRegions}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} focusUsers={justCreated === selected.id} />
+          <PartnerEditor key={`${selected.id}-${selected.code}-${selected.status}-${selected.allowedRegions.join()}-${selected.allRegions}-${selected.maxActiveReservations}-${selected.maxCtoOccupancyPct}-${selected.maxUsers}`} partner={selected} onChanged={() => void load()} focusUsers={justCreated === selected.id} onVerComo={onVerComo} />
         ) : (
           list && <p className="note">Selecione um parceiro ou cadastre o primeiro.</p>
         )}

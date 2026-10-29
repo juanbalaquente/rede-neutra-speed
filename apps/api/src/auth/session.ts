@@ -7,20 +7,29 @@ export interface SessionUser {
   partnerId: string | null;
   role: Role;
   name: string;
+  /** Administrador Speed vendo o painel de um parceiro como supervisor, só para consulta. */
+  verComo?: { partnerName: string } | null;
+}
+
+/** O que o cookie carrega além do usuário: o parceiro que o administrador está vendo e quando a sessão vence. */
+export interface SessionToken extends SessionUser {
+  verComoPid: string | null;
+  exp: number;
 }
 
 export const SESSION_COOKIE = "rn_session";
 
-export async function signSession(user: SessionUser, secret: string, hours: number): Promise<string> {
-  return new SignJWT({ pid: user.partnerId, role: user.role, name: user.name })
+/** `expires`: horas a partir de agora, ou o instante (em segundos) em que a sessão já vencia, para trocar de modo sem estender o login. */
+export async function signSession(user: SessionUser, secret: string, expires: number | { at: number }, verComoPid: string | null = null): Promise<string> {
+  return new SignJWT({ pid: user.partnerId, role: user.role, name: user.name, ...(verComoPid ? { vc: verComoPid } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime(`${hours}h`)
+    .setExpirationTime(typeof expires === "number" ? `${expires}h` : expires.at)
     .sign(new TextEncoder().encode(secret));
 }
 
-export async function verifySession(token: string, secret: string): Promise<SessionUser | null> {
+export async function verifySession(token: string, secret: string): Promise<SessionToken | null> {
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), { algorithms: ["HS256"] });
     if (!payload.sub) return null;
@@ -29,6 +38,8 @@ export async function verifySession(token: string, secret: string): Promise<Sess
       partnerId: (payload.pid as string | null) ?? null,
       role: payload.role as Role,
       name: String(payload.name ?? ""),
+      verComoPid: typeof payload.vc === "string" ? payload.vc : null,
+      exp: payload.exp ?? 0,
     };
   } catch {
     return null;

@@ -99,10 +99,11 @@ function Portal() {
       />
     );
   }
-  return <Shell user={user} onLogout={() => setUser(null)} />;
+  // key: entrar ou sair do painel de um parceiro recomeça o portal com o perfil novo (menu, avisos, dados).
+  return <Shell key={`${user.role}-${user.partnerId ?? ""}`} user={user} onLogout={() => setUser(null)} onSwitch={setUser} />;
 }
 
-function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Shell({ user, onLogout, onSwitch }: { user: User; onLogout: () => void; onSwitch: (u: User) => void }) {
   const { theme, choose } = useTheme();
   // O administrador Speed começa pela gestão; o parceiro, pela venda.
   const home: Tab = user.role === "admin_speed" ? "painel" : "inicio";
@@ -273,6 +274,29 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
     onLogout();
   }, [onLogout]);
 
+  // Administrador Speed abrindo o painel de um parceiro, e a volta. O endereço muda sem disparar a troca de tela do perfil antigo.
+  const verComo = useCallback(
+    async (partnerId: string) => {
+      try {
+        const r = await api.verComo(partnerId);
+        window.history.replaceState(null, "", "#/inicio");
+        onSwitch(r.user);
+      } catch (e) {
+        say(e instanceof Error ? e.message : "Não foi possível abrir o painel do parceiro.", "bad");
+      }
+    },
+    [onSwitch, say],
+  );
+  const sairVerComo = useCallback(async () => {
+    try {
+      const r = await api.sairVerComo();
+      window.history.replaceState(null, "", "#/parceiros");
+      onSwitch(r.user);
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Não foi possível voltar para a Speed.", "bad");
+    }
+  }, [onSwitch, say]);
+
   const commands = useMemo<Command[]>(
     () => [
       ...(user.role !== "admin_speed" ? [{ id: "go-inicio", group: "Ir para", title: "Painel", icon: <ChartIcon />, run: () => setTab("inicio") }] : []),
@@ -297,9 +321,10 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
         const Ico = THEME_ICON[t.id];
         return { id: `theme-${t.id}`, group: "Preferências", title: `Usar tema ${t.label.toLowerCase()}`, icon: <Ico />, run: () => choose(t.id) };
       }),
+      ...(user.verComo ? [{ id: "ver-como-sair", group: "Ir para", title: "Voltar para a Speed", hint: `saindo do painel da ${user.verComo.partnerName}`, icon: <OutIcon />, run: () => void sairVerComo() }] : []),
       { id: "out", group: "Preferências", title: "Sair", icon: <OutIcon />, run: () => void logout() },
     ],
-    [activeCount, pedidos, theme, choose, logout, user.role, fleet],
+    [activeCount, pedidos, theme, choose, logout, user.role, user.verComo, sairVerComo, fleet],
   );
 
   const notices = useMemo<Notice[]>(() => {
@@ -415,7 +440,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
           <div className="av" aria-hidden="true">{initials}</div>
           <div>
             <b>{user.name}</b>
-            <small>{ROLE_LABEL[user.role]}</small>
+            <small>{user.verComo ? "Speed, como supervisor" : ROLE_LABEL[user.role]}</small>
           </div>
           <button className="linkbtn" onClick={() => void logout()}>Sair</button>
         </div>
@@ -435,6 +460,12 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
             <OutIcon />
           </button>
         </header>
+        {user.verComo && (
+          <div className="banner view" role="status">
+            <span>Você está vendo o painel da <b>{user.verComo.partnerName}</b> como um supervisor dele. Só consulta: nada aqui altera a conta do parceiro.</span>
+            <button className="btn sm" onClick={() => void sairVerComo()}>Voltar para a Speed</button>
+          </div>
+        )}
         {user.role === "admin_speed" && rede && !rede.ok && (
           <div className="banner bad" role="alert">
             <b>Integração com a rede fora do ar.</b> {rede.detail} Viabilidade e reserva podem falhar ou vir como "conferir".
@@ -448,7 +479,7 @@ function Shell({ user, onLogout }: { user: User; onLogout: () => void }) {
         ) : tab === "equipe" && user.role === "supervisor" ? (
           <TeamPage user={user} partner={partner} />
         ) : tab === "parceiros" && user.role === "admin_speed" ? (
-          <PartnersPage />
+          <PartnersPage onVerComo={(id) => void verComo(id)} />
         ) : tab === "conferir" && user.role === "admin_speed" ? (
           <ConferirPage />
         ) : tab === "pedidos" && user.role === "admin_speed" ? (

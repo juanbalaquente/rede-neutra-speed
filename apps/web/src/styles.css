@@ -669,3 +669,14 @@ h2.sect { margin: 10px 0 -4px; font-size: 13px; font-weight: 500; letter-spacing
   .rk .rn { white-space: normal; }
   .rk .rn .badge { margin: 4px 6px 0 0 !important; }
 }
+
+/* Parceiros: o nome abre o painel do parceiro (modo "ver como"); a linha seleciona para editar. */
+.plist tr.pick { cursor: pointer; }
+.plist tr.pick:hover td { background: var(--hover); }
+.plist tr.pick:focus-visible { outline: 2px solid var(--data); outline-offset: -2px; }
+.plink { gap: 4px; }
+.plink:hover { text-decoration: underline; text-underline-offset: 3px; }
+.plink-arrow { font-size: 12px; color: var(--mute); transition: transform .15s ease; }
+.plink:hover .plink-arrow { color: var(--data); transform: translate(1px, -1px); }
+.banner.view { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--data-soft); border-color: color-mix(in srgb, var(--data) 35%, var(--line2)); }
+.banner.view .btn { margin-left: auto; }

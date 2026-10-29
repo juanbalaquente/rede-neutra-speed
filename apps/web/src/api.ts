@@ -5,6 +5,8 @@ export interface User {
   partnerId: string | null;
   role: Role;
   name: string;
+  /** Administrador Speed vendo o painel de um parceiro como supervisor, só para consulta. */
+  verComo?: { partnerName: string } | null;
 }
 
 /** Segundo fator: ligado? obrigatório para este perfil? falta configurar? */
@@ -212,6 +214,8 @@ export const api = {
 
   // ── Administração Speed ──
   adminPartners: () => request<{ partners: AdminPartner[] }>("GET", "/admin/partners"),
+  verComo: (partnerId: string) => request<{ user: User; mfa: MfaState }>("POST", `/admin/partners/${partnerId}/ver-como`),
+  sairVerComo: () => request<{ user: User; mfa: MfaState }>("POST", "/auth/ver-como/sair"),
   createPartner: (input: PartnerLimits & { name: string; cnpj: string; code?: string; allowedRegions: string[]; allRegions?: boolean }) =>
     request<{ partner: AdminPartner }>("POST", "/admin/partners", input),
   updatePartner: (id: string, changes: Partial<PartnerLimits> & { code?: string; allowedRegions?: string[]; allRegions?: boolean; status?: AdminPartner["status"]; reason?: string }) =>

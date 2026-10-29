@@ -47,7 +47,7 @@ export interface AppDeps {
   cepLookup?: CepLookup;
 }
 
-type Env = { Variables: { user: SessionUser; userRow: typeof users.$inferSelect } };
+type Env = { Variables: { user: SessionUser; userRow: typeof users.$inferSelect; sessionExp: number } };
 
 function clientIp(c: Context): string | null {
   return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
@@ -122,6 +122,18 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
     }
     c.set("user", { id: row.user.id, partnerId: row.user.partnerId, role: row.user.role, name: row.user.name });
     c.set("userRow", row.user);
+    c.set("sessionExp", session.exp);
+    // Administrador vendo o painel de um parceiro: o servidor o trata como supervisor dele (mesmo recorte por partner_id),
+    // inclusive de parceiro bloqueado, e só deixa ler. Sair do modo é a única escrita aceita.
+    if (session.verComoPid && row.user.role === "admin_speed") {
+      const [p] = await db.select({ id: partners.id, name: partners.name }).from(partners).where(eq(partners.id, session.verComoPid));
+      if (p) {
+        c.set("user", { id: row.user.id, partnerId: p.id, role: "supervisor", name: row.user.name, verComo: { partnerName: p.name } });
+        if (!["GET", "HEAD"].includes(c.req.method) && !c.req.path.startsWith("/api/auth/")) {
+          throw new AppError(403, "somente_leitura", `Você está vendo o painel da ${p.name} só para consulta. Volte para a Speed para fazer alterações.`);
+        }
+      }
+    }
     // Supervisor e administrador sem segundo fator só alcançam a configuração dele.
     if (mfa.mfaState(config, row.user).setupRequired && !c.req.path.startsWith("/api/auth/")) {
       throw new AppError(403, "mfa_obrigatorio", "Configure o segundo fator para continuar.");
@@ -171,17 +183,27 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
   /** Emite o cookie de sessão e registra a entrada. */
   async function startSession(c: Context, user: typeof users.$inferSelect, viaMfa: boolean) {
     const session: SessionUser = { id: user.id, partnerId: user.partnerId, role: user.role, name: user.name };
-    const token = await signSession(session, config.SESSION_SECRET, config.SESSION_HOURS);
-    setCookie(c, SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: "Lax",
-      secure: config.NODE_ENV === "production",
-      path: "/",
-      maxAge: config.SESSION_HOURS * 3600,
-    });
+    await setSessionCookie(c, session, config.SESSION_HOURS);
     await recordAudit(db, { partnerId: user.partnerId, userId: user.id, action: "auth.login", ip: clientIp(c), data: viaMfa ? { segundoFator: true } : undefined });
     return { user: session, mfa: mfa.mfaState(config, user) };
   }
+
+  async function setSessionCookie(c: Context, session: SessionUser, expires: number | { at: number }, verComoPid: string | null = null) {
+    const token = await signSession(session, config.SESSION_SECRET, expires, verComoPid);
+    const maxAge = typeof expires === "number" ? expires * 3600 : Math.max(0, expires.at - Math.floor(Date.now() / 1000));
+    setCookie(c, SESSION_COOKIE, token, { httpOnly: true, sameSite: "Lax", secure: config.NODE_ENV === "production", path: "/", maxAge });
+  }
+
+  /** Volta do painel do parceiro para a administração Speed, sem refazer o login. */
+  app.post("/auth/ver-como/sair", requireUser, async (c) => {
+    const me = c.get("user");
+    if (!me.verComo) throw new AppError(409, "fora_do_modo", "Você não está vendo o painel de um parceiro.");
+    const row = c.get("userRow");
+    const session: SessionUser = { id: row.id, partnerId: row.partnerId, role: row.role, name: row.name };
+    await setSessionCookie(c, session, { at: c.get("sessionExp") });
+    await recordAudit(db, { partnerId: me.partnerId, userId: row.id, action: "parceiro.ver_como_fim", entity: "partner", entityId: me.partnerId ?? undefined, ip: clientIp(c) });
+    return c.json({ user: session, mfa: mfa.mfaState(config, row) });
+  });
 
   /** Segundo passo do login: o código do app (ou um código de recuperação) troca o desafio por uma sessão. */
   app.post("/auth/login/2fa", async (c) => {
@@ -876,6 +898,17 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
   // ── Administração Speed ───────────────────────────────────────────────────
   const admin = new Hono<Env>();
   admin.use(requireUser, requireRole("admin_speed"));
+
+  /** Abre o painel do parceiro como um supervisor dele vê, só para consulta. Vale até sair do modo ou do login. */
+  admin.post("/partners/:id/ver-como", async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const [p] = await db.select({ id: partners.id, name: partners.name }).from(partners).where(eq(partners.id, id));
+    if (!p) throw new AppError(404, "nao_encontrado", "Parceiro não encontrado.");
+    const me = c.get("user");
+    await setSessionCookie(c, me, { at: c.get("sessionExp") }, p.id);
+    await recordAudit(db, { partnerId: p.id, userId: me.id, action: "parceiro.ver_como", entity: "partner", entityId: p.id, ip: clientIp(c) });
+    return c.json({ user: { id: me.id, partnerId: p.id, role: "supervisor", name: me.name, verComo: { partnerName: p.name } }, mfa: mfa.mfaState(config, c.get("userRow")) });
+  });
 
   admin.post("/capacity-requests/:id/decision", async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));
