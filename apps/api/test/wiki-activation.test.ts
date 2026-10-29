@@ -198,6 +198,7 @@ describe("sem leitura de sinal (a Wiki tenta por 2 min e devolve a decisão sem 
 describe("falha na configuração (a Wiki deixa a ONU autorizada e o NOC corrige)", () => {
   it("o portal segue lendo a Wiki e, quando a ONU fica online, converte a reserva", async () => {
     let estado = "falha_provisionamento";
+    const starts: Parameters<ActivationService["start"]>[0][] = [];
     const snap = () => ({
       ativacaoId: "a1",
       estado,
@@ -210,7 +211,10 @@ describe("falha na configuração (a Wiki deixa a ONU autorizada e o NOC corrige
     });
     const svc: ActivationService = {
       listPendingOnus: async () => [],
-      start: async () => ({ ativacaoId: "a1", estado: "recebida" as const }),
+      start: async (req) => {
+        starts.push(req);
+        return { ativacaoId: "a1", estado: (starts.length > 1 || estado === "provisionando" ? "provisionando" : "recebida") as never };
+      },
       get: async () => snap() as never,
       decide: async () => snap() as never,
     };
@@ -228,6 +232,17 @@ describe("falha na configuração (a Wiki deixa a ONU autorizada e o NOC corrige
       expect(await read()).toMatchObject({ state: "falha_provisionamento" });
       // Não abre nova tentativa na mesma reserva: a ONU continua autorizada.
       expect((await ctx.call(cookie, "POST", "/activations", { reservationId: reservation.id, serial: "HWTCD5B0DFA3", contrato: "33766", sinalCtoDbm: -21.4 })).status).toBe(409);
+
+      // "Tentar novamente": a Wiki reabre a mesma ativação em provisionando.
+      starts.length = 0;
+      estado = "provisionando";
+      const retry = await ctx.call(cookie, "POST", `/activations/${activation.id}/retry`);
+      expect(retry.status).toBe(200);
+      expect((await retry.json()).activation).toMatchObject({ state: "provisionando" });
+      expect(starts).toHaveLength(1);
+      expect(starts[0]).toMatchObject({ serial: "HWTCD5B0DFA3", pppLogin: "33766-JHV", sinalCtoDbm: -21.4 });
+      expect(starts[0]!.idempotencyKey).not.toBe(activation.idempotencyKey);
+      expect((await ctx.call(cookie, "POST", `/activations/${activation.id}/retry`)).status).toBe(409);
 
       estado = "online";
       expect(await read()).toMatchObject({ state: "online" });

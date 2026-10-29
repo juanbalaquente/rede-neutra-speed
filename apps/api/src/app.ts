@@ -25,7 +25,7 @@ import { TICKET_TYPES } from "./db/schema.js";
 import { getOperation, listOperations, operationView, refreshOperation, retryOperation, startOperation } from "./services/customer-ops.js";
 import { MONTH_RE, cobrancaCsv, financeForPartner, setRevenueGoal, speedBilling, speedRevenueSeries, clientesCsv, fechamentoCsv, getDashboard, getFinance, getPrices, markPayment, monthOf, setPrice, setSpeedPrice } from "./services/finance.js";
 import { closeServiceOrder, getInstallation, getOsPhotosRequired, listAgenda, listInstallations, listTechnicians, reschedule, saveCliente, setOsPhotosRequired } from "./services/installations.js";
-import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, setSignalLimit, startActivation } from "./services/activations.js";
+import { DEFAULT_SIGNAL_LIMIT_DB, decideActivation, getActivation, getSignalLimit, listActivations, listPendingOnus, retryActivation, setSignalLimit, startActivation } from "./services/activations.js";
 import { conferirCsv, conferirReport } from "./services/conferir-report.js";
 import { networkPanel, regionMap } from "./services/network-panel.js";
 import { cancelReservation, createReservation, listReservations } from "./services/reservations.js";
@@ -417,6 +417,11 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
   app.get("/activations/:id", requireUser, requireRole("atendente", "supervisor"), async (c) => {
     const id = z.string().uuid().parse(c.req.param("id"));
     return c.json({ activation: activationView(await getActivation(db, activationSvc(), c.get("user"), id)) });
+  });
+
+  app.post("/activations/:id/retry", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json({ activation: activationView(await retryActivation(db, activationSvc(), c.get("user"), id, { ip: clientIp(c) })) });
   });
 
   app.post("/activations/:id/decision", requireUser, requireRole("atendente", "supervisor"), async (c) => {

@@ -21,7 +21,7 @@ const STEPS: { state: ActivationState; label: string }[] = [
 const STATE_NOTE: Partial<Record<ActivationState, string>> = {
   recebida: "Pedido na fila.",
   aguardando_cliente: "O contrato ainda não chegou ao sistema de rede. A liberação continua sozinha quando ele chegar (pode levar até 2 horas); não refaça o pedido.",
-  falha_provisionamento: "A ONU foi autorizada, mas a configuração falhou. A Speed foi avisada; não refaça a instalação. Quando a Speed corrigir, esta tela segue sozinha. Se a ONU não for Huawei de modelo aceito, avise a Speed para trocar.",
+  falha_provisionamento: "A ONU foi autorizada, mas a configuração falhou. A Speed foi avisada; não refaça a instalação. Use “Tentar novamente”: a configuração retoma de onde parou, sem novo reset. Se a ONU não for Huawei de modelo aceito, avise a Speed para trocar.",
   cancelada: "Ativação cancelada. A reserva continua ativa e você pode tentar de novo.",
   falhou: "A ativação não pôde ser feita.",
 };
@@ -30,6 +30,7 @@ const STATE_NOTE: Partial<Record<ActivationState, string>> = {
 const MOTIVO_ATIVACAO: Record<string, string> = {
   nova_tentativa_de_provisionamento: "nova tentativa de configuração",
   provisionamento_falhou: "a configuração da ONU falhou",
+  nova_tentativa_pelo_portal: "nova tentativa pedida pelo portal",
   modelo_nao_suportado: "modelo de ONU não aceito",
 };
 
@@ -48,7 +49,7 @@ function onuProblem(o: Pick<PendingOnu, "serial" | "modelo">): string | null {
 /** A configuração (reset de fábrica, senha, IPv6) leva de 2,5 a 5 min, com a ONU uns 2 min fora do ar. */
 const PROVISIONING_SLOW_MS = 6 * 60_000;
 
-function Provisioning() {
+function Provisioning({ motivo }: { motivo?: string | null }) {
   const since = useRef(Date.now());
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -62,7 +63,9 @@ function Provisioning() {
     <p className="muted">
       Configurando a ONU: reset de fábrica, senha de acesso e IPv6. Leva de 2 a 5 minutos e a ONU reinicia e fica uns 2 minutos fora do ar; não desligue
       a ONU nem refaça o pedido. <span className="mono">{m}:{String(s).padStart(2, "0")}</span>
-      {left > PROVISIONING_SLOW_MS && " Está demorando mais que o normal; a Speed acompanha e a tela segue sozinha."}
+      {motivo?.startsWith("etapa_demorando")
+        ? " Aguardando configuração do equipamento: em ONU reaproveitada pode levar até 25 minutos. Não é falha; a tela segue sozinha."
+        : left > PROVISIONING_SLOW_MS && " Está demorando mais que o normal; a Speed acompanha e a tela segue sozinha."}
     </p>
   );
 }
@@ -147,6 +150,26 @@ function Decision({ activation, onChange }: { activation: Activation; onChange: 
   );
 }
 
+function Retry({ activation, onChange }: { activation: Activation; onChange: (a: Activation) => void }) {
+  const say = useToast();
+  const [busy, setBusy] = useState(false);
+  async function retry() {
+    setBusy(true);
+    try {
+      onChange((await api.retryActivation(activation.id)).activation);
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Falha ao pedir nova tentativa.", "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="acts2">
+      <button className="btn sm" disabled={busy} onClick={retry}>{busy ? "Enviando…" : "Tentar novamente"}</button>
+    </div>
+  );
+}
+
 function Progress({ activation, onChange }: { activation: Activation; onChange: (a: Activation) => void }) {
   const state = activation.state;
   const current = stepIndex(state);
@@ -177,7 +200,7 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
       {outageText(activation.snapshot?.motivo) && !ended ? (
         <p className="error" role="alert">{outageText(activation.snapshot?.motivo)} Não refaça o pedido.</p>
       ) : state === "provisionando" ? (
-        <Provisioning />
+        <Provisioning motivo={activation.snapshot?.motivo} />
       ) : (
         note && <p className={ended ? "error" : "muted"}>{note}{motivo && state !== "cancelada" ? ` (${MOTIVO_ATIVACAO[motivo] ?? motivo})` : ""}</p>
       )}
@@ -187,6 +210,7 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
         </p>
       )}
       {state === "aguardando_decisao" && <Decision activation={activation} onChange={onChange} />}
+      {state === "falha_provisionamento" && <Retry activation={activation} onChange={onChange} />}
       {done && (
         <p>
           <span className="badge b-ok">ONU liberada</span>{" "}

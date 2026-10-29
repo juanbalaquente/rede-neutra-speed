@@ -237,6 +237,7 @@ export const api = {
   startActivation: (input: { reservationId: string; serial: string; contrato?: string; sinalCtoDbm: number; idempotencyKey: string }) =>
     request<{ activation: Activation }>("POST", "/activations", input),
   activation: (id: string) => request<{ activation: Activation }>("GET", `/activations/${id}`),
+  retryActivation: (id: string) => request<{ activation: Activation }>("POST", `/activations/${id}/retry`),
   decideActivation: (id: string, decision: { acao: "remedir" | "cancelar" } | { acao: "prosseguir"; justificativa: string }) =>
     request<{ activation: Activation }>("POST", `/activations/${id}/decision`, decision),
   plans: () => request<{ plans: { id: string; name: string; speedMbps: number }[] }>("GET", "/plans"),

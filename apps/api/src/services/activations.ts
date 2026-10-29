@@ -239,7 +239,7 @@ async function applySnapshot(db: Db, row: typeof activations.$inferSelect, snap:
  * Estados em que o portal para de consultar a Wiki. A falha de configuração continua sendo lida: a ONU fica autorizada,
  * o NOC resolve pela Wiki e a ativação pode virar online depois (29 out 2026, 33766-JHV).
  */
-const STOP_SYNC = ACTIVATION_FINAL.filter((s) => s !== "falha_provisionamento");
+const STOP_SYNC: readonly ActivationState[] = ACTIVATION_FINAL.filter((s) => s !== "falha_provisionamento");
 
 /** Estado atual da ativação, consultando a Wiki enquanto não terminou. */
 export async function getActivation(db: Db, svc: ActivationService, user: SessionUser, id: string) {
@@ -271,6 +271,44 @@ export async function decideActivation(db: Db, svc: ActivationService, user: Ses
   // Prosseguir com a trava de sinal abre o chamado da Infra (aparece na lista do parceiro, marcado como automático).
   if (decision.acao === "prosseguir" && opts.tickets) await openSignalTicket(db, opts.tickets, user, row, decision.justificativa.trim());
   return applySnapshot(db, row, snap, user.id);
+}
+
+/**
+ * Nova tentativa depois de `falha_provisionamento` (Wiki, 29 out 2026): o mesmo pedido com chave nova reabre a ativação
+ * na Wiki (mesmo ativacaoId, volta em `provisionando`, sem repetir o reset de fábrica).
+ */
+export async function retryActivation(db: Db, svc: ActivationService, user: SessionUser, id: string, opts: { ip?: string | null } = {}) {
+  const row = await ownActivation(db, requirePartner(user), id);
+  if (row.state !== "falha_provisionamento") {
+    throw new AppError(409, "sem_nova_tentativa", "Só a ativação com falha na configuração pode ser tentada de novo.");
+  }
+  const partnerCode = await partnerCodeOf(db, row.partnerId);
+  const key = randomUUID();
+  const started = await guard(async () => {
+    try {
+      return await svc.start({
+        partnerCode,
+        idempotencyKey: key,
+        ctoId: row.ctoId,
+        serial: row.serial,
+        contrato: row.contract,
+        pppLogin: row.pppLogin,
+        alias: row.pppLogin,
+        sinalCtoDbm: row.sinalCtoDbm,
+        limiteDb: row.limiteDb,
+      });
+    } catch (e) {
+      if (e instanceof ActivationRefused && e.status !== 503) throw new AppError(409, e.code, ACTIVATION_REFUSAL_TEXT[e.code] ?? "A Speed recusou a nova tentativa.");
+      throw e;
+    }
+  });
+  const [updated] = await db
+    .update(activations)
+    .set({ idempotencyKey: key, wikiActivationId: started.ativacaoId, state: started.estado, snapshot: { ...(row.snapshot as object | null), motivo: "nova_tentativa_pelo_portal" }, updatedAt: new Date() })
+    .where(eq(activations.id, row.id))
+    .returning();
+  await recordAudit(db, { partnerId: row.partnerId, userId: user.id, action: "ativacao.nova_tentativa", entity: "activation", entityId: row.id, ip: opts.ip, data: { de: row.state, para: started.estado } });
+  return updated!;
 }
 
 export async function listActivations(db: Db, user: SessionUser) {
