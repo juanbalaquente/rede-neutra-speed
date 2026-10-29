@@ -159,6 +159,9 @@ export function diagnose(input: { detalhe: OnuDetail | null; status: ClientStatu
   }
   if (status?.autenticacao.estado === "desconectado") {
     out.push({ tom: "bad", codigo: "pppoe_caido", titulo: "Fibra boa, PPPoE caído", texto: `A fibra está no ar mas o roteador não autentica. Reinicie a ONU pelo portal; se não voltar, confira se o roteador está em PPPoE com o login ${login}.`, acao: "reiniciar" });
+  } else if (status?.autenticacao.estado !== "conectado") {
+    // Sem leitura do PPPoE não dá para dizer que está tudo certo (29 out 2026, 33766-JHV: "Tudo certo" com PPPoE sem leitura).
+    out.push({ tom: "mute", codigo: "sem_leitura", titulo: "PPPoE sem leitura", texto: `A fibra está boa, mas a rede não informou agora se o login ${login} está autenticado. Atualize em instantes; se o cliente está sem internet, reinicie a ONU pelo portal.`, acao: "reiniciar" });
   }
   const temp = detalhe?.onu.temperaturaC ?? null;
   if (temp !== null && temp >= TEMPERATURA_ALTA_C) {
@@ -192,8 +195,17 @@ export async function getOnuDetail(db: Db, svc: ClientStatusService | undefined,
   if (!a) throw new AppError(409, "cliente_sem_login", "Esse cliente ainda não tem ONU liberada.");
   const code = await partnerCode(db, r.partnerId);
 
+  // PPPoE ao vivo no NE40 (o snapshot pode ter 30 min e engana logo depois de ativar). Se a Wiki recusar ou enfileirar (429), vale o snapshot.
+  const statusAoVivo = async () => {
+    try {
+      return await service.status(a.login, code, { fresh: true });
+    } catch (e) {
+      console.error("[onus] status ao vivo falhou, usando o snapshot:", e instanceof Error ? e.message : e);
+      return service.status(a.login, code);
+    }
+  };
   // As duas leituras correm juntas e cada uma responde por si: a tela mostra o que vier.
-  const [statusR, detalheR] = await Promise.allSettled([service.status(a.login, code), service.onu(a.login, code)]);
+  const [statusR, detalheR] = await Promise.allSettled([statusAoVivo(), service.onu(a.login, code)]);
   const status = statusR.status === "fulfilled" ? statusR.value : null;
   const detalhe = detalheR.status === "fulfilled" ? detalheR.value : null;
   const rotaAusente = detalheR.status === "rejected" && detalheR.reason instanceof IntegrationError && detalheR.reason.status === 404;
