@@ -17,6 +17,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://rede:${POSTGRES_PASSWORD:-rede}@db:5432/rede_neutra
+      PHOTO_DIR: /data/photos
+    volumes:
+      - photos-data:/data/photos
     depends_on:
       db: { condition: service_healthy }
     restart: unless-stopped
@@ -30,3 +33,4 @@ services:
 
 volumes:
   db-data:
+  photos-data:

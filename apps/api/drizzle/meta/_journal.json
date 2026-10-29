@@ -8,6 +8,146 @@
       "when": 1791250041666,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791384278432,
+      "tag": "0001_cto_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791397776301,
+      "tag": "0002_vagas_e_regioes",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792007002029,
+      "tag": "0003_ativacao_onu",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792080803755,
+      "tag": "0004_fotos_de_campo",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792095888678,
+      "tag": "0005_segundo_fator",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792098757386,
+      "tag": "0006_instalacao_cliente_os",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792099794080,
+      "tag": "0007_precos_e_pagamentos",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792153950375,
+      "tag": "0008_operacoes_do_cliente",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792154688755,
+      "tag": "0009_chamados",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792170920420,
+      "tag": "0010_contratos",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792173974133,
+      "tag": "0011_limites_cto_e_aprovacoes",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792370534393,
+      "tag": "0012_contrato_abandonado",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792372593809,
+      "tag": "0013_data_do_cancelamento",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792374474349,
+      "tag": "0014_cancelamento_do_contrato",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792504321025,
+      "tag": "0015_pedidos_de_vaga",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792539987022,
+      "tag": "0016_periodo_visita",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792605935460,
+      "tag": "0017_observacao_da_wiki",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793197570776,
+      "tag": "0018_rede_inteira_do_parceiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793205801592,
+      "tag": "0019_precos_novos",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793207444487,
+      "tag": "0020_preco_referencia",
+      "breakpoints": true
     }
   ]
 }
