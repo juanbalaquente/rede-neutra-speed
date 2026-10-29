@@ -71,6 +71,8 @@ const fmtDb = (n: number) => n.toFixed(1).replace(".", ",");
 
 function stepIndex(state: ActivationState): number {
   if (state === "aguardando_decisao") return 1;
+  // A ONU já foi autorizada e medida; o que falhou foi a configuração.
+  if (state === "falha_provisionamento") return 2;
   const i = STEPS.findIndex((s) => s.state === state);
   return i === -1 ? 0 : i;
 }
@@ -162,7 +164,8 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
       </div>
       <ol className="atv-steps">
         {STEPS.map((s, i) => {
-          const status = done || i < current ? "done" : i === current && !ended ? "now" : "todo";
+          const status =
+            done || i < current ? "done" : i !== current ? "todo" : !ended ? "now" : state === "falha_provisionamento" ? "bad" : "todo";
           return (
             <li key={s.state} className={status}>
               <i aria-hidden="true" />
