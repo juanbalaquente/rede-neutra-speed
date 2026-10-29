@@ -23,7 +23,7 @@ function build(respond: () => Response) {
 describe("WikiCustomerActions.setWifi (contrato v3, seção J)", () => {
   it("manda chave de escrita, parceiro e corpo só com nome e senha; lê o nome de volta", async () => {
     const { svc, calls } = build(() => json({ aplicado: true, ssid: "Casa do Joao" }));
-    expect(await svc.setWifi(REQ)).toEqual({ ssid: "Casa do Joao" });
+    expect(await svc.setWifi(REQ)).toEqual({ ssid: "Casa do Joao", ssid5: null });
     expect(calls[0]!.url).toBe("https://wiki.exemplo/proxy/redeneutra/v3/clientes/10001-JHV/wifi");
     expect(calls[0]!.headers["X-RedeNeutra-Write-Key"]).toBe("chave-escrita");
     expect(calls[0]!.headers["X-RedeNeutra-Partner"]).toBe("JHV");
@@ -42,6 +42,11 @@ describe("WikiCustomerActions.setWifi (contrato v3, seção J)", () => {
   ])("%i %s vira recusa de negócio com o código", async (status, error) => {
     const { svc } = build(() => json({ error }, status));
     await expect(svc.setWifi(REQ)).rejects.toMatchObject({ code: error, status });
+  });
+
+  it("a rede 5 GHz vem com nome próprio (ssid5, 29 out 2026)", async () => {
+    const { svc } = build(() => json({ aplicado: true, ssid: "teste", ssid5: "teste_5G" }));
+    expect(await svc.setWifi(REQ)).toEqual({ ssid: "teste", ssid5: "teste_5G" });
   });
 
   it("404 vira login_desconhecido", async () => {

@@ -221,6 +221,8 @@ export interface WifiRequest {
 export interface WifiResult {
   /** SSID que ficou na ONU, como a Wiki leu de volta do ACS. */
   ssid: string | null;
+  /** Nome da rede 5 GHz: o mesmo com `_5G` no fim (Wiki, 29 out 2026). */
+  ssid5?: string | null;
 }
 
 export interface CustomerActions {
@@ -411,8 +413,9 @@ export interface WifiDevice {
 export interface WifiLastChange {
   estado: "em_andamento" | "aplicado" | "falhou";
   banda: 24 | 5 | null;
-  motivo: "recusado" | "sem_convergencia" | "erro_interno" | null;
+  motivo: string | null;
   ssid: string | null;
+  ssid5?: string | null;
   duracaoMs: number | null;
   atualizadoEm: string;
 }

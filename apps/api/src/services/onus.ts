@@ -159,6 +159,9 @@ export function diagnose(input: { detalhe: OnuDetail | null; status: ClientStatu
   }
   if (status?.autenticacao.estado === "desconectado") {
     out.push({ tom: "bad", codigo: "pppoe_caido", titulo: "Fibra boa, PPPoE caído", texto: `A fibra está no ar mas o roteador não autentica. Reinicie a ONU pelo portal; se não voltar, confira se o roteador está em PPPoE com o login ${login}.`, acao: "reiniciar" });
+  } else if (status?.autenticacao.motivo === "aguardando_leitura_apos_religar") {
+    // A ONU religou depois da última leitura do NE40; a Wiki grava uma nova em ~1 min (29 out 2026).
+    out.push({ tom: "mute", codigo: "sem_leitura", titulo: "Verificando conexão…", texto: "A ONU religou há pouco e a leitura do PPPoE sai em cerca de 1 minuto. Atualize em instantes.", acao: null });
   } else if (status?.autenticacao.estado !== "conectado") {
     // Sem leitura do PPPoE não dá para dizer que está tudo certo (29 out 2026, 33766-JHV: "Tudo certo" com PPPoE sem leitura).
     out.push({ tom: "mute", codigo: "sem_leitura", titulo: "PPPoE sem leitura", texto: `A fibra está boa, mas a rede não informou agora se o login ${login} está autenticado. Atualize em instantes; se o cliente está sem internet, reinicie a ONU pelo portal.`, acao: "reiniciar" });

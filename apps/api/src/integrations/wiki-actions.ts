@@ -25,7 +25,7 @@ const snapshotSchema = z.object({
   atualizadoEm: z.string().datetime({ offset: true }),
 });
 
-const wifiSchema = z.object({ aplicado: z.literal(true), ssid: z.string().nullable().default(null) });
+const wifiSchema = z.object({ aplicado: z.literal(true), ssid: z.string().nullable().default(null), ssid5: z.string().nullable().default(null) });
 
 const startedSchema = z.object({ operacaoId: z.string().min(1), estado });
 
@@ -95,7 +95,8 @@ export class WikiCustomerActions implements CustomerActions {
       throw new OperationRefused(typeof code === "string" ? code : res.status === 404 ? "login_desconhecido" : "recusada", res.status);
     }
     if (!res.ok) throw new IntegrationError("wiki", `POST /clientes/{login}/wifi ${res.status}`, res.status);
-    return { ssid: this.parse(wifiSchema, json, "Wi-Fi").ssid };
+    const { ssid, ssid5 } = this.parse(wifiSchema, json, "Wi-Fi");
+    return { ssid, ssid5 };
   }
 
   async start(req: OperationRequest) {

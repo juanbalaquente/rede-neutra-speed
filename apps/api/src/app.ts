@@ -744,7 +744,7 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
     );
     const done = await changeWifi(db, actionsSvc(), c.get("user"), id, { ssid: body.ssid ?? null, senha: body.senha }, { ip: clientIp(c) });
     c.header("Cache-Control", "no-store");
-    return c.json({ ok: true, ssid: done.ssid });
+    return c.json({ ok: true, ssid: done.ssid, ssid5: done.ssid5 });
   });
 
   /** Depois de "não deu para confirmar": como a Wiki terminou a troca de Wi-Fi (só a desta tentativa; nunca a senha). */

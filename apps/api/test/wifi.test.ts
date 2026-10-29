@@ -202,6 +202,20 @@ describe("troca do Wi-Fi do cliente", () => {
       }
     });
 
+    it("409 troca_em_andamento: código próprio, e a troca anterior em curso é acompanhada (com o nome da 5 GHz)", async () => {
+      const { ate } = await partner();
+      const id = await installed(ate);
+      // A troca anterior começou há 2 min e a Wiki ainda insiste nela.
+      status.wifiLast.set("10001-JHV", { estado: "em_andamento", banda: null, motivo: null, ssid: "teste", ssid5: "teste_5G", duracaoMs: null, atualizadoEm: new Date(Date.now() - 120_000).toISOString() });
+      actions.setWifi = async () => {
+        throw new OperationRefused("troca_em_andamento", 409);
+      };
+      const res = await wifi(ate, id, { ssid: "teste", senha: SENHA });
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toBe("troca_em_andamento");
+      expect(await (await outcome(ate, id)).json()).toMatchObject({ estado: "em_andamento", ssid: "teste", ssid5: "teste_5G" });
+    });
+
     it("a Wiki sem troca registrada (404) vira sem_registro", async () => {
       const { ate } = await partner();
       const id = await installed(ate);

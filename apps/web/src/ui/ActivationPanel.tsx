@@ -223,7 +223,7 @@ function Progress({ activation, onChange }: { activation: Activation; onChange: 
           <WifiForm installationId={activation.reservationId} onDone={(ssid) => setWifiDone(ssid)} />
         </div>
       ) : (
-        <p className="atv-vlan">Wi-Fi configurado{wifiDone ? <> na rede <b>{wifiDone}</b></> : ""}. Para trocar de novo, use as ações do cliente depois de fechar a O.S.</p>
+        <p className="atv-vlan">Wi-Fi configurado{wifiDone ? <>: <b>{wifiDone}</b></> : ""}. Para trocar de novo, use as ações do cliente depois de fechar a O.S.</p>
       ))}
     </div>
   );

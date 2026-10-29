@@ -185,3 +185,18 @@ describe("PPPoE sem leitura", () => {
     expect(out[0]).toMatchObject({ titulo: "PPPoE sem leitura", acao: "reiniciar" });
   });
 });
+
+describe("PPPoE logo depois de religar a ONU", () => {
+  it("aguardando_leitura_apos_religar mostra 'Verificando conexão…', não alerta de PPPoE caído", () => {
+    const status = {
+      login: "33766-JHV",
+      fibra: { estado: "online", sinalDbm: -22, uptimeDesde: null, ultimaQuedaEm: null, atualizadoEm: new Date().toISOString() },
+      autenticacao: { estado: "desconhecido", ip: null, desde: null, atualizadoEm: null, motivo: "aguardando_leitura_apos_religar" },
+      contrato: { estado: "ativo", desde: null, atualizadoEm: new Date().toISOString() },
+      onu: { serial: "HWTCD5B0DFA3", modelo: "HG8145V5", olt: "OLT_BACKBONE_CENTRAL", vlan: null },
+      bloqueio: null,
+    } as never;
+    const out = diagnose({ detalhe: null, status, minimoDbm: -22.9, bloqueado: false, login: "33766-JHV" });
+    expect(out).toEqual([expect.objectContaining({ codigo: "sem_leitura", titulo: "Verificando conexão…", acao: null })]);
+  });
+});

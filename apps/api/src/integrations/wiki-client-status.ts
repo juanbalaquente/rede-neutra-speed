@@ -101,8 +101,10 @@ const SENTINEL = -99;
 const wifiLastSchema = z.object({
   estado: z.enum(["em_andamento", "aplicado", "falhou"]),
   banda: z.union([z.literal(24), z.literal(5)]).nullable().default(null),
-  motivo: z.enum(["recusado", "sem_convergencia", "erro_interno"]).nullable().default(null),
+  // Motivo novo da Wiki não pode derrubar a consulta: a tela traduz os conhecidos e mostra o resto genérico.
+  motivo: z.string().nullable().default(null),
   ssid: z.string().nullable().default(null),
+  ssid5: z.string().nullable().default(null),
   duracaoMs: z.number().nullable().default(null),
   atualizadoEm: z.string(),
 });

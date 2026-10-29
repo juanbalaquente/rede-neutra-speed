@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "../api";
 import { clientStatusApi, type Achado, type OnuDetailView, type OnuItem, type OnuList, type OnuProblema, type SignalView } from "../clientStatusApi";
-import { CONTRATO, FIBRA, Light, PPP, ago, fmtDbm, since } from "../ui/ClientStatusPanel";
+import { CONTRATO, FIBRA, Light, ago, fmtDbm, pppLight, since } from "../ui/ClientStatusPanel";
 import { CustomerActionsPanel } from "../ui/CustomerActionsPanel";
 import { SearchIcon } from "../ui/Icons";
 import { SignalChart } from "../ui/SignalChart";
@@ -172,7 +172,7 @@ function Detail({ id, user, onOpenTicket, onOpenInstallation, onChanged }: { id:
         {s && (
           <div className="lights">
             <Light title="Fibra" label={FIBRA[o?.estado ?? s.fibra.estado].label} tone={FIBRA[o?.estado ?? s.fibra.estado].tone} detail={null} age={d?.lidoEm ?? s.fibra.atualizadoEm} stale={false} />
-            <Light title="PPPoE" label={PPP[s.autenticacao.estado].label} tone={PPP[s.autenticacao.estado].tone} detail={s.autenticacao.ip} age={s.autenticacao.atualizadoEm} stale={false} />
+            <Light title="PPPoE" label={pppLight(s.autenticacao).label} tone={pppLight(s.autenticacao).tone} detail={s.autenticacao.ip} age={s.autenticacao.atualizadoEm} stale={false} />
             <Light title="Contrato" label={CONTRATO[s.contrato.estado].label} tone={CONTRATO[s.contrato.estado].tone} detail={null} age={s.contrato.atualizadoEm} stale={false} />
           </div>
         )}

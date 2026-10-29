@@ -168,9 +168,14 @@ export async function changeWifi(
   const base = { partnerId: reservation.partnerId, userId: user.id, entity: "port_reservation", entityId: reservation.id, ip: opts.ip };
   try {
     const done = await svc.setWifi({ login, partnerCode: partner.code, ssid: input.ssid, senha: input.senha });
-    await recordAudit(db, { ...base, action: "cliente.wifi_alterado", data: { login, ssid: done.ssid ?? input.ssid, senhaTrocada: true } });
-    return { ssid: done.ssid ?? input.ssid };
+    await recordAudit(db, { ...base, action: "cliente.wifi_alterado", data: { login, ssid: done.ssid ?? input.ssid, ssid5: done.ssid5 ?? null, senhaTrocada: true } });
+    return { ssid: done.ssid ?? input.ssid, ssid5: done.ssid5 ?? null };
   } catch (e) {
+    if (e instanceof OperationRefused && e.code === "troca_em_andamento") {
+      // A troca anterior continua valendo: a tela passa a acompanhá-la em vez de deixar repetir.
+      await recordAudit(db, { ...base, action: "cliente.wifi_recusado", data: { login, motivo: e.code } });
+      throw new AppError(409, "troca_em_andamento", WIFI_REFUSAL.troca_em_andamento!);
+    }
     if (e instanceof OperationRefused) {
       await recordAudit(db, { ...base, action: "cliente.wifi_recusado", data: { login, motivo: e.code } });
       throw new AppError(WIFI_STATUS.has(e.status) ? (e.status as 403 | 404 | 429 | 502 | 503) : 409, "wifi_recusado", WIFI_REFUSAL[e.code] ?? `A Speed não conseguiu trocar o Wi-Fi agora (código: ${e.code}).`);

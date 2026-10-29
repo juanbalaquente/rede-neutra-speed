@@ -29,7 +29,7 @@ async function reservationOf(db: Db, user: SessionUser, id: string) {
 
 export type WifiOutcome =
   | { estado: "sem_registro" }
-  | { estado: "em_andamento" | "aplicado" | "falhou"; banda: 24 | 5 | null; motivo: string | null; ssid: string | null; duracaoMs: number | null };
+  | { estado: "em_andamento" | "aplicado" | "falhou"; banda: 24 | 5 | null; motivo: string | null; ssid: string | null; ssid5: string | null; duracaoMs: number | null };
 
 /**
  * Como terminou a troca de Wi-Fi que o portal acabou de pedir (depois de um 504). Só vale o registro da Wiki que é desta
@@ -42,8 +42,9 @@ export async function getWifiOutcome(db: Db, svc: ClientStatusService | undefine
   if (attempt === undefined) return { estado: "sem_registro" };
   const { login, code } = await loginAndCode(db, reservation);
   const last = await service.wifiLastChange(login, code);
-  if (!last || Date.parse(last.atualizadoEm) < attempt - 5000) return { estado: "sem_registro" };
-  return { estado: last.estado, banda: last.banda, motivo: last.motivo, ssid: last.ssid, duracaoMs: last.duracaoMs };
+  // Troca em andamento é a atual por definição (a Wiki insiste por até 4 min, e um 409 troca_em_andamento acompanha a anterior).
+  if (!last || (last.estado !== "em_andamento" && Date.parse(last.atualizadoEm) < attempt - 5000)) return { estado: "sem_registro" };
+  return { estado: last.estado, banda: last.banda, motivo: last.motivo, ssid: last.ssid, ssid5: last.ssid5 ?? null, duracaoMs: last.duracaoMs };
 }
 
 async function loginAndCode(db: Db, reservation: { id: string; partnerId: string }) {

@@ -6,9 +6,15 @@ const ASCII = /^[\x20-\x7E]+$/;
 /** A Wiki exige maiúscula, minúscula, número e caractere especial (senão 422 senha_fraca). */
 const classes = (s: string) => ({ maiuscula: /[A-Z]/.test(s), minuscula: /[a-z]/.test(s), numero: /\d/.test(s), especial: /[^A-Za-z0-9 ]/.test(s) });
 
-/** Depois de "não deu para confirmar": consulta a Wiki de 5 em 5 s por até 2 minutos e meio. */
-const POLL_MS = 5000;
-const POLL_MAX = 30;
+/** Depois de "não deu para confirmar": a Wiki insiste por até 4 min (29 out 2026); consulta de 10 em 10 s por até 4 min e meio. */
+const POLL_MS = 10_000;
+const POLL_MAX = 27;
+
+/** A Wiki dá à rede 5 GHz o mesmo nome com `_5G` no fim; o técnico precisa ver os dois. */
+export function redes(ssid: string | null | undefined, ssid5: string | null | undefined): string | null {
+  if (!ssid) return null;
+  return ssid5 ? `Rede 2,4 GHz: ${ssid} · Rede 5 GHz: ${ssid5}` : ssid;
+}
 
 const FALHA: Record<string, string> = {
   recusado: "A ONU recusou a troca. Confira se ela está online e tente de novo daqui a pouco.",
@@ -16,7 +22,8 @@ const FALHA: Record<string, string> = {
   erro_interno: "A Speed teve um erro ao aplicar a troca. Teste no aparelho antes de repetir.",
 };
 
-type Waiting = { tries: number } | null;
+/** `anterior`: o 409 troca_em_andamento, a tela acompanha a troca que já estava em curso. */
+type Waiting = { tries: number; anterior?: boolean } | null;
 
 /**
  * Nome e senha do Wi-Fi do cliente, enviados à ONU pela Speed. Usado pelo técnico logo depois da ONU ficar online
@@ -46,17 +53,19 @@ export function WifiForm({ installationId, onDone, onCancel, submitLabel = "Conf
 
   // Acompanha o resultado depois de um "sem confirmação".
   const tries = waiting?.tries;
+  const anterior = waiting?.anterior;
   useEffect(() => {
     if (tries === undefined) return;
     const t = setTimeout(async () => {
-      let next: Waiting = { tries: tries + 1 };
+      let next: Waiting = { tries: tries + 1, anterior };
       try {
         const r = await api.wifiOutcome(installationId);
         if (r.estado === "aplicado") {
-          say("Wi-Fi configurado.");
+          const nomes = redes(r.ssid ?? sentSsid.current, r.ssid5);
+          say(nomes ? `Wi-Fi configurado. ${nomes}` : "Wi-Fi configurado.");
           setWaiting(null);
-          setVerdict({ ok: true, text: "A Speed confirmou: o Wi-Fi foi aplicado. Teste no celular." });
-          doneRef.current?.(r.ssid ?? sentSsid.current);
+          setVerdict({ ok: true, text: `A Speed confirmou: o Wi-Fi foi aplicado${nomes ? ` (${nomes})` : ""}. Teste no celular.` });
+          doneRef.current?.(nomes);
           return;
         }
         if (r.estado === "falhou") {
@@ -75,7 +84,7 @@ export function WifiForm({ installationId, onDone, onCancel, submitLabel = "Conf
       setWaiting(next);
     }, tries === 0 ? 1000 : POLL_MS);
     return () => clearTimeout(t);
-  }, [tries, installationId, say]);
+  }, [tries, anterior, installationId, say]);
 
   async function send() {
     setBusy(true);
@@ -83,12 +92,15 @@ export function WifiForm({ installationId, onDone, onCancel, submitLabel = "Conf
     sentSsid.current = ssid.trim() || null;
     try {
       const r = await api.changeWifi(installationId, { ssid: ssid.trim() || null, senha });
-      say(r.ssid ? `Wi-Fi configurado (rede ${r.ssid}).` : "Senha do Wi-Fi configurada.");
+      const nomes = redes(r.ssid, r.ssid5);
+      say(nomes ? `Wi-Fi configurado. ${nomes}` : "Senha do Wi-Fi configurada.");
       setSenha("");
-      onDone?.(r.ssid);
+      onDone?.(nomes);
     } catch (e) {
       setSenha("");
+      // 504 da Wiki: ela continua tentando por até 4 min. 409: já havia uma troca em curso; acompanha aquela.
       if (e instanceof ApiError && e.code === "wifi_sem_confirmacao") setWaiting({ tries: 0 });
+      else if (e instanceof ApiError && e.code === "troca_em_andamento") setWaiting({ tries: 0, anterior: true });
       else say(e instanceof Error ? e.message : "Falha ao configurar o Wi-Fi.", "bad");
     } finally {
       setBusy(false);
@@ -98,8 +110,8 @@ export function WifiForm({ installationId, onDone, onCancel, submitLabel = "Conf
   if (waiting) {
     return (
       <div className="fld" role="status">
-        <span>A Speed ainda está aplicando o Wi-Fi nas duas redes.</span>
-        <small>Isso pode levar mais 1 ou 2 minutos. A tela atualiza sozinha; não envie de novo (são 5 trocas por hora).</small>
+        <span>{anterior ? "Troca em andamento: a troca pedida antes ainda está sendo aplicada." : "Aplicando… a Speed está configurando o Wi-Fi nas duas redes."}</span>
+        <small>Logo depois de ativar, a ONU pode demorar a responder e a Speed insiste por até 4 minutos. A tela atualiza sozinha; não envie de novo (são 5 trocas por hora).</small>
       </div>
     );
   }
@@ -119,9 +131,9 @@ export function WifiForm({ installationId, onDone, onCancel, submitLabel = "Conf
           {!ASCII.test(senha) ? "A senha não pode ter acento nem ç." : senha.length < 8 ? "A senha precisa de pelo menos 8 caracteres." : faltam.length ? `Falta na senha: ${faltam.join(", ")}.` : "A senha passa de 63 caracteres."}
         </small>
       )}
-      <small className="muted">A troca leva de 30 segundos a 1 minuto (as duas redes, 2,4 e 5 GHz) e os aparelhos conectados podem cair por instantes. Máximo de 5 trocas por hora.</small>
+      <small className="muted">A rede 5 GHz recebe o mesmo nome com _5G no fim (ex.: casa e casa_5G) e a mesma senha. A troca leva de 30 segundos a 1 minuto (até 4 logo depois de ativar) e os aparelhos conectados podem cair por instantes. Máximo de 5 trocas por hora.</small>
       <div className="acts2">
-        <button className="btn sm" disabled={busy || !ssidOk || !senhaOk}>{busy ? "Enviando… (pode levar até 1 min e meio)" : submitLabel}</button>
+        <button className="btn sm" disabled={busy || !ssidOk || !senhaOk}>{busy ? "Enviando…" : submitLabel}</button>
         {onCancel && <button type="button" className="btn sec sm" onClick={onCancel}>Voltar</button>}
       </div>
     </form>

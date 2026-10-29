@@ -20,6 +20,11 @@ export const PPP: Record<AutenticacaoEstado, { label: string; tone: Tone }> = {
   desconectado: { label: "Desconectado", tone: "bad" },
   desconhecido: { label: "Sem leitura", tone: "mute" },
 };
+/** PPPoE logo depois de religar a ONU: a Wiki ainda não leu de novo (~1 min), não é queda (29 out 2026). */
+export function pppLight(a: { estado: AutenticacaoEstado; motivo?: string | null }) {
+  if (a.estado === "desconhecido" && a.motivo === "aguardando_leitura_apos_religar") return { label: "Verificando conexão…", tone: "mute" as Tone };
+  return PPP[a.estado];
+}
 export const CONTRATO: Record<ContratoEstado, { label: string; tone: Tone }> = {
   ativo: { label: "Ativo", tone: "ok" },
   pendente_aprovacao: { label: "Aguardando aprovação", tone: "mute" },
@@ -118,7 +123,7 @@ export function ClientStatusPanel({ installationId, onOpenTicket }: { installati
         <>
           <div className="lights">
             <Light title="Fibra" label={FIBRA[s.fibra.estado].label} tone={FIBRA[s.fibra.estado].tone} detail={s.fibra.estado === "online" ? fmtDbm(s.fibra.sinalDbm) : null} age={s.fibra.atualizadoEm} stale={view.fibraVelha} />
-            <Light title="PPPoE" label={PPP[s.autenticacao.estado].label} tone={PPP[s.autenticacao.estado].tone} detail={s.autenticacao.ip ?? (s.autenticacao.motivo === "pppoe_ainda_nao_disponivel" ? "leitura do PPPoE ainda não disponível" : null)} age={s.autenticacao.atualizadoEm} stale={view.pppoeVelho} />
+            <Light title="PPPoE" label={pppLight(s.autenticacao).label} tone={pppLight(s.autenticacao).tone} detail={s.autenticacao.ip ?? (s.autenticacao.motivo === "pppoe_ainda_nao_disponivel" ? "leitura do PPPoE ainda não disponível" : null)} age={s.autenticacao.atualizadoEm} stale={view.pppoeVelho} />
             <Light title="Contrato" label={CONTRATO[s.contrato.estado].label} tone={CONTRATO[s.contrato.estado].tone} detail={null} age={s.contrato.atualizadoEm} stale={false} />
           </div>
           <div className="g3 os-sum">
