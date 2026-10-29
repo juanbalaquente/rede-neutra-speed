@@ -76,7 +76,7 @@ describe("troca do Wi-Fi do cliente", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     const text = await res.text();
     expect(text).not.toContain(SENHA);
-    expect(JSON.parse(text)).toEqual({ ok: true, ssid: "Casa do Joao" });
+    expect(JSON.parse(text)).toEqual({ ok: true, ssid: "Casa do Joao", ssid5: null });
     expect(actions.lastWifi).toMatchObject({ login: "10001-JHV", partnerCode: "JHV", ssid: "Casa do Joao", senha: SENHA });
 
     // A senha não pode estar em lugar nenhum do banco.
