@@ -3,6 +3,7 @@ import { MockActivationService } from "../src/integrations/mock-activation.js";
 import { MockClientStatus } from "../src/integrations/mock-client-status.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
 import { OS_REQUIRED_KINDS } from "../src/services/installations.js";
+import { diagnose } from "../src/services/onus.js";
 import { setup } from "./helpers.js";
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
@@ -111,7 +112,7 @@ describe("diagnóstico da ONU", () => {
     expect(d.status.autenticacao.estado).toBe("conectado");
     expect(d.detalheProblema).toBeNull();
     expect(codes(d)).toEqual(["tudo_certo"]);
-    expect(wiki.calls).toEqual(expect.arrayContaining(["status:10001-JHV", "onu:10001-JHV"]));
+    expect(wiki.calls).toEqual(expect.arrayContaining(["status:10001-JHV:fresh", "onu:10001-JHV"]));
   });
 
   it("cada cenário dá o diagnóstico certo, na ordem em que o suporte age", async () => {
@@ -166,5 +167,21 @@ describe("diagnóstico da ONU", () => {
     expect((await ctx.call(other.ate, "GET", `/onus/${id}`)).status).toBe(404);
     expect(wiki.calls).toHaveLength(before);
     expect((await detail(await ctx.login("admin@speed.test"), id)).cliente.login).toBe("10001-JHV");
+  });
+});
+
+describe("PPPoE sem leitura", () => {
+  it("fibra boa sem leitura do PPPoE não vira 'tudo certo' (33766-JHV, 29 out 2026)", () => {
+    const status = {
+      login: "33766-JHV",
+      fibra: { estado: "online", sinalDbm: -22, uptimeDesde: null, ultimaQuedaEm: null, atualizadoEm: new Date().toISOString() },
+      autenticacao: { estado: "desconhecido", ip: null, desde: null, atualizadoEm: new Date().toISOString() },
+      contrato: { estado: "ativo", desde: null, atualizadoEm: new Date().toISOString() },
+      onu: { serial: "HWTCD5B0DFA3", modelo: "HG8145V5", olt: "OLT_BACKBONE_CENTRAL", vlan: null },
+      bloqueio: null,
+    } as never;
+    const out = diagnose({ detalhe: null, status, minimoDbm: -22.9, bloqueado: false, login: "33766-JHV" });
+    expect(out.map((a) => a.codigo)).toEqual(["sem_leitura"]);
+    expect(out[0]).toMatchObject({ titulo: "PPPoE sem leitura", acao: "reiniciar" });
   });
 });
