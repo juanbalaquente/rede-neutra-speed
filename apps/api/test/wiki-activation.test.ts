@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
+import { portReservations } from "../src/db/schema.js";
 import type { Http } from "../src/integrations/http.js";
 import { MockActivationService } from "../src/integrations/mock-activation.js";
 import { MockNetworkMap } from "../src/integrations/mock.js";
@@ -187,6 +189,50 @@ describe("sem leitura de sinal (a Wiki tenta por 2 min e devolve a decisão sem 
       expect(list[0]).toMatchObject({ type: "trava_sinal", origin: "sistema" });
       expect(list[0].description).not.toMatch(/perda de/); // sem medição, sem números inventados
       expect(list[0].description).toContain("ONU ligada e fibra conectada");
+    } finally {
+      await ctx.close();
+    }
+  });
+});
+
+describe("falha na configuração (a Wiki deixa a ONU autorizada e o NOC corrige)", () => {
+  it("o portal segue lendo a Wiki e, quando a ONU fica online, converte a reserva", async () => {
+    let estado = "falha_provisionamento";
+    const snap = () => ({
+      ativacaoId: "a1",
+      estado,
+      serial: "HWTCD5B0DFA3",
+      sinal: null,
+      vlan: null,
+      prazoDecisaoAte: null,
+      motivo: estado === "falha_provisionamento" ? "provisionamento_falhou" : null,
+      atualizadoEm: new Date().toISOString(),
+    });
+    const svc: ActivationService = {
+      listPendingOnus: async () => [],
+      start: async () => ({ ativacaoId: "a1", estado: "recebida" as const }),
+      get: async () => snap() as never,
+      decide: async () => snap() as never,
+    };
+    const ctx = await setup(new MockNetworkMap(), svc);
+    try {
+      const a = await ctx.createPartner("JHV Telecom", "11111111000111", { code: "JHV", maxCtoOccupancyPct: 100, maxActiveReservations: 50 });
+      const cookie = await ctx.login(a.atendente);
+      await ctx.call(cookie, "POST", "/viability", { address: "Rua dos Testes, 100, Belo Horizonte" });
+      const { reservation } = await (await ctx.call(cookie, "POST", "/reservations", { ctoId: "CTO-TESTE-01", address: "Rua dos Testes, 100, Belo Horizonte" })).json();
+      await ctx.setCliente(cookie, reservation.id);
+      await ctx.upload(cookie, reservation.id, { kind: "medicao" });
+      const { activation } = await (await ctx.call(cookie, "POST", "/activations", { reservationId: reservation.id, serial: "HWTCD5B0DFA3", contrato: "33766", sinalCtoDbm: -21.4 })).json();
+      const read = async () => (await (await ctx.call(cookie, "GET", `/activations/${activation.id}`)).json()).activation;
+
+      expect(await read()).toMatchObject({ state: "falha_provisionamento" });
+      // Não abre nova tentativa na mesma reserva: a ONU continua autorizada.
+      expect((await ctx.call(cookie, "POST", "/activations", { reservationId: reservation.id, serial: "HWTCD5B0DFA3", contrato: "33766", sinalCtoDbm: -21.4 })).status).toBe(409);
+
+      estado = "online";
+      expect(await read()).toMatchObject({ state: "online" });
+      const [r] = await ctx.db.select().from(portReservations).where(eq(portReservations.id, reservation.id));
+      expect(r?.status).toBe("convertida");
     } finally {
       await ctx.close();
     }

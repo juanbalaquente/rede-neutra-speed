@@ -21,7 +21,7 @@ const STEPS: { state: ActivationState; label: string }[] = [
 const STATE_NOTE: Partial<Record<ActivationState, string>> = {
   recebida: "Pedido na fila.",
   aguardando_cliente: "O contrato ainda não chegou ao sistema de rede. A liberação continua sozinha quando ele chegar (pode levar até 2 horas); não refaça o pedido.",
-  falha_provisionamento: "A ONU foi autorizada, mas a configuração falhou. A Speed foi avisada; não refaça a instalação. Se a ONU não for Huawei de modelo aceito, avise a Speed para trocar.",
+  falha_provisionamento: "A ONU foi autorizada, mas a configuração falhou. A Speed foi avisada; não refaça a instalação. Quando a Speed corrigir, esta tela segue sozinha. Se a ONU não for Huawei de modelo aceito, avise a Speed para trocar.",
   cancelada: "Ativação cancelada. A reserva continua ativa e você pode tentar de novo.",
   falhou: "A ativação não pôde ser feita.",
 };
@@ -259,7 +259,9 @@ export function ActivationPanel({
   const activationId = activation?.id;
   const activationState = activation?.state;
   useEffect(() => {
-    if (!activationId || !activationState || FINAL.includes(activationState)) return;
+    // Na falha de configuração a Speed corrige pela Wiki e a ONU pode ficar online depois: segue olhando, mais devagar.
+    const slow = activationState === "falha_provisionamento";
+    if (!activationId || !activationState || (FINAL.includes(activationState) && !slow)) return;
     const t = setInterval(() => {
       api.activation(activationId).then((r) => { lastPollError.current = ""; setActivation(r.activation); }).catch((e) => {
         // Avisa uma vez por erro diferente (a consulta repete a cada 4 s): antes a falha sumia e a tela parecia parada.
@@ -267,7 +269,7 @@ export function ActivationPanel({
         if (text !== lastPollError.current) say(`Não consegui ler o andamento: ${text}`, "bad");
         lastPollError.current = text;
       });
-    }, 4000);
+    }, slow ? 30_000 : 4000);
     return () => clearInterval(t);
   }, [activationId, activationState, say]);
 

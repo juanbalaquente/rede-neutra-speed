@@ -235,10 +235,16 @@ async function applySnapshot(db: Db, row: typeof activations.$inferSelect, snap:
   return updated!;
 }
 
+/**
+ * Estados em que o portal para de consultar a Wiki. A falha de configuração continua sendo lida: a ONU fica autorizada,
+ * o NOC resolve pela Wiki e a ativação pode virar online depois (29 out 2026, 33766-JHV).
+ */
+const STOP_SYNC = ACTIVATION_FINAL.filter((s) => s !== "falha_provisionamento");
+
 /** Estado atual da ativação, consultando a Wiki enquanto não terminou. */
 export async function getActivation(db: Db, svc: ActivationService, user: SessionUser, id: string) {
   const row = await ownActivation(db, requirePartner(user), id);
-  if (ACTIVATION_FINAL.includes(row.state as ActivationState) || !row.wikiActivationId) return row;
+  if (STOP_SYNC.includes(row.state as ActivationState) || !row.wikiActivationId) return row;
   const snap = await guard(async () => svc.get(row.wikiActivationId!, await partnerCodeOf(db, row.partnerId)));
   if (!snap) throw new AppError(502, "ativacao_perdida", "A Wiki não reconhece essa ativação. Fale com a Speed.");
   return applySnapshot(db, row, snap, user.id);
