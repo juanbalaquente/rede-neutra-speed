@@ -110,7 +110,7 @@ describe("abrir a página do roteador", () => {
     ["onu_offline", 409, 409, /fora do ar/],
     ["onu_sem_acs", 409, 409, /não suporta/],
     ["onu_sem_conta_comum", 409, 409, /não suporta/],
-    ["onu_sem_resposta", 409, 409, /alguns minutos/],
+    ["onu_sem_resposta", 409, 409, /cerca de 15 minutos/],
     ["login_recusado_pela_onu", 409, 409, /1 ou 2 minutos/],
     ["limite_de_aberturas", 429, 429, /10 vezes/],
     ["muitas_sessoes_abertas", 429, 429, /alguns minutos/],

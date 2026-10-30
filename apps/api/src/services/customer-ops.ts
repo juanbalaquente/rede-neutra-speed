@@ -197,7 +197,7 @@ const ACESSO_WEB_REFUSAL: Record<string, string> = {
   onu_offline: "A ONU está fora do ar. Confira a situação do cliente e tente quando ela voltar.",
   onu_sem_acs: "Esse equipamento não suporta o acesso pelo portal. Fale com a Speed.",
   onu_sem_conta_comum: "Esse equipamento não suporta o acesso pelo portal. Fale com a Speed.",
-  onu_sem_resposta: "A ONU não respondeu. Tente de novo em alguns minutos.",
+  onu_sem_resposta: "A ONU não respondeu. Tente de novo em cerca de 15 minutos. Se repetir, fale com a Speed.",
   login_recusado_pela_onu: "A ONU recusou o acesso. Tente de novo em 1 ou 2 minutos; se repetir, fale com a Speed.",
   limite_de_aberturas: "A página desse cliente já foi aberta 10 vezes na última hora. Tente de novo mais tarde.",
   muitas_sessoes_abertas: "Há muitas sessões abertas agora. Tente de novo em alguns minutos.",

@@ -26,13 +26,17 @@ Resposta `200`: `{ "url": "https://roteador.spdlink.com.br/abrir/<token>", "expi
 | 409 | `cliente_bloqueado` | |
 | 409 | `onu_offline` | ONU fora do ar |
 | 409 | `onu_sem_acs`, `onu_sem_conta_comum` | equipamento não suporta; falar com a Speed |
-| 409 | `onu_sem_resposta` | tentar de novo em alguns minutos |
+| 409 | `onu_sem_resposta` | a ONU não respondeu ao abrir a página, ou o ACS recusou a gravação; tentar de novo em cerca de 15 minutos e, se repetir, falar com a Speed |
 | 409 | `login_recusado_pela_onu` | tentar de novo em 1 ou 2 minutos; se repetir, falar com a Speed |
 | 429 | `limite_de_aberturas` | máximo de 10 por hora por login |
 | 429 | `muitas_sessoes_abertas` | tentar de novo em alguns minutos |
 | 429 | `Too many requests` | limite de chamadas à rota; tentar de novo em 1 minuto |
 | 502 | `fonte_indisponivel` | tentar de novo |
 | 503 | `acesso_web_desligado` | recurso desligado na Wiki |
+
+**Primeira tentativa real (33766-JHV, HG8145V5, 30 out 2026, 13:08):** `502 fonte_indisponivel` em 20,6 s, tempo limite da Wiki ao abrir a página da ONU. O acesso à página pela rede de gerência estava desligado na ONU, e o mais provável é que tenha voltado a 0 no religamento de 29/10. A falha foi antes do login: nenhuma senha gravada, conta comum intacta. Isso depende do modelo: HG8546M e EG8145X6 mantiveram o acesso depois de religar; HG8245W5-6T e HG8145V5 perderam; os outros não foram medidos.
+
+**Correção anunciada pela Wiki, ainda não pronta:** em cada abertura ela confere esse ajuste e o religa sozinha antes do login (se já estiver ligado, nada é gravado). A chamada não muda. A ONU que não responde ao abrir a página passa de `502 fonte_indisponivel` para `409 onu_sem_resposta`. Até a Wiki avisar, não repetir o teste nessa ONU: falha igual e gasta uma das 10 aberturas por hora.
 
 ## Encerrar antes do prazo (opcional)
 
