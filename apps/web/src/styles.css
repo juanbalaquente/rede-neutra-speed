@@ -256,6 +256,7 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 .fld { display: grid; gap: 6px; font-size: 13px; min-width: 0; align-content: start; }
 .fld > span:first-child { color: var(--ink2); font-weight: 500; }
 .fld small { color: var(--mute); font-size: 12px; }
+.fld small.error { color: var(--bad); }
 .fld input, .fld select { border: 1px solid var(--line2); border-radius: 9px; padding: 9px 11px; background: var(--surf); color: var(--ink); width: 100%; min-width: 0; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
 .fld input:focus, .fld select:focus { border-color: var(--data); box-shadow: 0 0 0 4px var(--data-soft); }
 .inrow { display: flex; gap: 6px; }
@@ -349,7 +350,7 @@ kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--li
 @keyframes atvPulse { 0%, 100% { box-shadow: 0 0 0 0 var(--data-soft); } 50% { box-shadow: 0 0 0 6px var(--data-soft); } }
 .atv-trava { display: grid; gap: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line2)); background: var(--warn-soft); border-radius: 10px; }
 .atv-trava p { margin: 0; font-size: 13.5px; }
-.atv .acts2 { display: flex; gap: 8px; flex-wrap: wrap; }
+.atv .acts2, .summary .acts2 { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { .atv-steps li.now i { animation: none; } }
 
 /* Fotos de campo */

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Http } from "./http.js";
-import { IntegrationError, type CustomerActions, type OperationRequest, type OperationSnapshot, type WifiRequest, type WifiResult } from "./types.js";
+import { IntegrationError, type CustomerActions, type OperationRequest, type OperationSnapshot, type WebAccessLink, type WifiRequest, type WifiResult } from "./types.js";
 
 /**
  * Cliente de ESCRITA da SpeedWiki para as automações do cliente final (/proxy/redeneutra/v3/*).
@@ -27,6 +27,11 @@ const snapshotSchema = z.object({
 
 const wifiSchema = z.object({ aplicado: z.literal(true), ssid: z.string().nullable().default(null), ssid5: z.string().nullable().default(null) });
 
+/** Só https: a url vai direto para a aba do técnico. */
+const webAccessSchema = z.object({ url: z.string().url().startsWith("https://"), expiraEm: z.string().datetime({ offset: true }) });
+
+const webAccessClosedSchema = z.object({ encerrado: z.boolean() });
+
 const startedSchema = z.object({ operacaoId: z.string().min(1), estado });
 
 /** Erro de negócio devolvido pela Wiki (409/422: login_de_outro_parceiro, fatura_em_aberto...). */
@@ -48,6 +53,8 @@ export class WikiCustomerActions implements CustomerActions {
     private readonly writeKey: string,
     /** Cliente com tempo maior só para o Wi-Fi: gravar no ACS leva 8 a 10 s e a conferência soma mais ~5 s (Wiki, 26 out 2026). */
     private readonly wifiHttp: Http = http,
+    /** Idem para a página da ONU: a Wiki pode levar cerca de 1 min gravando a senha na ONU e pede ao menos 90 s (30 out 2026). */
+    private readonly webAccessHttp: Http = http,
   ) {
     this.root = `${base.replace(/\/$/, "")}/proxy/redeneutra/v3`;
   }
@@ -97,6 +104,30 @@ export class WikiCustomerActions implements CustomerActions {
     if (!res.ok) throw new IntegrationError("wiki", `POST /clientes/{login}/wifi ${res.status}`, res.status);
     const { ssid, ssid5 } = this.parse(wifiSchema, json, "Wi-Fi");
     return { ssid, ssid5 };
+  }
+
+  private async webAccess(method: "POST" | "DELETE", login: string, partnerCode: string, body?: unknown): Promise<unknown> {
+    const res = await this.webAccessHttp(`${this.root}/clientes/${encodeURIComponent(login)}/acesso-web`, {
+      method,
+      headers: { "X-RedeNeutra-Write-Key": this.writeKey, "X-RedeNeutra-Partner": partnerCode, Accept: "application/json", "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const json: unknown = await res.json().catch(() => null);
+    const code = (json as { error?: unknown } | null)?.error;
+    // Recusas com código (inclui 429 e 502/503 da Wiki). 401, 504 e resposta sem código são falha de integração.
+    if ([400, 403, 404, 409, 429].includes(res.status) || ([502, 503].includes(res.status) && typeof code === "string")) {
+      throw new OperationRefused(typeof code === "string" ? code : res.status === 404 ? "login_desconhecido" : "recusada", res.status);
+    }
+    if (!res.ok) throw new IntegrationError("wiki", `${method} /clientes/{login}/acesso-web ${res.status}`, res.status);
+    return json;
+  }
+
+  async openWebAccess(req: { login: string; partnerCode: string; solicitante: string }): Promise<WebAccessLink> {
+    return this.parse(webAccessSchema, await this.webAccess("POST", req.login, req.partnerCode, { solicitante: req.solicitante }), "acesso web");
+  }
+
+  async closeWebAccess(login: string, partnerCode: string) {
+    return this.parse(webAccessClosedSchema, await this.webAccess("DELETE", login, partnerCode), "acesso web");
   }
 
   async start(req: OperationRequest) {

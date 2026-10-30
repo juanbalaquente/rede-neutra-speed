@@ -225,7 +225,20 @@ export interface WifiResult {
   ssid5?: string | null;
 }
 
+/** Abertura da página da ONU (rota "acesso-web" da Wiki). A url é de uso único: só atravessa o portal, nunca é gravada nem logada. */
+export interface WebAccessLink {
+  url: string;
+  expiraEm: string;
+}
+
 export interface CustomerActions {
+  /**
+   * Abre a página da ONU por 15 min, com o login feito pela Wiki. Pode levar cerca de 1 min (a Wiki grava a senha na ONU).
+   * Uma nova abertura encerra a sessão anterior do mesmo login. Recusa de negócio vira OperationRefused.
+   */
+  openWebAccess(req: { login: string; partnerCode: string; solicitante: string }): Promise<WebAccessLink>;
+  /** Encerra antes do prazo. encerrado=false: não havia sessão aberta. */
+  closeWebAccess(login: string, partnerCode: string): Promise<{ encerrado: boolean }>;
   /**
    * Troca o nome e/ou a senha do Wi-Fi da ONU pelo ACS (contrato v3, seção J). Resposta direta, sem operação:
    * repetir com os mesmos valores é seguro. Recusa de negócio vira OperationRefused (onu_offline, cliente_bloqueado...).

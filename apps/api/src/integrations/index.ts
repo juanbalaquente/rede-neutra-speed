@@ -32,12 +32,15 @@ function createActivation(config: Config, log: ApiCallLogger): ActivationService
  */
 const WIFI_TIMEOUT_MS = 75_000;
 
+/** Página da ONU: a Wiki pede ao menos 90 s (grava a senha na ONU, cerca de 1 min). Fica abaixo do proxy_read_timeout do nginx (110 s). */
+const WEB_ACCESS_TIMEOUT_MS = 95_000;
+
 function createActions(config: Config, log: ApiCallLogger): CustomerActions | undefined {
   if (config.AUTOMATION_MODE === "off") return undefined;
   if (config.AUTOMATION_MODE === "mock") return new MockCustomerActions();
   const missing = (["WIKI_BASE_URL", "WIKI_WRITE_KEY"] as const).filter((k) => !config[k]);
   if (missing.length) throw new Error(`AUTOMATION_MODE=wiki sem: ${missing.join(", ")}`);
-  return new WikiCustomerActions(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!, createHttp("wiki", log, WIFI_TIMEOUT_MS));
+  return new WikiCustomerActions(createHttp("wiki", log), config.WIKI_BASE_URL!, config.WIKI_WRITE_KEY!, createHttp("wiki", log, WIFI_TIMEOUT_MS), createHttp("wiki", log, WEB_ACCESS_TIMEOUT_MS));
 }
 
 function createTickets(config: Config, log: ApiCallLogger): TicketService | undefined {

@@ -14,7 +14,7 @@ import { AppError, isUniqueViolation } from "./lib/errors.js";
 import { recordAudit } from "./services/audit.js";
 import * as mfa from "./services/mfa.js";
 import { abandonContract, confirmCancelDone, contractIssues, getContract, refreshCancels, retryCancel, retryContract, startContract } from "./services/contracts.js";
-import { approveOperation, changeWifi, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
+import { approveOperation, changeWifi, closeWebAccess, openWebAccess, startBatch, getApprovalTypes, listPendingApprovals, OPERATION_TYPES, refuseOperation, setApprovalTypes } from "./services/customer-ops.js";
 import { signalQuality } from "./services/signal-quality.js";
 import { speedOverview, ticketHotspots } from "./services/speed-overview.js";
 import { deleteCtoLimit, listCtoLimits, setCtoLimit } from "./services/cto-limits.js";
@@ -752,6 +752,19 @@ export function createApp({ db, config, integrations, photoStorage, now, cepLook
     const id = z.string().uuid().parse(c.req.param("id"));
     c.header("Cache-Control", "no-store");
     return c.json(await getWifiOutcome(db, integrations.clientStatus, c.get("user"), id));
+  });
+
+  /** Página da ONU em aba nova, por 15 min. A url é de uso único: a resposta nunca vai para cache. */
+  app.post("/installations/:id/acesso-web", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    const link = await openWebAccess(db, actionsSvc(), c.get("user"), id, { ip: clientIp(c) });
+    c.header("Cache-Control", "no-store");
+    return c.json(link);
+  });
+
+  app.delete("/installations/:id/acesso-web", requireUser, requireRole("atendente", "supervisor"), async (c) => {
+    const id = z.string().uuid().parse(c.req.param("id"));
+    return c.json(await closeWebAccess(db, actionsSvc(), c.get("user"), id, { ip: clientIp(c) }));
   });
 
   app.get("/operations/:id", requireUser, requireRole("atendente", "supervisor"), async (c) => {

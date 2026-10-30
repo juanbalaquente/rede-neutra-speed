@@ -265,6 +265,8 @@ export const api = {
   wifiOutcome: (installationId: string) => request<WifiOutcome>("GET", `/installations/${installationId}/wifi/ultima-troca`),
   changeWifi: (installationId: string, body: { ssid: string | null; senha: string }) =>
     request<{ ok: true; ssid: string | null; ssid5?: string | null }>("POST", `/installations/${installationId}/wifi`, body),
+  openWebAccess: (installationId: string) => request<{ url: string; expiraEm: string }>("POST", `/installations/${installationId}/acesso-web`),
+  closeWebAccess: (installationId: string) => request<{ encerrado: boolean }>("DELETE", `/installations/${installationId}/acesso-web`),
   operation: (id: string) => request<{ operation: CustomerOperation }>("GET", `/operations/${id}`),
   retryOperation: (id: string) => request<{ operation: CustomerOperation }>("POST", `/operations/${id}/retry`),
 

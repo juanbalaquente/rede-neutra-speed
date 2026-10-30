@@ -188,6 +188,79 @@ export async function changeWifi(
   }
 }
 
+const ACESSO_WEB_REFUSAL: Record<string, string> = {
+  parceiro_invalido: "O cadastro do parceiro não foi aceito pela Speed. Fale com a Speed.",
+  login_invalido: "O login desse cliente não foi aceito pela Speed. Fale com a Speed.",
+  login_de_outro_parceiro: "Esse cliente não pertence ao seu contrato.",
+  login_desconhecido: "A Speed não achou a ONU desse cliente.",
+  cliente_bloqueado: "O cliente está bloqueado. Desbloqueie antes de abrir a página do roteador.",
+  onu_offline: "A ONU está fora do ar. Confira a situação do cliente e tente quando ela voltar.",
+  onu_sem_acs: "Esse equipamento não suporta o acesso pelo portal. Fale com a Speed.",
+  onu_sem_conta_comum: "Esse equipamento não suporta o acesso pelo portal. Fale com a Speed.",
+  onu_sem_resposta: "A ONU não respondeu. Tente de novo em alguns minutos.",
+  login_recusado_pela_onu: "A ONU recusou o acesso. Tente de novo em 1 ou 2 minutos; se repetir, fale com a Speed.",
+  limite_de_aberturas: "A página desse cliente já foi aberta 10 vezes na última hora. Tente de novo mais tarde.",
+  muitas_sessoes_abertas: "Há muitas sessões abertas agora. Tente de novo em alguns minutos.",
+  fonte_indisponivel: "O sistema da Speed não respondeu. Tente de novo.",
+  acesso_web_desligado: "A abertura da página do roteador está desligada pela Speed no momento.",
+};
+const ACESSO_WEB_STATUS = new Set<number>([403, 404, 429, 502, 503]);
+
+function webAccessRefusal(e: OperationRefused): AppError {
+  // Sem código conhecido, 429 é o limite de chamadas à rota ("Too many requests").
+  const fallback = e.status === 429 ? "Muitas chamadas agora. Tente de novo em 1 minuto." : `A Speed não conseguiu abrir a página agora (código: ${e.code}).`;
+  return new AppError(ACESSO_WEB_STATUS.has(e.status) ? (e.status as 403 | 404 | 429 | 502 | 503) : 409, "acesso_web_recusado", ACESSO_WEB_REFUSAL[e.code] ?? fallback);
+}
+
+/**
+ * Abre a página da ONU do cliente em nome do usuário logado. A url é de uso único e só atravessa o portal:
+ * não vai para o banco, a auditoria nem o log (a auditoria guarda quem abriu e até quando vale).
+ */
+export async function openWebAccess(db: Db, svc: CustomerActions, user: SessionUser, reservationId: string, opts: { ip?: string | null } = {}) {
+  const reservation = await ownReservation(db, user, reservationId);
+  if (reservation.status !== "convertida") throw new AppError(409, "operacao_indisponivel", "A ONU do cliente ainda não foi liberada.");
+  if (reservation.customerStatus === "cancelado") throw new AppError(409, "operacao_indisponivel", "Esse cliente já foi cancelado.");
+  if (reservation.customerStatus === "bloqueado") throw new AppError(409, "operacao_indisponivel", ACESSO_WEB_REFUSAL.cliente_bloqueado!);
+  const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, reservation.partnerId));
+  if (!partner?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código cadastrado.");
+  const login = await loginOf(db, reservation.id);
+  const solicitante = user.name.slice(0, 120);
+
+  const base = { partnerId: reservation.partnerId, userId: user.id, entity: "port_reservation", entityId: reservation.id, ip: opts.ip };
+  try {
+    const link = await svc.openWebAccess({ login, partnerCode: partner.code, solicitante });
+    await recordAudit(db, { ...base, action: "cliente.acesso_web_aberto", data: { login, solicitante, expiraEm: link.expiraEm } });
+    return link;
+  } catch (e) {
+    if (e instanceof OperationRefused) {
+      await recordAudit(db, { ...base, action: "cliente.acesso_web_recusado", data: { login, motivo: e.code } });
+      throw webAccessRefusal(e);
+    }
+    if (e instanceof IntegrationError) {
+      await recordAudit(db, { ...base, action: "cliente.acesso_web_falhou", data: { login } });
+      throw new AppError(502, "acesso_web_falhou", "Não deu para abrir a página agora. Tente de novo.");
+    }
+    throw e;
+  }
+}
+
+/** Encerra o acesso antes dos 15 min. Vale para cliente em qualquer situação: fechar uma sessão nunca é o que se quer impedir. */
+export async function closeWebAccess(db: Db, svc: CustomerActions, user: SessionUser, reservationId: string, opts: { ip?: string | null } = {}) {
+  const reservation = await ownReservation(db, user, reservationId);
+  const [partner] = await db.select({ code: partners.code }).from(partners).where(eq(partners.id, reservation.partnerId));
+  if (!partner?.code) throw new AppError(422, "codigo_parceiro_ausente", "O parceiro ainda não tem código cadastrado.");
+  const login = await loginOf(db, reservation.id);
+  try {
+    const done = await svc.closeWebAccess(login, partner.code);
+    await recordAudit(db, { partnerId: reservation.partnerId, userId: user.id, action: "cliente.acesso_web_encerrado", entity: "port_reservation", entityId: reservation.id, ip: opts.ip, data: { login, encerrado: done.encerrado } });
+    return done;
+  } catch (e) {
+    if (e instanceof OperationRefused) throw webAccessRefusal(e);
+    if (e instanceof IntegrationError) throw new AppError(502, "acesso_web_falhou", "Não deu para encerrar agora. Tente de novo ou aguarde os 15 minutos.");
+    throw e;
+  }
+}
+
 /** Envia (ou reenvia, com a mesma chave) o pedido à Wiki. Falha de rede deixa a operação "recebida", e repetir é seguro. */
 async function send(db: Db, svc: CustomerActions, row: Row, partnerCode: string): Promise<Row> {
   try {

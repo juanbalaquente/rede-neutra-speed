@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { OperationRefused } from "./wiki-actions.js";
-import { IntegrationError, type CustomerActions, type WifiRequest, type WifiResult, type OperationRequest, type OperationSnapshot, type OperationState, type OperationStep } from "./types.js";
+import { IntegrationError, type CustomerActions, type WebAccessLink, type WifiRequest, type WifiResult, type OperationRequest, type OperationSnapshot, type OperationState, type OperationStep } from "./types.js";
 
 interface Entry {
   req: OperationRequest;
@@ -25,6 +25,21 @@ export class MockCustomerActions implements CustomerActions {
   /** Última troca de Wi-Fi recebida, para os testes conferirem que a senha chegou (só no mock). */
   lastWifi: WifiRequest | null = null;
   wifiCalls = 0;
+  /** Sessões abertas por login, para os testes conferirem a abertura e o encerramento. */
+  readonly webSessions = new Set<string>();
+  lastWebAccess: { login: string; partnerCode: string; solicitante: string } | null = null;
+
+  async openWebAccess(req: { login: string; partnerCode: string; solicitante: string }): Promise<WebAccessLink> {
+    if (req.login.endsWith("-OFF")) throw new OperationRefused("onu_offline", 409);
+    if (req.login.endsWith("-LENTO")) throw new IntegrationError("wiki", "POST /clientes/{login}/acesso-web 504", 504);
+    this.lastWebAccess = { ...req };
+    this.webSessions.add(req.login);
+    return { url: `https://roteador.invalid/abrir/${randomUUID()}`, expiraEm: new Date(Date.now() + 15 * 60_000).toISOString() };
+  }
+
+  async closeWebAccess(login: string, _partnerCode: string) {
+    return { encerrado: this.webSessions.delete(login) };
+  }
 
   async setWifi(req: WifiRequest): Promise<WifiResult> {
     this.wifiCalls += 1;
