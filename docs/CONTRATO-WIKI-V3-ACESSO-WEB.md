@@ -1,6 +1,6 @@
 # Rota da Wiki: abrir a página do roteador (30 out 2026)
 
-**Estado:** a rota está em produção na Wiki, em `https://roteador.spdlink.com.br` (certificado ok). Pelo domínio final a Wiki só validou certificado e recusas: ainda não houve teste completo com um login `-JHV` real. A navegação foi testada à parte numa ONU de bancada (EG8145V5); outros modelos não foram testados.
+**Estado:** a rota está em produção na Wiki, em `https://roteador.spdlink.com.br` (certificado ok), e funcionou pelo portal com um login `-JHV` real (seção abaixo). Só EG8145V5 (bancada) e HG8145V5 (33766-JHV) foram testados; os outros modelos, não.
 
 Regras comuns do `CONTRATO-WIKI-V3-CLIENTES.md`: prefixo `/proxy/redeneutra/v3`, chave de escrita `X-RedeNeutra-Write-Key`, `X-RedeNeutra-Partner`, login PPPoE como chave.
 
@@ -36,7 +36,9 @@ Resposta `200`: `{ "url": "https://roteador.spdlink.com.br/abrir/<token>", "expi
 
 **Primeira tentativa real (33766-JHV, HG8145V5, 30 out 2026, 13:08):** `502 fonte_indisponivel` em 20,6 s, tempo limite da Wiki ao abrir a página da ONU. O acesso à página pela rede de gerência estava desligado na ONU, e o mais provável é que tenha voltado a 0 no religamento de 29/10. A falha foi antes do login: nenhuma senha gravada, conta comum intacta. Isso depende do modelo: HG8546M e EG8145X6 mantiveram o acesso depois de religar; HG8245W5-6T e HG8145V5 perderam; os outros não foram medidos.
 
-**Correção anunciada pela Wiki, ainda não pronta:** em cada abertura ela confere esse ajuste e o religa sozinha antes do login (se já estiver ligado, nada é gravado). A chamada não muda. A ONU que não responde ao abrir a página passa de `502 fonte_indisponivel` para `409 onu_sem_resposta`. Até a Wiki avisar, não repetir o teste nessa ONU: falha igual e gasta uma das 10 aberturas por hora.
+**Correção da Wiki, no ar desde 30 out 2026:** em cada abertura ela confere esse ajuste e, com a página fechada, religa o acesso e a senha da conta comum na mesma gravação, antes do login (se já estiver ligado, nada é gravado). A chamada não muda. Essa abertura leva mais tempo (17 s no teste da Wiki, até cerca de 1 minuto), e a seguinte a um religamento pode voltar a demorar. Se o ACS recusar a gravação ou a ONU não responder, a resposta é `409 onu_sem_resposta`, caso que ainda não aconteceu em teste real.
+
+**Teste pelo portal (30 out 2026, Juan, 33766-JHV):** funcionou pelo botão. Outros modelos seguem sem teste.
 
 ## Encerrar antes do prazo (opcional)
 
