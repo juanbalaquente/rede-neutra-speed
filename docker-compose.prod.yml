@@ -1,0 +1,24 @@
+# Produção: use junto do compose base.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Só o Caddy (80/443) fica exposto; o web deixa de publicar a porta 8088.
+services:
+  web:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      PORTAL_DOMAIN: ${PORTAL_DOMAIN:?defina PORTAL_DOMAIN no .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web]
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

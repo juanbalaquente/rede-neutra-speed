@@ -11,12 +11,17 @@ services:
       test: ["CMD-SHELL", "pg_isready -U rede -d rede_neutra"]
       interval: 5s
       retries: 10
+    # Sem isto o Postgres não volta sozinho quando cai ou a VM reinicia, e a API fica em loop (portal fora de ~2026-11-06 a 2026-11-09).
+    restart: unless-stopped
 
   api:
     build: { context: ., dockerfile: apps/api/Dockerfile }
     env_file: .env
     environment:
       DATABASE_URL: postgres://rede:${POSTGRES_PASSWORD:-rede}@db:5432/rede_neutra
+      PHOTO_DIR: /data/photos
+    volumes:
+      - photos-data:/data/photos
     depends_on:
       db: { condition: service_healthy }
     restart: unless-stopped
@@ -30,3 +35,4 @@ services:
 
 volumes:
   db-data:
+  photos-data:

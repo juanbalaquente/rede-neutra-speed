@@ -1,0 +1,2 @@
+DROP INDEX "contract_requests_live_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "contract_requests_live_idx" ON "contract_requests" USING btree ("reservation_id") WHERE "contract_requests"."state" NOT IN ('falhou', 'abandonada');

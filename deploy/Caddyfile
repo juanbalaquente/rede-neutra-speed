@@ -1,0 +1,19 @@
+# HTTPS automático (Let's Encrypt) para o domínio definido em PORTAL_DOMAIN.
+{$PORTAL_DOMAIN} {
+	encode gzip
+
+	header {
+		# Só HTTPS por 180 dias neste host (sem includeSubDomains: o domínio tem outros sistemas).
+		Strict-Transport-Security "max-age=15552000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(self), camera=(self), microphone=()"
+		# O front carrega a fonte Geist do Google Fonts e usa style inline do React; scripts só do próprio portal.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# Não revelar a versão do nginx.
+		-Server
+	}
+
+	reverse_proxy web:80
+}

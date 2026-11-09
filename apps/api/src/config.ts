@@ -7,8 +7,46 @@ const envSchema = z.object({
   /** Segredo das sessões (JWT). Obrigatório em produção. */
   SESSION_SECRET: z.string().min(32).default("dev-only-secret-troque-em-producao-0000"),
   SESSION_HOURS: z.coerce.number().default(8),
-  /** mock = dados de exemplo; real = Codemaps/OLTCloud/Voalle de verdade. */
-  INTEGRATIONS_MODE: z.enum(["mock", "real"]).default("mock"),
+  /**
+   * mock = dados de exemplo; wiki = API versionada da SpeedWiki (caminho
+   * previsto para produção); real = Codemaps/OLTCloud/Voalle direto (só de
+   * servidor liberado por IP, usado para validação).
+   */
+  INTEGRATIONS_MODE: z.enum(["mock", "wiki", "real"]).default("mock"),
+  /** Só com INTEGRATIONS_MODE=mock. teste = 3 CTOs (o que os testes usam); demo = rede de demonstração com ~40 CTOs por sigla. */
+  MOCK_NETWORK: z.enum(["teste", "demo"]).default("teste"),
+  /** Base da SpeedWiki, sem o /proxy/redeneutra/v1. */
+  WIKI_BASE_URL: z.string().url().optional(),
+  /** Chave da integração, enviada em X-RedeNeutra-Key. Só no ambiente do servidor. */
+  WIKI_API_KEY: z.string().optional(),
+  /**
+   * Liberação de ONU (ESCRITA em produção). off = desligada (padrão); mock = Wiki de mentira;
+   * wiki = rotas /proxy/redeneutra/v2 da SpeedWiki, só com validação do Juan.
+   */
+  ACTIVATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /**
+   * Automações do cliente final: bloquear, desbloquear, reiniciar e cancelar (ESCRITA em produção).
+   * off = desligadas (padrão); mock = Wiki de mentira; wiki = rotas /proxy/redeneutra/v3, só com validação do Juan.
+   */
+  AUTOMATION_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /** Status do cliente (semáforo e sinal de 30 dias), só leitura. off = desligado (padrão); mock; wiki = rotas /proxy/redeneutra/v3 com WIKI_API_KEY. */
+  CLIENT_STATUS_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /** Criação do contrato no Voalle pela Wiki (ESCRITA em produção). off = desligada (padrão; o contrato é informado à mão); mock; wiki = rota /proxy/redeneutra/v3/contratos, só com validação do Juan. */
+  CONTRACT_MODE: z.enum(["off", "mock", "wiki"]).default("off"),
+  /** Chave de escrita da Wiki (X-RedeNeutra-Write-Key), separada da de leitura. */
+  WIKI_WRITE_KEY: z.string().optional(),
+  /** Pasta das fotos de campo. Em produção é um volume do Docker (entra no backup). */
+  PHOTO_DIR: z.string().default("./data/photos"),
+  PHOTO_MAX_MB: z.coerce.number().default(8),
+  /** Base pública do portal (https://...), para montar o link assinado completo das fotos. Sem ela, o link sai só com o caminho. */
+  PUBLIC_BASE_URL: z.string().url().optional(),
+  /**
+   * Segundo fator (TOTP) obrigatório para supervisor e administrador Speed. Padrão: ligado em
+   * produção, desligado em desenvolvimento e testes. "true"/"false" força o valor.
+   */
+  MFA_REQUIRED: z.enum(["true", "false"]).optional(),
+  /** Chave que cifra os segredos TOTP no banco. Sem ela, deriva do SESSION_SECRET (trocá-lo invalidaria todos os segundos fatores). */
+  TOTP_KEY: z.string().min(16).optional(),
   RESERVATION_HOURS: z.coerce.number().default(48),
   CODEMAPS_TOKEN: z.string().optional(),
   CODEMAPS_SECRET: z.string().optional(),

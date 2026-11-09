@@ -1,0 +1,1 @@
+ALTER TABLE "partners" ADD COLUMN "all_regions" boolean DEFAULT false NOT NULL;
