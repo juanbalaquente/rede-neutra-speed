@@ -98,7 +98,13 @@ Para a tela combinar com os dados, use `INTEGRATIONS_MODE=mock`, `MOCK_NETWORK=d
 
 ## Ainda não feito
 
-- Criação de contrato no Voalle com ponto de acesso, aceite e liberação de PPPoE (depende da validação no Voalle).
-- Liberação de ONU: o portal já tem o fluxo completo (foto da medição, trava de sinal, decisão do técnico) contra um mock. Ligar no OLTCloud depende das rotas de escrita da SpeedWiki (`ACTIVATION_MODE=wiki`) e da autorização do Juan.
-- Fotos: o painel de ativação envia as cinco fotos; faltam a O.S. (fechamento) e uma tela de consulta das fotos pela Speed.
-- A tela do cliente (semáforo e sinal de 30 dias) e os chamados já existem no portal; ligar na SpeedWiki depende das rotas dela (v3).
+Revisto em 2026-11-23, conferido no código. Contrato no Voalle, liberação de ONU, fechamento da O.S. com fotos, consulta das fotos pela Speed (Instalações), tela do cliente e chamados pela Wiki já existem e foram usados no piloto JHV desde 2026-10-21 (ver [docs/CONTEXTO.md](docs/CONTEXTO.md) §6 e `docs/modulos/`). Quais interruptores (`*_MODE`) estão ligados em produção: conferir no servidor.
+
+- Mapa colorido por ocupação, ocupação por região no painel da Speed e listas com painel lateral.
+- Modelo da ONU ainda digitado no fechamento da O.S. (o portal não guarda o modelo da lista de pendentes).
+- Tela para editar o preço de referência ao cliente final (`plans.reference_price_cents`).
+- Alarme do cliente por transição entre leituras (hoje é o estado atual).
+- Módulo de WhatsApp e app do técnico.
+- Testes de interface (os testes cobrem só a API).
+
+Validações em produção que faltam e próximos passos: `ONDE_PAREI.md`.

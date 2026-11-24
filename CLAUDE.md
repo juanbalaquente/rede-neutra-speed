@@ -1,6 +1,6 @@
 # Speed Rede Neutra — contexto para o Claude
 
-Portal do parceiro da rede neutra da Speed Fibra. Visão geral, como rodar e o que falta estão no README. **Antes de qualquer tarefa, leia `docs/CONTEXTO.md`**: regras de negócio, decisões já tomadas, estado do código, visual aprovado e integração com a SpeedWiki. A especificação original está em `docs/planejamento.pdf`.
+Portal do parceiro da rede neutra da Speed Fibra. Visão geral, como rodar e o que falta estão no README. **Antes de qualquer tarefa, leia `docs/CONTEXTO.md`**: regras de negócio, decisões já tomadas, estado do código, visual aprovado e integração com a SpeedWiki. A especificação original está em `docs/planejamento.pdf`. O detalhe de cada módulo (diário com datas, decisões, testes de produção) fica em `docs/modulos/`, com índice no §6 do CONTEXTO: antes de mexer num módulo, leia o arquivo dele; detalhe novo vai para lá, não para o CONTEXTO. Ponto de retomada: `ONDE_PAREI.md`.
 
 - Monorepo npm workspaces: `apps/api` (Hono + Drizzle + Postgres) e `apps/web` (React + Vite).
 - Imports relativos na API usam extensão `.js` (o build é NodeNext).

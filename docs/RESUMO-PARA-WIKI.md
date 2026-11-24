@@ -4,10 +4,12 @@ Atualizado em 16 out 2026, para quem trabalha na SpeedWiki. Complementa [`PEDIDO
 
 Nenhuma credencial está aqui.
 
+> **Atualização de 2026-11-23:** este resumo é de 16 out 2026 e ficou para trás em vários pontos (contrato, ativação, bloqueio, Wi-Fi e acesso web entraram depois). O mais importante: os modos **não estão mais todos em `off`** segundo os diários do próprio portal, que registram produção com todos os modos em `wiki` em 2026-10-21 (primeiro cliente JHV) e `AUTOMATION_MODE=wiki` no teste de bloqueio de 2026-10-22 ([`modulos/contrato-e-ativacao.md`](modulos/contrato-e-ativacao.md), [`modulos/clientes-e-suporte.md`](modulos/clientes-e-suporte.md)). O padrão no código continua `off` (`apps/api/src/config.ts`, `.env.example`); o valor real fica só no `.env` do servidor: **conferir no servidor** (`printenv` no container `api`). Estado atual do código: [`CONTEXTO.md`](CONTEXTO.md) §6; pendências e validações: `ONDE_PAREI.md` na raiz do repositório.
+
 ## 1. Onde estamos
 
 - O portal está **no ar** (https://redeneutra.spdlink.com.br, commit `30c95ae`) e fala com a Wiki em **v1** com dado real (viabilidade, vagas, mapa por sigla). `INTEGRATIONS_MODE=wiki`.
-- Tudo o que depende de escrita ou das rotas v2/v3 está **construído e testado contra mock** (232 testes) e **desligado em produção** (`ACTIVATION_MODE`, `AUTOMATION_MODE`, `CONTRACT_MODE`, `CLIENT_STATUS_MODE` em `off`). Cada modo só liga com a validação do Juan numa ONU ou contrato de teste da Speed.
+- Tudo o que depende de escrita ou das rotas v2/v3 está **construído e testado contra mock** (232 testes) e, em 16 out, **desligado em produção** (`ACTIVATION_MODE`, `AUTOMATION_MODE`, `CONTRACT_MODE`, `CLIENT_STATUS_MODE` em `off`; ligados em `wiki` a partir de 2026-10-21 segundo os diários, ver a atualização acima). Cada modo só liga com a validação do Juan numa ONU ou contrato de teste da Speed.
 - O que os contratos dizem e o que o portal já espera estão alinhados com as respostas da Wiki de 14 a 16 out.
 
 ## 2. O que o portal já faz (por etapa do planejamento)
